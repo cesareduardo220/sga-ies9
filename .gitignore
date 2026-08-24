@@ -1,0 +1,26 @@
+# ── Credenciales ─────────────────────────────────────────────
+# NUNCA subir el .env: tiene la contrasena de la base de datos.
+.env
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+env/
+.venv/
+
+# ── Entorno de desarrollo ────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+
+# ── Windows / macOS ──────────────────────────────────────────
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ── Archivos temporales del sistema ──────────────────────────
+*.log
+*.bak
+*.tmp

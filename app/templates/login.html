@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGA — IES N° 9 | Ingreso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --verde-oscuro:#123626;
+    --verde-medio:#1B5E3F;
+    --verde-claro:#2D8C63;
+    --indigo:#473B73;
+    --crema:#FAF9F5;
+    --crema-2:#F1EFE8;
+    --texto-oscuro:#1C2321;
+    --texto-gris:#6B7280;
+    --borde:#E1E4DD;
+    --error:#D14343;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:'Inter',sans-serif; color:var(--texto-oscuro); background:var(--crema);
+    overflow-x:hidden;
+  }
+  h1,h2{font-family:'Raleway',sans-serif;}
+  button{font-family:inherit; cursor:pointer;}
+
+  .patron-cerebro{
+    position:absolute; inset:0; opacity:0.07; pointer-events:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg transform='translate(70,68)' fill='none' stroke='%23ffffff' stroke-width='1.4'%3E%3Cpath d='M-65,-15 C-72,-40 -50,-55 -30,-50 C-22,-62 0,-62 8,-50 C30,-56 50,-40 42,-18 C58,-10 58,10 42,18 C50,40 30,56 8,50 C0,62 -22,62 -30,50 C-50,55 -72,40 -65,15 C-76,7 -76,-7 -65,-15 Z'/%3E%3Cpath d='M-11,-54 C-11,-20 -11,20 -11,54'/%3E%3C/g%3E%3C/svg%3E");
+    background-size:140px 140px;
+  }
+
+  #screen-login{ display:flex; min-height:100vh; }
+  .login-panel-izq{
+    position:relative; flex:0 0 44%;
+    background:linear-gradient(160deg, var(--verde-oscuro) 0%, var(--verde-medio) 100%);
+    color:#fff; display:flex; flex-direction:column; justify-content:space-between;
+    padding:56px 56px; overflow:hidden;
+  }
+  .login-cerebro{ width:64px; height:64px; margin-bottom:28px; position:relative; z-index:2; }
+  @keyframes respirarLogo{
+    0%, 100% { transform:scale(1); opacity:0.92; }
+    50% { transform:scale(1.05); opacity:1; }
+  }
+  .login-cerebro{ animation:respirarLogo 3.6s ease-in-out infinite; transform-origin:center; }
+
+  .login-panel-izq h1{ font-size:2.6rem; font-weight:800; line-height:1.1; margin:0 0 14px; position:relative; z-index:2; }
+  .login-panel-izq p.lead{ font-size:1.05rem; opacity:0.88; max-width:380px; line-height:1.55; position:relative; z-index:2; margin:0 0 30px; }
+
+  .roles{ position:relative; z-index:2; display:flex; flex-direction:column; gap:16px; margin-bottom:auto; }
+  .rol-item{ display:flex; align-items:flex-start; gap:13px; }
+  .rol-icono{
+    width:34px; height:34px; border-radius:9px; background:rgba(255,255,255,0.1);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .rol-info strong{ display:block; font-size:0.84rem; font-weight:700; margin-bottom:2px; }
+  .rol-info span{ font-size:0.78rem; opacity:0.65; line-height:1.5; }
+
+  .pie-institucional{ position:relative; z-index:2; font-size:0.85rem; opacity:0.7; letter-spacing:0.03em; margin-top:30px; }
+
+  .login-panel-der{ flex:1; background:var(--crema); display:flex; align-items:center; justify-content:center; padding:40px; }
+  .login-form-wrap{ width:100%; max-width:380px; }
+  .login-form-wrap .eyebrow{ font-size:0.78rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--verde-medio); font-weight:700; margin-bottom:10px; }
+  .login-form-wrap h2{ font-size:1.7rem; margin:0 0 6px; font-weight:700; }
+  .login-form-wrap .sub{ color:var(--texto-gris); font-size:0.92rem; margin-bottom:28px; }
+
+  .error-msg{
+    background:#FBEAEA; border:1px solid #F0C2C2; color:var(--error); font-size:0.86rem;
+    padding:11px 15px; border-radius:9px; margin-bottom:20px; display:flex; align-items:center; gap:8px;
+  }
+
+  .campo{ margin-bottom:20px; }
+  .campo label{ display:block; font-size:0.83rem; font-weight:600; margin-bottom:7px; color:var(--texto-oscuro); }
+  .input-wrap{ position:relative; }
+  .input-wrap input{
+    width:100%; padding:13px 16px; border-radius:10px; border:1.5px solid var(--borde);
+    font-size:0.96rem; background:#fff; transition:border-color .15s, box-shadow .15s; font-family:'Inter',sans-serif;
+  }
+  .input-wrap input:focus{ outline:none; border-color:var(--verde-medio); box-shadow:0 0 0 4px rgba(45,140,99,0.13); }
+  .input-wrap.con-icono input{ padding-right:46px; }
+  .btn-ojo{
+    position:absolute; right:10px; top:50%; transform:translateY(-50%);
+    background:none; border:none; padding:6px; color:var(--texto-gris); display:flex; border-radius:6px;
+  }
+  .btn-ojo:hover{ color:var(--texto-oscuro); background:var(--crema-2); }
+
+  .btn-primario{
+    width:100%; padding:14px; border:none; border-radius:10px;
+    background:var(--verde-medio); color:#fff; font-weight:700; font-size:0.98rem;
+    transition:background .15s, transform .1s; margin-top:6px;
+  }
+  .btn-primario:hover{ background:var(--verde-oscuro); }
+  .btn-primario:active{ transform:scale(0.99); }
+
+  .form-footer{
+    margin-top:26px; padding-top:20px; border-top:1px solid var(--borde);
+    font-size:0.78rem; color:var(--texto-gris); text-align:center; line-height:1.6;
+  }
+
+  @media (max-width: 720px){
+    #screen-login{ flex-direction:column; }
+    .login-panel-izq{ flex:0 0 auto; padding:36px 28px 40px; }
+    .login-panel-izq h1{ font-size:1.9rem; }
+    .roles{ margin-bottom:24px; }
+    .login-panel-der{ padding:32px 24px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="screen-login">
+  <div class="login-panel-izq">
+    <div class="patron-cerebro"></div>
+    <div>
+      <svg class="login-cerebro" viewBox="0 0 140 140" fill="none">
+        <path d="M-65,-15 C-72,-40 -50,-55 -30,-50 C-22,-62 0,-62 8,-50 C30,-56 50,-40 42,-18 C58,-10 58,10 42,18 C50,40 30,56 8,50 C0,62 -22,62 -30,50 C-50,55 -72,40 -65,15 C-76,7 -76,-7 -65,-15 Z" transform="translate(70,68)" stroke="#fff" stroke-width="3.2" fill="none"/>
+        <path d="M-11,-54 C-11,-20 -11,20 -11,54" transform="translate(70,68)" stroke="#fff" stroke-width="2.4" fill="none"/>
+      </svg>
+      <h1>Sistema de Gestión<br>Académica</h1>
+      <p class="lead">Plataforma interna del IES N°9 "Juana Azurduy" para la gestión de alumnos, cursadas, mesas de examen e historial académico.</p>
+
+      <div class="roles">
+        <div class="rol-item">
+          <div class="rol-icono">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+          </div>
+          <div class="rol-info"><strong>Administrador</strong><span>Usá el usuario "admin" para gestionar el sistema.</span></div>
+        </div>
+        <div class="rol-item">
+          <div class="rol-icono">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div class="rol-info"><strong>Coordinadores</strong><span>Ingresá con tu DNI y contraseña asignada.</span></div>
+        </div>
+        <div class="rol-item">
+          <div class="rol-icono">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg>
+          </div>
+          <div class="rol-info"><strong>Preceptoras</strong><span>Ingresá con tu DNI y contraseña asignada.</span></div>
+        </div>
+      </div>
+
+      <div class="pie-institucional">San Pedro de Jujuy · IES N°9 "Juana Azurduy"</div>
+    </div>
+  </div>
+
+  <div class="login-panel-der">
+    <div class="login-form-wrap">
+      <div class="eyebrow">Acceso al sistema</div>
+      <h2>Iniciar sesión</h2>
+      <div class="sub">Ingresá con tu usuario institucional para continuar.</div>
+
+      {% if error %}
+      <div class="error-msg">⚠️ {{ error }}</div>
+      {% endif %}
+
+      <form method="POST" action="/login">
+        <div class="campo">
+          <label for="li-user">DNI o usuario</label>
+          <div class="input-wrap">
+            <input id="li-user" type="text" name="usuario" placeholder="Ej: 38421005 o admin" autocomplete="username" required>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label for="li-pass">Contraseña</label>
+          <div class="input-wrap con-icono">
+            <input id="li-pass" type="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
+            <button type="button" class="btn-ojo" onclick="toggleOjo('li-pass', this)">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primario">Ingresar al sistema</button>
+      </form>
+
+      <div class="form-footer">¿Olvidaste tu contraseña? Contactá al coordinador<br>o administrador del sistema.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleOjo(inputId, btn){
+  const input = document.getElementById(inputId);
+  const visible = input.type === 'text';
+  input.type = visible ? 'password' : 'text';
+  btn.innerHTML = visible
+    ? '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>'
+    : '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a18.6 18.6 0 0 1 5.06-5.94M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 7 11 7a18.6 18.6 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>';
+}
+</script>
+</body>
+</html>

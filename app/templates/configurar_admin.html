@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configurar administrador · SGA IES N°9</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Raleway:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+    :root{
+        --verde-oscuro:#123626;
+        --verde-medio:#1B5E3F;
+        --crema:#FAF9F5;
+        --crema-2:#F1EFE8;
+        --texto-oscuro:#1C2321;
+        --texto-gris:#6B7280;
+        --borde:#E1E4DD;
+        --error:#D14343;
+        --exito:#1F8A4C;
+        --sombra: 0 8px 30px rgba(18,54,38,0.12);
+    }
+    *{ box-sizing:border-box; margin:0; padding:0; }
+    body{
+        font-family:'DM Sans', 'Inter', sans-serif;
+        background:linear-gradient(160deg, var(--verde-oscuro) 0%, var(--verde-medio) 55%, var(--crema) 55%);
+        min-height:100vh;
+        display:flex; align-items:center; justify-content:center;
+        padding:24px;
+        color:var(--texto-oscuro);
+    }
+    .tarjeta{
+        background:#fff; border-radius:18px; box-shadow:var(--sombra);
+        max-width:520px; width:100%; padding:36px 40px;
+    }
+    .marca{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .marca svg{ flex-shrink:0; }
+    .marca span{ font-family:'Raleway',sans-serif; font-weight:800; font-size:1.15rem; color:var(--verde-oscuro); }
+    .subtitulo{ color:var(--texto-gris); font-size:0.88rem; margin-bottom:26px; }
+    .pasos{ display:flex; gap:8px; margin-bottom:26px; }
+    .paso-barra{ flex:1; height:4px; border-radius:4px; background:var(--borde); transition:background .2s; }
+    .paso-barra.activo{ background:var(--verde-medio); }
+    h1{ font-family:'Raleway',sans-serif; font-size:1.3rem; font-weight:700; margin-bottom:4px; color:var(--texto-oscuro); }
+    .paso-desc{ color:var(--texto-gris); font-size:0.85rem; margin-bottom:22px; }
+    .campo{ margin-bottom:16px; }
+    .campo label{ display:block; font-size:0.78rem; font-weight:700; color:var(--texto-gris); text-transform:uppercase; letter-spacing:0.02em; margin-bottom:6px; }
+    .campo input{
+        width:100%; padding:11px 13px; border:1.5px solid var(--borde); border-radius:9px;
+        font-size:0.95rem; font-family:inherit; color:var(--texto-oscuro); background:var(--crema);
+        transition:border-color .15s;
+    }
+    .campo input:focus{ outline:none; border-color:var(--verde-medio); background:#fff; }
+    .fila-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .req-lista{ list-style:none; margin:10px 0 4px; display:flex; flex-direction:column; gap:5px; }
+    .req-lista li{ font-size:0.8rem; color:var(--texto-gris); display:flex; align-items:center; gap:7px; }
+    .req-lista li .punto{ width:6px; height:6px; border-radius:50%; background:var(--borde); flex-shrink:0; }
+    .req-lista li.ok{ color:var(--exito); }
+    .req-lista li.ok .punto{ background:var(--exito); }
+    .botones{ display:flex; gap:10px; margin-top:24px; }
+    .btn{
+        flex:1; padding:13px; border:none; border-radius:10px; font-size:0.92rem; font-weight:700;
+        cursor:pointer; font-family:inherit; transition:opacity .15s;
+    }
+    .btn:hover{ opacity:0.9; }
+    .btn-primario{ background:var(--verde-medio); color:#fff; }
+    .btn-secundario{ background:var(--crema-2); color:var(--texto-oscuro); }
+    .error-msg{
+        background:#FBEAEA; color:var(--error); font-size:0.85rem; padding:11px 14px;
+        border-radius:9px; margin-bottom:18px;
+    }
+    .paso{ display:none; }
+    .paso.activo{ display:block; }
+    .nota{ font-size:0.74rem; color:var(--texto-gris); margin-top:18px; text-align:center; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="tarjeta">
+    <div class="marca">
+        <svg width="26" height="26" viewBox="0 0 100 100" fill="none"><path d="M50 5 L90 25 V75 L50 95 L10 75 V25 Z" stroke="#1B5E3F" stroke-width="5" fill="none"/></svg>
+        <span>SGA · IES N°9</span>
+    </div>
+    <div class="subtitulo">Configuración inicial del administrador</div>
+
+    <div class="pasos">
+        <div class="paso-barra activo" id="barra-1"></div>
+        <div class="paso-barra" id="barra-2"></div>
+    </div>
+
+    {% if error %}
+    <div class="error-msg">⚠️ {{ error }}</div>
+    {% endif %}
+
+    <form method="POST" id="form-config-admin">
+
+        <!-- PASO 1: Datos personales -->
+        <div class="paso activo" id="paso-1">
+            <h1>Datos del administrador</h1>
+            <p class="paso-desc">Esta va a ser la cuenta definitiva del sistema. Completá tus datos reales.</p>
+
+            <div class="fila-2">
+                <div class="campo">
+                    <label>Apellido *</label>
+                    <input type="text" name="apellido" id="input-apellido" required>
+                </div>
+                <div class="campo">
+                    <label>Nombre *</label>
+                    <input type="text" name="nombre" id="input-nombre" required>
+                </div>
+            </div>
+            <div class="campo">
+                <label>DNI * <span style="text-transform:none;font-weight:400">(será tu usuario)</span></label>
+                <input type="text" name="dni" id="input-dni" placeholder="Sin puntos ni espacios" required>
+            </div>
+            <div class="fila-2">
+                <div class="campo">
+                    <label>Celular</label>
+                    <input type="text" name="celular" placeholder="Ej: 3884 123456">
+                </div>
+                <div class="campo">
+                    <label>Email</label>
+                    <input type="email" name="email" placeholder="correo@ejemplo.com">
+                </div>
+            </div>
+            <div class="campo">
+                <label>Domicilio</label>
+                <input type="text" name="domicilio" placeholder="Opcional">
+            </div>
+
+            <div class="botones">
+                <button type="button" class="btn btn-primario" onclick="irPaso2()">Continuar →</button>
+            </div>
+        </div>
+
+        <!-- PASO 2: Contraseña -->
+        <div class="paso" id="paso-2">
+            <h1>Creá tu contraseña</h1>
+            <p class="paso-desc">Esta es la que vas a usar de acá en adelante para entrar al sistema.</p>
+
+            <div class="campo">
+                <label>Nueva contraseña *</label>
+                <input type="password" name="nueva" id="input-nueva" oninput="validarPassword()" required>
+            </div>
+            <div class="campo">
+                <label>Confirmar contraseña *</label>
+                <input type="password" name="confirmar" id="input-confirmar" oninput="validarPassword()" required>
+            </div>
+
+            <ul class="req-lista" id="lista-requisitos">
+                <li id="req-largo"><span class="punto"></span>Mínimo 8 caracteres</li>
+                <li id="req-mayus"><span class="punto"></span>Al menos una mayúscula</li>
+                <li id="req-minus"><span class="punto"></span>Al menos una minúscula</li>
+                <li id="req-num"><span class="punto"></span>Al menos un número</li>
+                <li id="req-esp"><span class="punto"></span>Al menos un carácter especial (!@#$%...)</li>
+                <li id="req-igual"><span class="punto"></span>Las dos contraseñas coinciden</li>
+            </ul>
+
+            <div class="botones">
+                <button type="button" class="btn btn-secundario" onclick="irPaso1()">← Atrás</button>
+                <button type="submit" class="btn btn-primario" id="btn-confirmar" disabled>Crear administrador</button>
+            </div>
+        </div>
+
+    </form>
+
+    <div class="nota">Después de confirmar vas a volver a la pantalla de inicio de sesión<br>para entrar con tu usuario y contraseña definitivos.</div>
+</div>
+
+<script>
+function irPaso2() {
+    const apellido = document.getElementById('input-apellido').value.trim();
+    const nombre   = document.getElementById('input-nombre').value.trim();
+    const dni      = document.getElementById('input-dni').value.trim();
+    if (!apellido || !nombre || !dni) {
+        alert('Apellido, nombre y DNI son obligatorios.');
+        return;
+    }
+    if (!/^\d{7,8}$/.test(dni)) {
+        alert('Ingresá un DNI válido, sin puntos ni espacios (7 u 8 dígitos).');
+        return;
+    }
+    document.getElementById('paso-1').classList.remove('activo');
+    document.getElementById('paso-2').classList.add('activo');
+    document.getElementById('barra-1').classList.add('activo');
+    document.getElementById('barra-2').classList.add('activo');
+}
+
+function irPaso1() {
+    document.getElementById('paso-2').classList.remove('activo');
+    document.getElementById('paso-1').classList.add('activo');
+    document.getElementById('barra-2').classList.remove('activo');
+}
+
+function validarPassword() {
+    const pass = document.getElementById('input-nueva').value;
+    const conf = document.getElementById('input-confirmar').value;
+
+    const reqs = {
+        'req-largo': pass.length >= 8,
+        'req-mayus': /[A-Z]/.test(pass),
+        'req-minus': /[a-z]/.test(pass),
+        'req-num':   /[0-9]/.test(pass),
+        'req-esp':   /[!@#$%^&*(),.?":{}|<>_\-]/.test(pass),
+        'req-igual': pass.length > 0 && pass === conf,
+    };
+
+    let todoOk = true;
+    for (const [id, ok] of Object.entries(reqs)) {
+        document.getElementById(id).classList.toggle('ok', ok);
+        if (!ok) todoOk = false;
+    }
+    document.getElementById('btn-confirmar').disabled = !todoOk;
+}
+</script>
+</body>
+</html>
