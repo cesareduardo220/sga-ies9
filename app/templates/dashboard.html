@@ -3309,14 +3309,14 @@
             <div class="modal-icono">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
             </div>
-            <h3>¿Confirmar cambio de plan?</h3>
+            <h3 id="modal-plan-titulo">¿Confirmar cambio de plan?</h3>
         </div>
         <div class="modal-card-body">
-            <p style="margin-bottom:0;">Esta acción reemplaza el plan de estudios activo de la carrera. Todos los alumnos van a migrar al plan nuevo según la política elegida — <b>no se puede deshacer</b>.</p>
+            <p id="modal-plan-texto" style="margin-bottom:0;">Esta acción reemplaza el plan de estudios activo de la carrera. Todos los alumnos van a migrar al plan nuevo según la política elegida — <b>no se puede deshacer</b>.</p>
         </div>
         <div class="modal-card-footer">
             <button class="modal-btn-cancelar" onclick="cerrarModal('modal-confirmar-cambio-plan')">Cancelar</button>
-            <button class="modal-btn-confirmar" onclick="cambioPlanConfirmado()">Sí, confirmar cambio</button>
+            <button class="modal-btn-confirmar" id="modal-plan-btn" onclick="cambioPlanConfirmado()">Sí, confirmar cambio</button>
         </div>
     </div>
 </div>
@@ -4975,6 +4975,17 @@
             msg.textContent = '⚠️ El nombre del plan y la fecha de vigencia son obligatorios.';
             return;
         }
+        // Textos del modal según haya o no plan previo
+        const _hayPlan = (typeof _planNuevoData !== 'undefined' && _planNuevoData)
+            ? !!_planNuevoData.hay_plan_actual : false;
+        document.getElementById('modal-plan-titulo').textContent =
+            _hayPlan ? '¿Confirmar cambio de plan?' : '¿Confirmar carga del plan?';
+        document.getElementById('modal-plan-texto').innerHTML = _hayPlan
+            ? 'Esta acción reemplaza el plan de estudios activo de la carrera. Todos los alumnos van a migrar al plan nuevo según la política elegida — <b>no se puede deshacer</b>.'
+            : 'Esta acción carga el plan de estudios de la carrera. Como no hay un plan activo, no se migra ningún alumno — <b>no se puede deshacer</b>.';
+        document.getElementById('modal-plan-btn').textContent =
+            _hayPlan ? 'Sí, confirmar cambio' : 'Sí, cargar plan';
+
         abrirModal('modal-confirmar-cambio-plan');
     }
 
