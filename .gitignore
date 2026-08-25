@@ -24,3 +24,5 @@ desktop.ini
 *.log
 *.bak
 *.tmp
+.env*
+!.env.example

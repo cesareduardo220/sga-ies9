@@ -2178,7 +2178,7 @@
                     </div>
 
                     <!-- Política de migración -->
-                    <div class="tarjeta-form">
+                    <div class="tarjeta-form" id="panel-politica-migracion">
                         <div class="tarjeta-form-titulo">🔄 Política para alumnos al vencer el plazo</div>
                         <label class="radio-card">
                             <input type="radio" name="politica-migracion" value="ninguna" onchange="seleccionarRadioCard(this)">
@@ -2208,7 +2208,7 @@
                     <div id="cambio-plan-msg" style="display:none;font-size:0.85rem;padding:10px 14px;border-radius:8px;margin-bottom:12px"></div>
                     <div style="display:flex; justify-content:flex-end; gap:10px;">
                         <button class="modal-btn-cancelar" style="border:1.5px solid var(--sga-borde); background:#fff;" onclick="cancelarCambioPlan()">✕ Cancelar</button>
-                        <button class="btn-cerrar-cursada" onclick="confirmarCambioPlan()">⚠️ Confirmar cambio de plan</button>
+                        <button class="btn-cerrar-cursada" id="btn-confirmar-plan" onclick="confirmarCambioPlan()">⚠️ Confirmar cambio de plan</button>
                     </div>
                 </div>
 
@@ -4816,11 +4816,6 @@
                 if (!file) return;
                 const msg = document.getElementById('plan-mensaje');
                 msg.style.display = 'none';
-                // Leer con FileReader para preview básico
-                document.getElementById('plan-preview').style.display = 'none';
-                document.getElementById('plan-preview-tabla').innerHTML =
-                    `<div style="font-size:13px;color:var(--verde)">✅ Archivo seleccionado: <strong>${file.name}</strong> (${(file.size/1024).toFixed(1)} KB)</div>`;
-                document.getElementById('plan-preview').style.display = 'block';
             });
         }
     });
@@ -4873,6 +4868,10 @@
             document.getElementById('aviso-cambio-texto').textContent  = `Se detectaron ${data.total_nuevo} espacios curriculares en el archivo. Revisalos y completá los datos del plan antes de confirmar la carga.`;
         }
 
+        const _esCambio = !!data.hay_plan_actual;
+        document.getElementById('panel-politica-migracion').style.display = _esCambio ? 'block' : 'none';
+        document.getElementById('panel-equiv-manuales').style.display = _esCambio ? 'block' : 'none';
+        document.getElementById('btn-confirmar-plan').innerHTML = _esCambio ? '⚠️ Confirmar cambio de plan' : '✅ Confirmar carga del plan';
         mostrarComparacion(data.comparacion, data.filas_nuevo);
         document.getElementById('panel-agregar-materia-manual').style.display = 'none';
         document.getElementById('panel-cambio-plan').style.display = 'block';
