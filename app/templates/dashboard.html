@@ -4949,6 +4949,7 @@
 
     function cancelarCambioPlan() {
         _planNuevoData = null;
+        window._vigenciaPasadaOk = false;
         document.getElementById('panel-cambio-plan').style.display = 'none';
         document.getElementById('panel-agregar-materia-manual').style.display = '';
         document.getElementById('plan-mensaje').style.display = 'none';
@@ -4975,6 +4976,50 @@
             msg.textContent = '⚠️ El nombre del plan y la fecha de vigencia son obligatorios.';
             return;
         }
+        // --- Validaciones de fecha ---
+        const _msgV = document.getElementById('cambio-plan-msg');
+        const _avisar = (txt, error) => {
+            _msgV.style.display = 'block';
+            _msgV.style.background = error ? '#F3E2E2' : '#FFF3CD';
+            _msgV.style.color = error ? 'var(--sga-error)' : '#856404';
+            _msgV.textContent = txt;
+        };
+        const _fechaValida = (d, m, a) => {
+            const dt = new Date(+a, +m - 1, +d);
+            return dt.getFullYear() == +a && dt.getMonth() == +m - 1 && dt.getDate() == +d;
+        };
+
+        if (!_fechaValida(vigDia, vigMes, vigAnio)) {
+            _avisar('La fecha de vigencia no existe en el calendario. Revisá el día y el mes.', true);
+            return;
+        }
+
+        const cieD = document.getElementById('nuevo-plan-cierre-dia').value;
+        const cieM = document.getElementById('nuevo-plan-cierre-mes').value;
+        const cieA = document.getElementById('nuevo-plan-cierre-anio').value;
+        if (cieD && cieM && cieA) {
+            if (!_fechaValida(cieD, cieM, cieA)) {
+                _avisar('La fecha límite de transición no existe en el calendario. Revisá el día y el mes.', true);
+                return;
+            }
+            const fV = new Date(+vigAnio, +vigMes - 1, +vigDia);
+            const fC = new Date(+cieA, +cieM - 1, +cieD);
+            if (fC < fV) {
+                _avisar('La fecha límite de transición no puede ser anterior a la fecha de vigencia.', true);
+                return;
+            }
+        }
+
+        // Vigencia retroactiva: avisa una vez, permite confirmar al segundo intento
+        const _hoy = new Date(); _hoy.setHours(0, 0, 0, 0);
+        const _fVig = new Date(+vigAnio, +vigMes - 1, +vigDia);
+        if (_fVig < _hoy && !window._vigenciaPasadaOk) {
+            window._vigenciaPasadaOk = true;
+            _avisar('La fecha de vigencia es anterior a hoy. Si es correcta, volvé a apretar el botón para continuar.', false);
+            return;
+        }
+        _msgV.style.display = 'none';
+
         // Textos del modal según haya o no plan previo
         const _hayPlan = (typeof _planNuevoData !== 'undefined' && _planNuevoData)
             ? !!_planNuevoData.hay_plan_actual : false;
