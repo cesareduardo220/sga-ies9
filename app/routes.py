@@ -6541,3 +6541,19 @@ def api_importar_sheets_confirmar():
         'actualizados': actualizados,
         'errores': errores_conf,
     })
+
+
+# ============================================================
+# Estadísticas del panel de administrador
+# ============================================================
+@auth.route('/api/stats/admin', methods=['GET'])
+@login_requerido(['admin'])
+def api_stats_admin():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
+    row = cur.fetchone()
+    anio = row[0] if row else '2026'
+    cur.close()
+    conn.close()
+    return jsonify({'anio': anio})
