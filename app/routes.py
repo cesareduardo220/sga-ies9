@@ -3089,9 +3089,11 @@ def api_inscripciones_ventana_set():
     conn = get_db()
     cur  = conn.cursor()
     try:
-        cur.execute("UPDATE configuracion SET valor = %s WHERE clave = 'inscripciones_fecha_inicio'",
+        cur.execute("""INSERT INTO configuracion (clave, valor) VALUES ('inscripciones_fecha_inicio', %s)
+                       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
                     (finicio.isoformat(),))
-        cur.execute("UPDATE configuracion SET valor = %s WHERE clave = 'inscripciones_fecha_fin'",
+        cur.execute("""INSERT INTO configuracion (clave, valor) VALUES ('inscripciones_fecha_fin', %s)
+                       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
                     (ffin.isoformat(),))
 
         cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
