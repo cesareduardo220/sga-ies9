@@ -2842,6 +2842,10 @@
                 <label>Nombre de la carrera</label>
                 <input type="text" id="input-carrera-nombre" class="input-edit-ficha" placeholder="Ej: Higiene y Seguridad en el Trabajo">
             </div>
+            <div class="campo-edit">
+                <label>Nombre corto (opcional)</label>
+                <input type="text" id="input-carrera-nombre-corto" class="input-edit-ficha" maxlength="40" placeholder="Ej: Redes">
+            </div>
             <div id="modal-carrera-error" class="form-error" style="display:none"></div>
         </div>
         <div class="modal-card-footer">
@@ -4622,7 +4626,7 @@
                     <td><span class="badge-estado ${c.activa ? 'activo' : 'inactivo'}">${c.activa ? 'Activa' : 'Inactiva'}</span></td>
                     <td>
                         <div style="display:flex; gap:6px;">
-                            <button class="btn-secundario" style="padding:6px 10px;" title="Editar" onclick="abrirModalCarrera(${c.id}, '${c.nombre.replace(/'/g,"\\'")}')">✏️</button>
+                            <button class="btn-secundario" style="padding:6px 10px;" title="Editar" onclick="abrirModalCarrera(${c.id}, '${c.nombre.replace(/'/g,"\\'")}', '${(c.nombre_corto||'').replace(/'/g,"\\'")}')">✏️</button>
                             <button class="${c.activa ? 'btn-cerrar-cursada' : 'btn-secundario'}" style="padding:6px 10px;" onclick="toggleCarrera(${c.id})">${c.activa ? 'Desactivar' : 'Activar'}</button>
                         </div>
                     </td>
@@ -4633,21 +4637,23 @@
         </div>`;
     }
 
-    function abrirModalCarrera(id = null, nombre = '') {
+    function abrirModalCarrera(id = null, nombre = '', nombreCorto = '') {
         editandoCarreraId = id;
         document.getElementById('modal-carrera-titulo').textContent = id ? 'Editar carrera' : 'Nueva carrera';
         document.getElementById('input-carrera-nombre').value = nombre;
+            document.getElementById('input-carrera-nombre-corto').value = nombreCorto || '';
         document.getElementById('modal-carrera-error').style.display = 'none';
         abrirModal('modal-carrera');
     }
 
     async function guardarCarrera() {
         const nombre = document.getElementById('input-carrera-nombre').value.trim();
+            const nombreCorto = document.getElementById('input-carrera-nombre-corto').value.trim();
         const errDiv = document.getElementById('modal-carrera-error');
         if (!nombre) { errDiv.textContent = 'El nombre es obligatorio'; errDiv.style.display = ''; return; }
         const url    = editandoCarreraId ? `/api/carreras/${editandoCarreraId}` : '/api/carreras';
         const method = editandoCarreraId ? 'PUT' : 'POST';
-        const res    = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({ nombre }) });
+        const res    = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({ nombre, nombre_corto: nombreCorto }) });
         const data   = await res.json();
         if (data.error) { errDiv.textContent = data.error; errDiv.style.display = ''; return; }
         cerrarModal('modal-carrera');

@@ -567,7 +567,7 @@ def dashboard():
     nombre_carrera = ''
     if carrera_id:
         conn_c = get_db(); cur_c = conn_c.cursor()
-        cur_c.execute("SELECT nombre FROM carreras WHERE id = %s", (carrera_id,))
+        cur_c.execute("SELECT COALESCE(nombre_corto, nombre) FROM carreras WHERE id = %s", (carrera_id,))
         row_c = cur_c.fetchone()
         cur_c.close(); conn_c.close()
         if row_c:
@@ -617,18 +617,18 @@ def api_carreras_listar():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        SELECT c.id, c.nombre, c.activa,
+        SELECT c.id, c.nombre, c.nombre_corto, c.activa,
                COUNT(u.id) AS coordinadores
         FROM carreras c
         LEFT JOIN usuarios u ON u.carrera_id = c.id AND u.rol = 'coordinador' AND u.activo = TRUE
-        GROUP BY c.id, c.nombre, c.activa
+        GROUP BY c.id, c.nombre, c.nombre_corto, c.activa
         ORDER BY c.nombre
     """)
     rows = cur.fetchall()
     cur.close()
     conn.close()
     return jsonify([{
-        'id': r[0], 'nombre': r[1], 'activa': r[2], 'coordinadores': r[3]
+        'id': r[0], 'nombre': r[1], 'nombre_corto': r[2], 'activa': r[3], 'coordinadores': r[4]
     } for r in rows])
 
 
@@ -637,13 +637,14 @@ def api_carreras_listar():
 def api_carreras_crear():
     data = request.get_json()
     nombre = data.get('nombre', '').strip()
+    nombre_corto = (data.get('nombre_corto') or '').strip() or None
     if not nombre:
         return jsonify({'error': 'El nombre es obligatorio'}), 400
 
     conn = get_db()
     cur = conn.cursor()
     try:
-        cur.execute("INSERT INTO carreras (nombre) VALUES (%s) RETURNING id", (nombre,))
+        cur.execute("INSERT INTO carreras (nombre, nombre_corto) VALUES (%s, %s) RETURNING id", (nombre, nombre_corto))
         nuevo_id = cur.fetchone()[0]
         conn.commit()
         return jsonify({'ok': True, 'id': nuevo_id})
@@ -661,14 +662,15 @@ def api_carreras_editar(cid):
     data = request.get_json()
     nombre = data.get('nombre', '').strip()
     activa = data.get('activa', True)
+    nombre_corto = (data.get('nombre_corto') or '').strip() or None
     if not nombre:
         return jsonify({'error': 'El nombre es obligatorio'}), 400
 
     conn = get_db()
     cur = conn.cursor()
     try:
-        cur.execute("UPDATE carreras SET nombre = %s, activa = %s WHERE id = %s",
-                    (nombre, activa, cid))
+        cur.execute("UPDATE carreras SET nombre = %s, nombre_corto = %s, activa = %s WHERE id = %s",
+                    (nombre, nombre_corto, activa, cid))
         conn.commit()
         return jsonify({'ok': True})
     except Exception as e:
