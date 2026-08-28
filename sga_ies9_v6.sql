@@ -132,6 +132,7 @@ ALTER SEQUENCE public.alumnos_id_seq OWNED BY public.alumnos.id;
 CREATE TABLE public.carreras (
     id integer NOT NULL,
     nombre character varying(150) NOT NULL,
+    nombre_corto character varying(40),
     activa boolean DEFAULT true NOT NULL,
     creada_en timestamp without time zone DEFAULT now() NOT NULL
 );
