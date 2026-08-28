@@ -2856,6 +2856,19 @@
 </div>
 
 <!-- MODAL COORDINADOR -->
+<div id="modal-coord-lista" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-card-header" style="align-items:center;">
+            <h3 id="modal-coord-lista-titulo">Coordinadores</h3>
+        </div>
+        <div class="modal-card-body">
+            <div id="modal-coord-lista-body"></div>
+        </div>
+        <div class="modal-card-footer">
+            <button class="modal-btn-cancelar" onclick="cerrarModal('modal-coord-lista')">Cerrar</button>
+        </div>
+    </div>
+</div>
 <div id="modal-coord" class="modal-overlay" style="display:none">
     <div class="modal-card">
         <div class="modal-card-header" style="align-items:center;">
@@ -4622,7 +4635,9 @@
             ${carrerasData.map(c => `
                 <tr>
                     <td><strong>${c.nombre}</strong></td>
-                    <td>${c.coordinadores}</td>
+                                                    <td>${c.coordinadores > 0
+                                    ? `<button class="btn-secundario" style="padding:2px 12px;" onclick="verCoordinadoresDeCarrera(${c.id}, '${c.nombre.replace(/'/g,"\\'")}')">${c.coordinadores}</button>`
+                                    : c.coordinadores}</td>
                     <td><span class="badge-estado ${c.activa ? 'activo' : 'inactivo'}">${c.activa ? 'Activa' : 'Inactiva'}</span></td>
                     <td>
                         <div style="display:flex; gap:6px;">
@@ -4666,7 +4681,25 @@
     }
 
     // ── COORDINADORES ──
-    async function cargarCoordinadores() {
+            async function verCoordinadoresDeCarrera(carreraId, nombreCarrera) {
+            const res = await fetch('/api/coordinadores');
+            const todos = await res.json();
+            const propios = todos.filter(u => u.carrera_id === carreraId && u.activo);
+            document.getElementById('modal-coord-lista-titulo').textContent = nombreCarrera;
+            const body = document.getElementById('modal-coord-lista-body');
+            if (!propios.length) {
+                body.innerHTML = '<div class="empty-state">Esta carrera no tiene coordinadores activos.</div>';
+            } else {
+                body.innerHTML = propios.map(u => `
+                    <div style="padding:10px 0; border-bottom:1px solid var(--sga-crema-2);">
+                        <strong>${u.apellido}, ${u.nombre}</strong>
+                        <div style="font-size:0.85rem; color:#666;">DNI ${u.dni}</div>
+                    </div>`).join('');
+            }
+            document.getElementById('modal-coord-lista').style.display = '';
+        }
+		
+		async function cargarCoordinadores() {
         const wrap = document.getElementById('tabla-coord-wrap');
         wrap.innerHTML = '<div class="cargando">Cargando...</div>';
         const res = await fetch('/api/coordinadores');
