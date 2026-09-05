@@ -31,6 +31,9 @@ auth = Blueprint('auth', __name__)
 def renovar_sesion():
     session.modified = True
     session.permanent = True
+    # Resolución automática de promociones provisorias vencidas.
+    # Se dispara con la actividad de cualquier usuario logueado.
+    _chequear_promociones_vencidas()
 
 
 # ================================================================
@@ -48,6 +51,159 @@ def login_requerido(roles_permitidos):
             return f(*args, **kwargs)
         return wrapper
     return decorador
+
+
+# ================================================================
+# PROMOCIÓN PROVISORIA POR CORRELATIVA ADEUDADA
+#
+# Regla institucional: el alumno que promociona una materia y adeuda
+# el final de su correlativa del año anterior conserva la promoción
+# sólo hasta la fecha límite del ciclo lectivo (por defecto el 31/12).
+# Tiene las mesas de ese mismo año para aprobar el final. Si llega la
+# fecha límite sin aprobarlo, la promoción se cae y la materia queda
+# como 'regular': pasa a deber final, porque los profesores no guardan
+# la promoción de un año para el otro.
+#
+# Mientras tanto la cursada queda marcada con promocion_provisoria.
+# ================================================================
+
+# Marcas que el sistema escribe solo en observaciones. Se limpian en cada
+# guardado antes de volver a evaluar la regla, para que no se acumulen ni
+# queden colgadas cuando la condicion cambia.
+_MARCAS_AUTOMATICAS = ('PROMOCIÓN PROVISORIA', 'PROMOCIÓN CAÍDA', 'PROMOCIÓN CONDICIONADA')
+
+
+def _limpiar_marcas_automaticas(obs):
+    """
+    Devuelve las observaciones sin las marcas que escribe el sistema,
+    conservando intacto lo que haya escrito la preceptora.
+    """
+    if not obs:
+        return ''
+    partes = [p.strip() for p in str(obs).split('|')]
+    quedan = [p for p in partes
+              if p and not any(p.startswith(m) for m in _MARCAS_AUTOMATICAS)]
+    return ' | '.join(quedan)
+
+
+def _fecha_limite_promocion(cur, anio):
+    """
+    Devuelve la fecha límite del ciclo lectivo indicado, leída del
+    parámetro 'fecha_limite_promocion' (formato DD-MM).
+    Si el parámetro falta o está mal cargado, cae al 31 de diciembre.
+    """
+    try:
+        cur.execute("SELECT valor FROM configuracion WHERE clave = 'fecha_limite_promocion'")
+        row = cur.fetchone()
+        dia, mes = [int(x) for x in (row[0] if row and row[0] else '31-12').strip().split('-')]
+        return date(anio, mes, dia)
+    except Exception:
+        return date(anio, 12, 31)
+
+
+def resolver_promociones_provisorias(conn):
+    """
+    Baja a 'regular' las promociones provisorias cuyo plazo ya venció.
+
+    Cada cursada se evalúa contra la fecha límite de SU PROPIO ciclo
+    lectivo (inscripciones.anio_lectivo), no contra el ciclo configurado
+    como vigente. Esto la hace inmune a dos situaciones:
+
+      • Servidor apagado durante meses: al prender, resuelve todo lo
+        que quedó pendiente de ciclos anteriores.
+      • Cambio de anio_lectivo_actual antes de la resolución: si el
+        admin pasa el sistema a 2027 en febrero, las promociones
+        provisorias de 2026 se resuelven igual contra el 31/12/2026.
+
+    Es idempotente: una vez resuelta, la cursada deja de estar marcada,
+    así que correrla de más no hace nada.
+
+    NO toca cursadas cerradas: por decisión institucional una cursada
+    cerrada es inmodificable. Por eso el cierre de notas está bloqueado
+    hasta pasada la fecha límite cuando hay promociones provisorias.
+
+    Cada baja queda registrada en cursadas_auditoria con
+    modificado_por_id NULL, que identifica al sistema como autor.
+
+    Devuelve la cantidad de promociones dadas de baja.
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT cu.id, cu.condicion, cu.observaciones, i.anio_lectivo
+            FROM cursadas cu
+            JOIN inscripciones i ON i.id = cu.inscripcion_id
+            WHERE cu.promocion_provisoria
+              AND NOT cu.cerrada
+        """)
+        pendientes = cur.fetchall()
+        if not pendientes:
+            return 0
+
+        hoy = date.today()
+        motivo = ('Baja automática del sistema: venció el plazo para aprobar '
+                  'el final de la correlativa y la promoción no se confirmó.')
+        bajadas = 0
+
+        for cursada_id, condicion_ant, obs_ant, anio_lectivo in pendientes:
+            limite = _fecha_limite_promocion(cur, anio_lectivo)
+            if hoy <= limite:
+                continue  # todavía está en plazo
+
+            nota_obs = (f'PROMOCIÓN CAÍDA — venció el plazo del '
+                        f'{limite.strftime("%d/%m/%Y")} sin aprobar el final '
+                        f'de la correlativa. Se asienta como regular.')
+            obs_nueva = (obs_ant + ' | ' + nota_obs).strip(' |') if obs_ant else nota_obs
+
+            cur.execute("""
+                UPDATE cursadas
+                SET condicion = 'regular',
+                    promocion_provisoria = FALSE,
+                    observaciones = %s
+                WHERE id = %s
+            """, (obs_nueva, cursada_id))
+
+            cur.execute("""
+                INSERT INTO cursadas_auditoria
+                    (cursada_id, campo, valor_anterior, valor_nuevo,
+                     modificado_por_id, motivo)
+                VALUES (%s, 'condicion', %s, 'regular', NULL, %s)
+            """, (cursada_id, condicion_ant, motivo))
+            bajadas += 1
+
+        conn.commit()
+        return bajadas
+    except Exception:
+        conn.rollback()
+        return 0
+    finally:
+        cur.close()
+
+
+# Evita golpear la base en cada request: se chequea una vez por día
+# por worker. El parámetro en la base evita que dos workers procesen
+# el mismo ciclo dos veces.
+_ULTIMO_CHEQUEO_PROMOCIONES = None
+
+
+def _chequear_promociones_vencidas():
+    global _ULTIMO_CHEQUEO_PROMOCIONES
+    if 'rol' not in session:
+        return
+    hoy = date.today()
+    if _ULTIMO_CHEQUEO_PROMOCIONES == hoy:
+        return
+    _ULTIMO_CHEQUEO_PROMOCIONES = hoy
+    conn = None
+    try:
+        conn = get_db()
+        resolver_promociones_provisorias(conn)
+    except Exception:
+        # Nunca romper la navegación por esto.
+        pass
+    finally:
+        if conn:
+            conn.close()
 
 
 def limpiar_dni(dni):
@@ -297,6 +453,7 @@ def get_pendientes_libro_folio(carrera_id):
         JOIN alumnos a        ON a.id  = i.alumno_id
         JOIN materias m       ON m.id  = i.materia_id
         WHERE cu.condicion = 'promocionado'
+          AND NOT cu.promocion_provisoria
           AND (cu.libro IS NULL OR cu.folio IS NULL)
           AND m.carrera_id = %s
         ORDER BY m.anio, a.apellido, a.nombre
@@ -1978,7 +2135,16 @@ def api_historial_alumno(aid):
             cu.condicion,
             cu.cerrada,
             cu.observaciones,
-            i.id AS inscripcion_id
+            i.id AS inscripcion_id,
+            COALESCE(cu.promocion_provisoria, FALSE),
+            cu.libro,
+            cu.folio,
+            (SELECT e.resultado FROM examenes e
+              WHERE e.alumno_id = i.alumno_id AND e.materia_id = i.materia_id
+              ORDER BY e.fecha_mesa DESC LIMIT 1),
+            (SELECT e.nota FROM examenes e
+              WHERE e.alumno_id = i.alumno_id AND e.materia_id = i.materia_id
+              ORDER BY e.fecha_mesa DESC LIMIT 1)
         FROM inscripciones i
         JOIN materias m ON m.id = i.materia_id
         LEFT JOIN cursadas cu ON cu.inscripcion_id = i.id
@@ -2011,6 +2177,11 @@ def api_historial_alumno(aid):
             'cerrada':               r[10] or False,
             'observaciones':         r[11] or '',
             'inscripcion_id':        r[12],
+            'promocion_provisoria':  bool(r[13]),
+            'libro':                 r[14],
+            'folio':                 r[15],
+            'resultado_mesa':        r[16],
+            'nota_mesa':             float(r[17]) if r[17] is not None else None,
         })
 
     return jsonify({
@@ -2674,6 +2845,9 @@ def api_constancia_validar(aid):
         JOIN materias m ON m.id = i.materia_id
         WHERE i.alumno_id = %s AND m.carrera_id = %s
           AND i.anio_lectivo = %s AND cu.condicion IN ('aprobado','promocionado')
+          -- Una promoción provisoria todavía puede caerse: no habilita
+          -- la emisión de un documento oficial.
+          AND NOT COALESCE(cu.promocion_provisoria, FALSE)
     """, (aid, carrera_id, anio_actual))
     cant_aprobadas = cur.fetchone()[0]
 
@@ -2754,7 +2928,7 @@ def api_inscripciones_alumno(aid):
         JOIN cursadas cu ON cu.inscripcion_id = i.id
         WHERE i.alumno_id = %s
           AND i.anio_lectivo < %s
-          AND cu.condicion IN ('regular', 'promocionado')
+          AND cu.condicion IN ('regular', 'promocionado', 'aprobado')
     """, (aid, anio))
     cursadas_ok = {r[0] for r in cur.fetchall()}
 
@@ -2829,15 +3003,22 @@ def api_inscripciones_alumno(aid):
             anio_prev = anio_m - 1
             bloqueada_por.append(f"Necesitás regularizar al menos una materia de {anio_prev}° año")
         else:
-            # Si el año está habilitado, verificar correlatividades específicas
+            # Si el año está habilitado, verificar correlatividades específicas.
+            #
+            # IMPORTANTE — las dos columnas del plan de estudios (Res. 3003-E)
+            # son requisitos de MOMENTOS DISTINTOS:
+            #   tipo 'cursada'  = "Regularizadas para cursar"  → bloquea INSCRIBIRSE
+            #   tipo 'aprobada' = "Aprobadas para rendir"      → bloquea la MESA DE EXAMEN
+            #
+            # Por eso acá solo se controlan las de tipo 'cursada'. Las de tipo
+            # 'aprobada' se verifican al inscribir a mesa, no al inscribir a
+            # la cursada. Exigirlas acá impedía que un alumno cursara una
+            # materia adeudando finales, que es un caso normal del régimen.
             for req_id, tipo in correl_map.get(mid, []):
                 req_nombre = materia_nombres.get(req_id, f'Materia {req_id}')
                 if tipo == 'cursada' and req_id not in cursadas_ok:
                     puede = False
                     bloqueada_por.append(f"Regularizar: {req_nombre}")
-                elif tipo == 'aprobada' and req_id not in aprobadas_ok:
-                    puede = False
-                    bloqueada_por.append(f"Aprobar: {req_nombre}")
 
         resultado.append({
             'id': mid,
@@ -3570,7 +3751,8 @@ def api_notas_materia_detalle(mid):
             i.id AS inscripcion_id,
             cu.id AS cursada_id,
             cu.nota_cursada, cu.porcentaje_asistencia, cu.porcentaje_tp,
-            cu.condicion, cu.cerrada, cu.observaciones
+            cu.condicion, cu.cerrada, cu.observaciones,
+            COALESCE(cu.promocion_provisoria, FALSE)
         FROM inscripciones i
         JOIN alumnos a ON a.id = i.alumno_id
         LEFT JOIN cursadas cu ON cu.inscripcion_id = i.id
@@ -3594,6 +3776,7 @@ def api_notas_materia_detalle(mid):
             'porcentaje_tp': float(r[8]) if r[8] is not None else None,
             'condicion': r[9], 'cerrada': r[10] or False,
             'observaciones': r[11],
+            'promocion_provisoria': bool(r[12]),
             'condicion_sugerida': sugerir_condicion(nota, materia[5]),
         })
 
@@ -3650,6 +3833,13 @@ def api_notas_guardar(mid):
     """, (mid,))
     requeridas_aprob = cur.fetchall()
 
+    # Fecha límite del ciclo lectivo para confirmar promociones.
+    _hoy = date.today()
+    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
+    _row_anio = cur.fetchone()
+    _anio_cfg = int(_row_anio[0]) if _row_anio else _hoy.year
+    _limite_promo = _fecha_limite_promocion(cur, _anio_cfg)
+
     guardados = 0
     avisos    = []
     for fila in filas:
@@ -3665,6 +3855,11 @@ def api_notas_guardar(mid):
         tp        = float(tp) if tp is not None and str(tp).strip() != '' else None
         condicion = condicion if condicion in ['regular', 'libre', 'promocionado', 'ausente'] else None
 
+        # Se descartan las marcas automaticas que hayan quedado de un
+        # guardado anterior. Si la regla sigue aplicando, se vuelve a
+        # escribir mas abajo; si no, desaparece sola.
+        obs = _limpiar_marcas_automaticas(obs)
+
         # ── REGLA 1: el plan manda sobre la promoción ──
         # Si la materia se aprueba sólo con examen final, no se puede
         # promocionar por más alta que sea la nota.
@@ -3675,10 +3870,19 @@ def api_notas_guardar(mid):
                 f"({regimen_aprob}). Se guardó como regular."
             )
 
-        # ── REGLA 2: promoción condicionada por correlatividades ──
-        # La nota del profesor se respeta y se guarda, pero si le faltan
-        # correlativas aprobadas se deja constancia en observaciones:
-        # la promoción no habilita nada hasta que las apruebe.
+        # ── REGLA 2: la promoción cae si adeuda la correlativa ──
+        # Regla institucional: el alumno que promociona una materia y
+        # adeuda el final de su correlativa del año anterior tiene hasta
+        # la fecha límite del ciclo (por defecto 31/12) para aprobarlo.
+        #
+        #   • Antes de la fecha límite → la promoción se guarda, pero
+        #     marcada como PROVISORIA. Todavía le quedan mesas.
+        #   • Pasada la fecha límite   → la promoción se cae y la nota
+        #     se asienta directamente como 'regular'.
+        #
+        # La nota numérica del profesor NO se toca en ningún caso; lo
+        # único que cambia es la condición.
+        _promo_prov = False
         if condicion == 'promocionado' and requeridas_aprob:
             cur.execute("""
                 SELECT alumno_id FROM inscripciones WHERE id = %s
@@ -3686,6 +3890,9 @@ def api_notas_guardar(mid):
             _row_al = cur.fetchone()
             if _row_al:
                 _alumno_id = _row_al[0]
+                # Una promoción provisoria NO cuenta como materia aprobada:
+                # si contara, serviría para validar la promoción de la
+                # materia siguiente y el error se propagaría en cascada.
                 cur.execute("""
                     SELECT materia_id FROM (
                         SELECT i.materia_id
@@ -3693,6 +3900,7 @@ def api_notas_guardar(mid):
                         JOIN cursadas cu ON cu.inscripcion_id = i.id
                         WHERE i.alumno_id = %s
                           AND cu.condicion IN ('promocionado', 'aprobado')
+                          AND NOT cu.promocion_provisoria
                         UNION
                         SELECT materia_id FROM examenes
                         WHERE alumno_id = %s AND resultado = 'aprobado'
@@ -3702,8 +3910,21 @@ def api_notas_guardar(mid):
                 _faltan = [f"({o}) {n}" for rid, n, o in requeridas_aprob
                            if rid not in _aprobadas]
                 if _faltan:
-                    _nota_cond = ("PROMOCIÓN CONDICIONADA — requiere aprobar: "
-                                  + ", ".join(_faltan))
+                    if _hoy <= _limite_promo:
+                        _promo_prov = True
+                        _nota_cond = (
+                            "PROMOCIÓN PROVISORIA — se confirma solo si aprueba "
+                            "el final de: " + ", ".join(_faltan) +
+                            f" (plazo: {_limite_promo.strftime('%d/%m/%Y')})"
+                        )
+                    else:
+                        condicion = 'regular'
+                        _nota_cond = (
+                            "PROMOCIÓN CAÍDA — venció el plazo del "
+                            f"{_limite_promo.strftime('%d/%m/%Y')} sin aprobar "
+                            "el final de: " + ", ".join(_faltan) +
+                            ". Se asienta como regular."
+                        )
                     obs = (obs + " | " + _nota_cond).strip(" |") if obs else _nota_cond
                     avisos.append(_nota_cond)
 
@@ -3747,16 +3968,17 @@ def api_notas_guardar(mid):
             cur.execute("""
                 UPDATE cursadas SET
                     nota_cursada = %s, porcentaje_asistencia = %s,
-                    porcentaje_tp = %s, condicion = %s, observaciones = %s
+                    porcentaje_tp = %s, condicion = %s, observaciones = %s,
+                    promocion_provisoria = %s
                 WHERE id = %s
-            """, (nota, asist, tp, condicion, obs or None, cursada_id))
+            """, (nota, asist, tp, condicion, obs or None, _promo_prov, cursada_id))
         else:
             cur.execute("""
                 INSERT INTO cursadas
                     (inscripcion_id, nota_cursada, porcentaje_asistencia,
-                     porcentaje_tp, condicion, observaciones)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (insc_id, nota, asist, tp, condicion, obs or None))
+                     porcentaje_tp, condicion, observaciones, promocion_provisoria)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (insc_id, nota, asist, tp, condicion, obs or None, _promo_prov))
         guardados += 1
 
     conn.commit()
@@ -3780,6 +4002,31 @@ def api_notas_cerrar(mid):
 
     cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
     anio = int(cur.fetchone()[0])
+
+    # ── Bloqueo: promociones provisorias sin resolver ──
+    # Una cursada cerrada es inmodificable, así que si se cierra antes
+    # de la fecha límite las promociones provisorias quedarían firmes
+    # por accidente. Se cierra recién pasado el plazo, cuando el sistema
+    # ya las resolvió.
+    limite = _fecha_limite_promocion(cur, anio)
+    if date.today() <= limite:
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM cursadas cu
+            JOIN inscripciones i ON i.id = cu.inscripcion_id
+            JOIN materias m ON m.id = i.materia_id
+            WHERE i.materia_id = %s AND i.anio_lectivo = %s
+              AND m.carrera_id = %s
+              AND cu.promocion_provisoria
+        """, (mid, anio, carrera_id))
+        provisorias = cur.fetchone()[0]
+        if provisorias:
+            cur.close(); conn.close()
+            return jsonify({'error':
+                f'No se puede cerrar todavía: hay {provisorias} '
+                f'{"promoción provisoria" if provisorias == 1 else "promociones provisorias"} '
+                f'a la espera de que el alumno apruebe el final de su correlativa. '
+                f'El cierre se habilita después del {limite.strftime("%d/%m/%Y")}.'}), 400
 
     cur.execute("""
         UPDATE cursadas SET cerrada = TRUE
@@ -3928,6 +4175,15 @@ def api_guardar_libro_folio():
             libro      = item.get('libro', '').strip() or None
             folio      = item.get('folio', '').strip() or None
             if not cursada_id:
+                continue
+            # Una promoción provisoria no puede recibir libro y folio:
+            # todavía puede caerse. Asentarla sería un registro oficial
+            # sobre una condición que no está firme.
+            cur.execute("""
+                SELECT 1 FROM cursadas
+                WHERE id = %s AND promocion_provisoria
+            """, (cursada_id,))
+            if cur.fetchone():
                 continue
             cur.execute("""
                 UPDATE cursadas SET libro = %s, folio = %s
@@ -5711,6 +5967,44 @@ def api_mesas_cargar_resultados(mid):
                         LIMIT 1
                     )
                 """, (libro, folio, alumno_id, materia_id))
+
+                # ── Confirmar promociones provisorias ──
+                # Al aprobar este final, el alumno destraba las materias
+                # que había promocionado adeudando esta correlativa.
+                # Sin esto quedarían marcadas y se caerían igual cuando
+                # venza el plazo, pese a haber cumplido.
+                cur.execute("""
+                    UPDATE cursadas cu
+                    SET promocion_provisoria = FALSE
+                    FROM inscripciones i, correlatividades co
+                    WHERE cu.inscripcion_id = i.id
+                      AND i.alumno_id = %s
+                      AND co.materia_id = i.materia_id
+                      AND co.tipo = 'aprobada'
+                      AND co.requiere_materia_id = %s
+                      AND cu.promocion_provisoria
+                      AND NOT cu.cerrada
+                      -- Solo si NO le queda ninguna otra correlativa
+                      -- 'aprobada' pendiente para esa materia.
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM correlatividades co2
+                          WHERE co2.materia_id = i.materia_id
+                            AND co2.tipo = 'aprobada'
+                            AND co2.requiere_materia_id <> %s
+                            AND co2.requiere_materia_id NOT IN (
+                                SELECT i2.materia_id
+                                FROM inscripciones i2
+                                JOIN cursadas cu2 ON cu2.inscripcion_id = i2.id
+                                WHERE i2.alumno_id = %s
+                                  AND cu2.condicion IN ('promocionado', 'aprobado')
+                                  AND NOT cu2.promocion_provisoria
+                                UNION
+                                SELECT e2.materia_id FROM examenes e2
+                                WHERE e2.alumno_id = %s AND e2.resultado = 'aprobado'
+                            )
+                      )
+                """, (alumno_id, materia_id, materia_id, alumno_id, alumno_id))
 
         # Cerrar la mesa
         cur.execute("UPDATE mesas_examen SET cerrada = TRUE WHERE id = %s", (mid,))

@@ -1523,7 +1523,7 @@
                     <div class="ficha-card">
                         <h3>Situación académica</h3>
                         <div class="ficha-dato"><span class="label">Año de ingreso</span><span class="valor" id="fd-anio-ingreso">—</span></div>
-                        <div class="ficha-dato"><span class="label">Materias aprobadas</span><span class="valor" id="fd-aprobadas">—</span></div>
+                        <div class="ficha-dato"><span class="label">Materias aprobadas <span style="font-size:11px;color:var(--sga-texto-gris)">(toda la carrera)</span></span><span class="valor" id="fd-aprobadas">—</span></div>
                     </div>
                 </div>
             </div>
@@ -1930,7 +1930,7 @@
                             Planilla de asistencia
                         </button>
                         <button class="btn-nuevo" id="btn-guardar-notas" onclick="notasGuardar()">Guardar notas</button>
-                        <button class="btn-cerrar-cursada" id="btn-cerrar-cursada" onclick="abrirModal('modal-cerrar-cursada')" style="display:none">
+                        <button class="btn-cerrar-cursada" id="btn-cerrar-cursada" onclick="notasIntentarCerrar()" style="display:none">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                             Cerrar cursada
                         </button>
@@ -3275,6 +3275,25 @@
 </div>
 
 <!-- modal: cerrar cursada -->
+<div class="modal-overlay" id="modal-avisos-reglas" style="display:none">
+    <div class="modal-card">
+        <div class="modal-card-header">
+            <div class="modal-icono">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            </div>
+            <h3>Reglas del plan aplicadas</h3>
+        </div>
+        <div class="modal-card-body">
+            <p>Al guardar, el sistema ajustó algunas condiciones según el plan de estudios y las correlatividades:</p>
+            <ul id="modal-avisos-lista"></ul>
+            <p style="margin-bottom:0;">Las notas numéricas cargadas por el profesor no se modificaron.</p>
+        </div>
+        <div class="modal-card-footer">
+            <button class="modal-btn-confirmar" onclick="cerrarModal('modal-avisos-reglas')">Entendido</button>
+        </div>
+    </div>
+</div>
+
 <div class="modal-overlay" id="modal-cerrar-cursada" style="display:none">
     <div class="modal-card">
         <div class="modal-card-header">
@@ -5221,8 +5240,8 @@
                         <th>Espacio curricular</th>
                         <th>Régimen</th>
                         <th>Régimen de aprobación</th>
-                        <th>Correl. Cursada</th>
-                        <th>Correl. Aprobada</th>
+                        <th>Regularizadas<br><span style="font-weight:400;font-size:11px">para cursar</span></th>
+                        <th>Aprobadas<br><span style="font-weight:400;font-size:11px">para rendir</span></th>
                     </tr></thead>
                     <tbody>
                     ${materias.map(m => `
@@ -7579,9 +7598,13 @@
             const obs      = a.observaciones || '';
             const letras   = notaEnLetras(nota);
 
+            const badgeProv = a.promocion_provisoria
+                ? ` <span title="La promoción se confirma solo si aprueba el final de la correlativa antes de fin de año" style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;background:#fff3cd;color:#8a6100;white-space:nowrap">⏳ Provisoria</span>`
+                : '';
+
             return `<tr id="fila-nota-${idx}" data-insc="${a.inscripcion_id}">
                 <td style="text-align:center;font-size:13px">${a.dni}</td>
-                <td><strong>${a.apellido}</strong>, ${a.nombre}</td>
+                <td><strong>${a.apellido}</strong>, ${a.nombre}${badgeProv}</td>
                 <td style="text-align:center">
                     <input type="number" min="0" max="100" step="0.01"
                            class="input-chico" id="asist-${idx}" value="${asist}"
@@ -7632,6 +7655,14 @@
             else condSelect.value = '';
         }
         notasCambio(idx);
+    }
+
+    function mostrarAvisosReglas(avisos) {
+        if (!avisos || !avisos.length) return;
+        const esc = t => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        document.getElementById('modal-avisos-lista').innerHTML =
+            avisos.map(a => `<li>${esc(a)}</li>`).join('');
+        abrirModal('modal-avisos-reglas');
     }
 
     function notasCambio(idx) {
@@ -7819,13 +7850,36 @@
             mostrarExito('notas-aviso-importar', msgOk);
             // Reglas del plan de estudios que se aplicaron al guardar
             if (data.avisos && data.avisos.length > 0) {
-                alert('\u2139\uFE0F Reglas del plan de estudios aplicadas:\n\n\u2022 ' +
-                      data.avisos.join('\n\u2022 '));
+                mostrarAvisosReglas(data.avisos);
             }
             await notasAbrirMateria(notasMateriaId);
         } else {
             mostrarError('notas-aviso-importar', data.error || 'Error al guardar');
         }
+    }
+
+    function notasIntentarCerrar() {
+        // El cierre es irreversible. Antes de ofrecerlo hay que descartar
+        // los dos casos en que dejaría la cursada mal cerrada para siempre:
+        // cambios tipeados y no guardados, y alumnos sin condición cargada.
+        if (hayCambios) {
+            mostrarError('notas-aviso-importar',
+                'Tenés cambios sin guardar. Guardá las notas antes de cerrar la cursada, ' +
+                'porque el cierre es definitivo y no se puede reabrir.');
+            return;
+        }
+
+        const sinCondicion = (notasAlumnos || []).filter(a => !a.condicion);
+        if (sinCondicion.length) {
+            const n = sinCondicion.length;
+            mostrarError('notas-aviso-importar',
+                `Falta cargar la condición de ${n} ${n === 1 ? 'alumno' : 'alumnos'}: ` +
+                sinCondicion.map(a => `${a.apellido}, ${a.nombre}`).join(' · ') +
+                '. No se puede cerrar la cursada con condiciones vacías.');
+            return;
+        }
+
+        abrirModal('modal-cerrar-cursada');
     }
 
     async function notasCerrarConfirmado() {
@@ -8089,8 +8143,7 @@
             msgDiv.style.color   = '#155724';
             msgDiv.textContent   = '✅ Guardado correctamente.';
             if (data2.avisos && data2.avisos.length > 0) {
-                alert('\u2139\uFE0F Reglas del plan de estudios aplicadas:\n\n\u2022 ' +
-                      data2.avisos.join('\n\u2022 '));
+                mostrarAvisosReglas(data2.avisos);
             }
             // Recargar tabla principal
             await notasAbrirMateria(notasMateriaId);
@@ -8398,9 +8451,16 @@
             return;
         }
         tbody.innerHTML = m.inscriptos.map((al) => {
-            const condBadge = al.condicion_cursada === 'regular'
-                ? '<span class="badge-estado" style="background:#E5F0F8;color:#2D6CA8">Regular</span>'
-                : '<span class="badge-estado" style="background:#FFF0DC;color:#B36A14">Libre</span>';
+            let condBadge;
+            if (al.condicion_cursada === 'regular') {
+                condBadge = '<span class="badge-estado" style="background:#E5F0F8;color:#2D6CA8">Regular</span>';
+            } else if (al.condicion_cursada === 'aprobado') {
+                condBadge = '<span class="badge-estado" style="background:#E6F9EE;color:#1A6E3C">Aprobado</span>';
+            } else if (al.condicion_cursada === 'promocionado') {
+                condBadge = '<span class="badge-estado" style="background:#C8F7E4;color:#0D5C38">Promocion\u00f3</span>';
+            } else {
+                condBadge = '<span class="badge-estado" style="background:#FFF0DC;color:#B36A14">Libre</span>';
+            }
             let resBadge = '—';
             if (al.resultado === 'aprobado')    resBadge = '<span class="badge-estado activo">Aprobado</span>';
             if (al.resultado === 'desaprobado') resBadge = '<span class="badge-estado inactivo">Desaprobado</span>';
@@ -8971,7 +9031,9 @@
         // Materias aprobadas (Resumen) — aprobado o promocionado, en cualquier año
         let totalAprobadas = 0;
         Object.values(anios).forEach(cursadas => {
-            totalAprobadas += cursadas.filter(c => ['aprobado','promocionado'].includes(condicionNormalizada(c.condicion))).length;
+            totalAprobadas += cursadas.filter(c =>
+                ['aprobado','promocionado'].includes(condicionNormalizada(c.condicion))
+                && !c.promocion_provisoria).length;
         });
         document.getElementById('fd-aprobadas').textContent = totalAprobadas;
 
@@ -8980,7 +9042,9 @@
 
         contenido.innerHTML = aniosOrdenados.map(anioLec => {
             const cursadas = anios[anioLec];
-            const promo  = cursadas.filter(c => condicionNormalizada(c.condicion) === 'promocionado').length;
+            const provis = cursadas.filter(c => c.promocion_provisoria).length;
+            const promo  = cursadas.filter(c => condicionNormalizada(c.condicion) === 'promocionado' && !c.promocion_provisoria).length;
+            const aprob  = cursadas.filter(c => condicionNormalizada(c.condicion) === 'aprobado').length;
             const reg    = cursadas.filter(c => condicionNormalizada(c.condicion) === 'regular').length;
             const libre  = cursadas.filter(c => condicionNormalizada(c.condicion) === 'libre').length;
             const sinNota = cursadas.filter(c => c.nota_cursada === null).length;
@@ -8992,7 +9056,10 @@
                     <div style="display:flex;gap:8px;align-items:center">
                         <span style="font-size:12px;font-weight:400;color:var(--texto-2)">
                             ${cursadas.length} materia${cursadas.length !== 1 ? 's' : ''}
-                            · ${promo} promo · ${reg} regular · ${libre} libre
+                            ${aprob ? ` · ${aprob} aprobada${aprob !== 1 ? 's' : ''}` : ''}
+                            · ${promo} promo
+                            ${provis ? ` · ${provis} provisoria${provis !== 1 ? 's' : ''}` : ''}
+                            · ${reg} regular · ${libre} libre
                             ${sinNota ? ` · <span style="color:var(--texto-3)">${sinNota} sin nota</span>` : ''}
                         </span>
                         <button class="btn-secundario" style="font-size:11px;padding:4px 10px" onclick="historialDescargarAnio(${anioLec})">📄 PDF ${anioLec}</button>
@@ -9023,8 +9090,12 @@
                             'regular':      'Regularizó',
                             'libre':        'Libre',
                         };
-                        const condStyle = COND_STYLE[condNorm] || 'background:#f5f5f5;color:#666';
-                        const condLabel = COND_LABEL[condNorm] || '—';
+                        const condStyle = c.promocion_provisoria
+                            ? 'background:#fff3cd;color:#8a6100'
+                            : (COND_STYLE[condNorm] || 'background:#f5f5f5;color:#666');
+                        const condLabel = c.promocion_provisoria
+                            ? '⏳ Promoción provisoria'
+                            : (COND_LABEL[condNorm] || '—');
 
                         // Nota: si aprobó en mesa usar nota_mesa, sino nota_cursada
                         const nota = c.resultado_mesa === 'aprobado' ? c.nota_mesa : c.nota_cursada;
@@ -9033,7 +9104,8 @@
                             : '<span style="color:var(--texto-3)">—</span>';
 
                         // Libro/Folio: solo para aprobado o promocionado
-                        const tieneLibroFolio = condNorm === 'aprobado' || condNorm === 'promocionado';
+                        const tieneLibroFolio = (condNorm === 'aprobado' || condNorm === 'promocionado')
+                                                && !c.promocion_provisoria;
                         const libroHtml = tieneLibroFolio
                             ? (c.libro || '<span style="color:#dc3545;font-size:11px">Pendiente</span>')
                             : '<span style="color:var(--texto-3)">—</span>';
