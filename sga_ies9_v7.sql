@@ -4,21 +4,30 @@
 -- IES N 9 "Juana Azurduy" - San Pedro de Jujuy
 -- Practicas Profesionalizantes III
 --
--- Version: 6.0  (24/08/2026)
--- Reemplaza a sga_ies9_v4.sql, que habia quedado desactualizado:
--- declaraba 12 tablas cuando el sistema real usa 19.
+-- Version: 7.0  (05/09/2026)
+-- Reemplaza a sga_ies9_v6.sql, que no incluia la columna
+-- promocion_provisoria y obligaba a correr una migracion aparte
+-- despues de cada instalacion desde cero.
 --
--- Este archivo se genero con pg_dump sobre la base en produccion,
--- asi que refleja la estructura REAL y completa del sistema:
+-- Refleja la estructura REAL y completa del sistema (19 tablas):
 --   * mesas de examen e inscripciones a mesa
 --   * planes de estudio, equivalencias y reconocimientos
 --   * auditoria de cursadas e inscripciones
 --   * libro y folio en cursadas
 --   * motivo_cierre en mesas_examen (mesas desiertas)
+--   * promocion_provisoria en cursadas (NUEVO en v7)
+--
+-- CAMBIOS RESPECTO DE v6
+--   + cursadas.promocion_provisoria (boolean NOT NULL DEFAULT false)
+--   + indice parcial idx_cursadas_promocion_provisoria
+--
+-- Ya NO hace falta correr migracion_promocion_provisoria.sql
+-- despues de este script. Esa migracion sigue existiendo solo
+-- para bases que ya estaban creadas con v6.
 --
 -- USO: crear la base vacia y ejecutar este script.
 --      createdb ies9_gestion
---      psql -d ies9_gestion -f sga_ies9_v6.sql
+--      psql -d ies9_gestion -f sga_ies9_v7.sql
 --
 -- Solo contiene la ESTRUCTURA, no los datos.
 -- ================================================================
@@ -251,6 +260,7 @@ CREATE TABLE public.cursadas (
     porcentaje_tp numeric(5,2),
     libro character varying(20),
     folio character varying(20),
+    promocion_provisoria boolean DEFAULT false NOT NULL,
     CONSTRAINT cursadas_condicion_check CHECK (((condicion)::text = ANY ((ARRAY['regular'::character varying, 'libre'::character varying, 'promocionado'::character varying, 'ausente'::character varying, 'aprobado'::character varying])::text[]))),
     CONSTRAINT cursadas_nota_cursada_check CHECK (((nota_cursada >= (1)::numeric) AND (nota_cursada <= (10)::numeric))),
     CONSTRAINT cursadas_porcentaje_asistencia_check CHECK (((porcentaje_asistencia >= (0)::numeric) AND (porcentaje_asistencia <= (100)::numeric))),
@@ -1372,6 +1382,15 @@ CREATE INDEX idx_alumnos_cuil ON public.alumnos USING btree (cuil) WHERE (cuil I
 --
 
 CREATE INDEX idx_auditoria_cursada ON public.cursadas_auditoria USING btree (cursada_id);
+
+
+--
+-- Name: idx_cursadas_promocion_provisoria; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_cursadas_promocion_provisoria ON public.cursadas USING btree (promocion_provisoria) WHERE promocion_provisoria;
+
+COMMENT ON COLUMN public.cursadas.promocion_provisoria IS 'Promocion sujeta a que el alumno apruebe el final de su correlativa antes de la fecha limite del ciclo lectivo.';
 
 
 --
