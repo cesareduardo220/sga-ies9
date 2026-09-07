@@ -556,6 +556,20 @@ def login():
 
     error = None
 
+
+
+    # Si no hay ningun usuario cargado, avisar que falta la instalacion inicial
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM usuarios")
+    hay_usuarios = cur.fetchone()[0] > 0
+    cur.close()
+    conn.close()
+    if not hay_usuarios:
+        error = 'El sistema todavía no está configurado. Contactá al administrador.'
+
+
+
     if request.method == 'POST':
         usuario = limpiar_dni(request.form['usuario'].strip())
         password = request.form['password'].strip()
