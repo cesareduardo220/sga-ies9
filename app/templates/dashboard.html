@@ -1397,6 +1397,7 @@
                         <div id="datos-vista">
                             <div class="ficha-dato"><span class="label" id="fd-dni-label">Documento</span><span class="valor" id="fd-dni">—</span></div>
                             <div class="ficha-dato"><span class="label">CUIL</span><span class="valor" id="fd-cuil">—</span></div>
+                            <div class="ficha-dato"><span class="label">N° de legajo</span><span class="valor" id="fd-legajo">—</span></div>
                             <div class="ficha-dato"><span class="label">Fecha de nacimiento</span><span class="valor" id="fd-fnac">—</span></div>
                             <div class="ficha-dato"><span class="label">Celular</span><span class="valor" id="fd-celular">—</span></div>
                             <div class="ficha-dato"><span class="label">Dirección</span><span class="valor" id="fd-direccion">—</span></div>
@@ -1444,6 +1445,10 @@
                             <div class="campo-edit">
                                 <label>CUIL <span style="color:var(--sga-texto-gris);font-weight:400">(opcional)</span></label>
                                 <input type="text" class="input-edit-ficha" id="fe-cuil" placeholder="20-12345678-3" maxlength="13" oninput="onCuilFichaInput()">
+                            </div>
+                            <div class="campo-edit">
+                                <label>N° de legajo (opcional)</label>
+                                <input type="text" class="input-edit-ficha" id="fe-legajo" placeholder="Se completa cuando el instituto lo asigna" maxlength="20">
                             </div>
                             <div class="campo-edit">
                                 <label>Fecha de nacimiento</label>
@@ -2979,6 +2984,11 @@
                        placeholder="Ej: 2026" min="2000" max="2099" style="max-width:120px">
             </div>
         </div>
+                <div class="form-grupo">
+                    <label class="form-label">N° de legajo <span style="color:var(--texto-3);font-weight:400">(opcional)</span></label>
+                    <input type="text" id="input-al-legajo" class="form-input"
+                           placeholder="Se completa cuando el instituto lo asigna" maxlength="20">
+                </div>
 
         <div class="form-grupo">
             <label class="form-label">Fecha de nacimiento</label>
@@ -3827,6 +3837,16 @@
             if (typeof cancelarCambioPlan === 'function') cancelarCambioPlan();
         }
     }
+
+    // Al cargar, la URL puede traer un #seccion de una visita anterior
+    // (F5, marcador, historial). El sistema siempre arranca en el inicio,
+    // asi que se limpia la URL y se deja un estado inicial coherente.
+    function limpiarUrlAlCargar() {
+        history.replaceState(
+            { seccionId: 'dashboard-carrera', label: '' }, '', location.pathname
+        );
+    }
+    document.addEventListener('DOMContentLoaded', limpiarUrlAlCargar);
 
     // Botón "atrás/adelante" del navegador — sin botones internos de "Volver"
     window.addEventListener('popstate', function(e){
@@ -5522,6 +5542,10 @@
         if (buscar) buscar.value = '';
         const dropdown = document.getElementById('alumnos-buscar-dropdown');
         if (dropdown) dropdown.style.display = 'none';
+        // El navegador conserva el valor del desplegable al recargar: se lo
+        // vuelve a alinear con el filtro que el sistema tiene aplicado.
+        const filtroEstado = document.getElementById('alumnos-filtro-estado');
+        if (filtroEstado) filtroEstado.value = filtroActual;
 
         const res  = await fetch('/api/alumnos');
         alumnosData = await res.json();
@@ -5982,6 +6006,7 @@
             dniField.disabled      = (ROL !== 'coordinador');
             tipoDocSelect.disabled = (ROL !== 'coordinador');
             document.getElementById('input-al-anio-ingreso').value      = a.anio_ingreso || '';
+            document.getElementById('input-al-legajo').value = a.legajo || '';
             setFechaNacimiento(a.fecha_nacimiento);
             document.getElementById('input-al-direccion').value         = a.direccion || '';
             document.getElementById('input-al-localidad').value         = a.localidad || '';
@@ -6000,6 +6025,7 @@
             dniOriginal            = '';
             tipoDocOriginal        = 'DNI';
             document.getElementById('input-al-anio-ingreso').value = anioLectivoActual;
+            document.getElementById('input-al-legajo').value = '';
         }
 
         // Aplicar la lógica de label/placeholder según el tipo seleccionado
@@ -6033,6 +6059,7 @@
             cuil:           cuilNuevo,
             provincia:      document.getElementById('input-al-provincia').value,
             anio_ingreso:   document.getElementById('input-al-anio-ingreso').value || anioLectivoActual,
+            legajo:         document.getElementById('input-al-legajo').value.trim(),
             fecha_nacimiento: fechaNac,
             direccion:      document.getElementById('input-al-direccion').value.trim(),
             localidad:      document.getElementById('input-al-localidad').value.trim(),
@@ -6136,6 +6163,7 @@
         document.getElementById('fd-dni-label').textContent = tipoLabel;
         document.getElementById('fd-dni').textContent       = a.dni;
         document.getElementById('fd-cuil').textContent      = formatearCuilDisplay(a.cuil) || '—';
+        document.getElementById('fd-legajo').textContent  = a.legajo || '—';
 
         document.getElementById('fd-fnac').innerHTML = formatearFechaDDMMYYYY(a.fecha_nacimiento);
         document.getElementById('fd-celular').textContent = a.celular || '—';
@@ -6191,6 +6219,7 @@
             document.getElementById('fe-localidad').value = a.localidad || '';
             document.getElementById('fe-provincia').value = a.provincia || '';
             document.getElementById('fe-email').value = a.email || '';
+            document.getElementById('fe-legajo').value = a.legajo || '';
             document.getElementById('fe-cem-nombre').value = a.contacto_emergencia_nombre || '';
             document.getElementById('fe-cem-tel').value = a.contacto_emergencia_telefono || '';
             document.getElementById('ficha-edicion-error').style.display = 'none';
@@ -6295,6 +6324,7 @@
             tipo_documento: tipoDocNuevo,
             dni:            dniNuevo,
             cuil:           cuilNuevo,
+            legajo:         document.getElementById('fe-legajo').value.trim(),
             provincia:      document.getElementById('fe-provincia').value,
             anio_ingreso:   fichaAlumnoActual.anio_ingreso,
             fecha_nacimiento: fechaNac,
@@ -6316,8 +6346,7 @@
         await cargarAlumnos();
         fichaAlumnoActual = alumnosData.find(x => x.id === fichaAlumnoActual.id);
         renderFichaResumen(fichaAlumnoActual);
-        document.getElementById('datos-edicion').style.display = 'none';
-        document.getElementById('datos-vista').style.display = 'block';
+        _cerrarEdicionDatos();
     }
 
     async function fichaToggleActivo() {
