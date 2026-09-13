@@ -1844,7 +1844,7 @@ def api_alumnos_listar():
         SELECT id, apellido, nombre, dni, email, celular,
                fecha_nacimiento, direccion, localidad,
                contacto_emergencia_nombre, contacto_emergencia_telefono,
-               activo, anio_ingreso, tipo_documento, cuil, provincia
+               activo, anio_ingreso, tipo_documento, cuil, provincia, legajo
         FROM alumnos
         WHERE carrera_id = %s
         ORDER BY apellido, nombre
@@ -1865,7 +1865,7 @@ def api_alumnos_listar():
         'direccion': r[7], 'localidad': r[8],
         'contacto_emergencia_nombre': r[9],
         'contacto_emergencia_telefono': r[10],
-        'activo': r[11], 'anio_ingreso': r[12]
+        'activo': r[11], 'anio_ingreso': r[12], 'legajo': r[16]
     } for r in rows])
 
 
@@ -1882,6 +1882,7 @@ def api_alumnos_crear():
     cuil           = limpiar_cuil(data.get('cuil', ''))
     provincia      = (data.get('provincia') or '').strip() or None
     fecha_nac      = data.get('fecha_nacimiento') or None
+    legajo        = (data.get('legajo') or '').strip() or None
 
     if not apellido or not nombre:
         return jsonify({'error': 'Apellido y nombre son obligatorios'}), 400
@@ -1934,8 +1935,8 @@ def api_alumnos_crear():
                 carrera_id, apellido, nombre, dni, tipo_documento, cuil,
                 email, celular, fecha_nacimiento, direccion, localidad, provincia,
                 contacto_emergencia_nombre, contacto_emergencia_telefono,
-                anio_ingreso
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                anio_ingreso, legajo
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             carrera_id, apellido, nombre, dni, tipo_documento, cuil,
@@ -1947,7 +1948,7 @@ def api_alumnos_crear():
             provincia,
             data.get('contacto_emergencia_nombre', '').strip() or None,
             data.get('contacto_emergencia_telefono', '').strip() or None,
-            anio_ingreso,
+            anio_ingreso, legajo,
         ))
         nuevo_id = cur.fetchone()[0]
         conn.commit()
@@ -1955,6 +1956,8 @@ def api_alumnos_crear():
     except Exception as e:
         conn.rollback()
         if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+            if 'legajo' in str(e).lower():
+                return jsonify({'error': 'Ya existe un alumno con ese legajo'}), 409
             return jsonify({'error': 'Ya existe un alumno con ese documento'}), 409
         return jsonify({'error': str(e)}), 500
     finally:
@@ -2035,6 +2038,8 @@ def api_alumnos_editar(aid):
     except (ValueError, TypeError):
         anio_ingreso = None
 
+    legajo = (data.get('legajo') or '').strip() or None
+
     try:
         cur.execute("""
             UPDATE alumnos SET
@@ -2043,7 +2048,7 @@ def api_alumnos_editar(aid):
                 direccion = %s, localidad = %s, provincia = %s,
                 contacto_emergencia_nombre = %s,
                 contacto_emergencia_telefono = %s,
-                anio_ingreso = %s
+                anio_ingreso = %s, legajo = %s
             WHERE id = %s AND carrera_id = %s
         """, (
             apellido, nombre, dni, tipo_documento, cuil,
@@ -2055,7 +2060,7 @@ def api_alumnos_editar(aid):
             provincia,
             data.get('contacto_emergencia_nombre', '').strip() or None,
             data.get('contacto_emergencia_telefono', '').strip() or None,
-            anio_ingreso,
+            anio_ingreso, legajo,
             aid, carrera_id
         ))
         conn.commit()
@@ -2063,6 +2068,8 @@ def api_alumnos_editar(aid):
     except Exception as e:
         conn.rollback()
         if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+            if 'legajo' in str(e).lower():
+                return jsonify({'error': 'Ya existe un alumno con ese legajo'}), 409
             return jsonify({'error': 'Ya existe un alumno con ese documento'}), 409
         return jsonify({'error': str(e)}), 500
     finally:
