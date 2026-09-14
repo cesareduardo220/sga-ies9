@@ -7385,3 +7385,259 @@ def api_inscripcion_validar():
         cur.close()
         conn.close()
  
+
+# ------------------------------------------------------------
+# Guardado de la preinscripción (público, sin sesión)
+# ------------------------------------------------------------
+ 
+_RE_EMAIL = re.compile(r'^[^@\s]+@[^@\s.]+\.[^@\s]{2,}$')
+ 
+ 
+def validar_email(email):
+    """Devuelve None si es válido, o un mensaje de error."""
+    if not email:
+        return 'El correo electrónico es obligatorio'
+    if len(email) > 150:
+        return 'El correo electrónico es demasiado largo'
+    if not _RE_EMAIL.match(email.strip()):
+        return 'El correo electrónico no tiene un formato válido'
+    return None
+ 
+ 
+def _limpiar_telefono(valor):
+    """Deja solo dígitos, espacios y guiones. Corta el largo de más."""
+    if not valor:
+        return None
+    v = re.sub(r'[^0-9\s\-+()]', '', str(valor)).strip()
+    return v or None
+ 
+ 
+def _limpiar_texto(valor, maximo):
+    if valor is None:
+        return None
+    v = ' '.join(str(valor).split())
+    return v[:maximo] or None
+ 
+ 
+@auth.route('/api/inscripcion/guardar', methods=['POST'])
+def api_inscripcion_guardar():
+    """
+    Recibe el formulario público y crea la preinscripción.
+ 
+    Revalida TODO del lado del servidor: el token se vuelve a verificar
+    acá, sin confiar en que el cliente ya pasó por /validar.
+    """
+    data = request.get_json(silent=True) or {}
+ 
+    if (data.get('website') or '').strip():
+        return jsonify({'error': 'No se pudo procesar la solicitud.'}), 400
+ 
+    token = (data.get('token') or '').strip().upper().replace(' ', '')
+    if '-' not in token and len(token) == 8:
+        token = f"{token[:4]}-{token[4:]}"
+    if not token:
+        return jsonify({'error': 'Falta el token de inscripción.'}), 400
+ 
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        abierta, motivo = _autoinscripcion_abierta(cur)
+        if not abierta:
+            return jsonify({'error': motivo}), 403
+ 
+        # FOR UPDATE bloquea la fila del token hasta el commit: si llegan
+        # dos envíos simultáneos con el mismo token, el segundo espera y
+        # después lo encuentra ya usado.
+        cur.execute("""
+            SELECT id, tipo, estado, vence_el, ciclo_lectivo, carrera_id, alumno_id
+            FROM tokens_inscripcion
+            WHERE token = %s
+            FOR UPDATE
+        """, (token,))
+        t = cur.fetchone()
+ 
+        if not t or t[2] == 'anulado':
+            conn.rollback()
+            return jsonify({'error': 'El token no es válido.'}), 404
+        if t[2] == 'usado':
+            conn.rollback()
+            return jsonify({'error': 'Este token ya fue utilizado.'}), 409
+        if t[3] and t[3] < date.today():
+            conn.rollback()
+            return jsonify({'error': 'Este token venció. Acercate a preceptoría.'}), 410
+ 
+        token_id, tipo, _, _, ciclo, carrera_id, alumno_id = t
+ 
+        # ---------- Documento ----------
+        if tipo == 'reinscripcion':
+            # El documento no se edita en una reinscripción: sale del legajo.
+            cur.execute("""
+                SELECT tipo_documento, dni, plan_id
+                FROM alumnos WHERE id = %s AND activo = TRUE
+            """, (alumno_id,))
+            al = cur.fetchone()
+            if not al:
+                conn.rollback()
+                return jsonify({'error': 'El token no es válido.'}), 404
+ 
+            # El DNI del payload confirma identidad, igual que en /validar.
+            if limpiar_dni(data.get('dni') or '') != limpiar_dni(al[1] or ''):
+                conn.rollback()
+                return jsonify({'error': 'El DNI no coincide con el titular del token.'}), 403
+ 
+            tipo_doc = al[0]
+            documento = al[1]
+            plan_id = al[2]
+        else:
+            tipo_doc = (data.get('tipo_documento') or 'DNI').upper()
+            documento = limpiar_documento(data.get('dni') or '')
+            err = validar_documento(tipo_doc, documento)
+            if err:
+                conn.rollback()
+                return jsonify({'error': err}), 400
+            plan_id = None
+ 
+        # ---------- Identidad ----------
+        apellido = _limpiar_texto(data.get('apellido'), 100)
+        nombre   = _limpiar_texto(data.get('nombre'), 100)
+        if not apellido:
+            conn.rollback()
+            return jsonify({'error': 'El apellido es obligatorio.'}), 400
+        if not nombre:
+            conn.rollback()
+            return jsonify({'error': 'El nombre es obligatorio.'}), 400
+        if re.search(r'[0-9]', apellido + nombre):
+            conn.rollback()
+            return jsonify({'error': 'El nombre y el apellido no pueden contener números.'}), 400
+ 
+        fecha_nac = (data.get('fecha_nacimiento') or '').strip()
+        if not fecha_nac:
+            conn.rollback()
+            return jsonify({'error': 'La fecha de nacimiento es obligatoria.'}), 400
+        err = validar_fecha_nacimiento(fecha_nac)
+        if err:
+            conn.rollback()
+            return jsonify({'error': err}), 400
+ 
+        cuil = limpiar_cuil(data.get('cuil') or '')
+        err = validar_cuil(cuil)
+        if err:
+            conn.rollback()
+            return jsonify({'error': err}), 400
+ 
+        # ---------- Contacto ----------
+        email = (data.get('email') or '').strip().lower()
+        err = validar_email(email)
+        if err:
+            conn.rollback()
+            return jsonify({'error': err}), 400
+ 
+        celular = _limpiar_telefono(data.get('celular'))
+        if not celular:
+            conn.rollback()
+            return jsonify({'error': 'El celular es obligatorio.'}), 400
+        telefono = _limpiar_telefono(data.get('telefono'))
+ 
+        # ---------- Domicilio ----------
+        direccion = _limpiar_texto(data.get('direccion'), 200)
+        if not direccion:
+            conn.rollback()
+            return jsonify({'error': 'La dirección es obligatoria.'}), 400
+ 
+        provincia = _limpiar_texto(data.get('provincia'), 50)
+        if not provincia:
+            conn.rollback()
+            return jsonify({'error': 'La provincia es obligatoria.'}), 400
+        err = validar_provincia(provincia)
+        if err:
+            conn.rollback()
+            return jsonify({'error': err}), 400
+ 
+        localidad     = _limpiar_texto(data.get('localidad'), 150)
+        departamento  = _limpiar_texto(data.get('departamento'), 150)
+        localidad_id  = data.get('localidad_id') or None
+        if not localidad:
+            conn.rollback()
+            return jsonify({'error': 'La localidad es obligatoria.'}), 400
+ 
+        if localidad_id:
+            cur.execute("SELECT 1 FROM localidades WHERE id = %s", (localidad_id,))
+            if not cur.fetchone():
+                localidad_id = None   # cayó un id inexistente: se guarda como texto libre
+ 
+        # ---------- Contacto de emergencia ----------
+        ce_nombre   = _limpiar_texto(data.get('contacto_emergencia_nombre'), 150)
+        ce_vinculo  = _limpiar_texto(data.get('contacto_emergencia_vinculo'), 50)
+        ce_telefono = _limpiar_telefono(data.get('contacto_emergencia_telefono'))
+        if not ce_nombre:
+            conn.rollback()
+            return jsonify({'error': 'El nombre del contacto de emergencia es obligatorio.'}), 400
+        if not ce_telefono:
+            conn.rollback()
+            return jsonify({'error': 'El teléfono del contacto de emergencia es obligatorio.'}), 400
+ 
+        # ---------- Duplicado en el mismo ciclo ----------
+        cur.execute("""
+            SELECT id FROM preinscripciones
+            WHERE dni = %s AND ciclo_lectivo = %s
+        """, (documento, ciclo))
+        if cur.fetchone():
+            conn.rollback()
+            return jsonify({
+                'error': 'Ya existe una inscripción registrada con este documento '
+                         'para el ciclo lectivo actual.'
+            }), 409
+ 
+        # ---------- Alta ----------
+        cur.execute("""
+            INSERT INTO preinscripciones (
+                token_id, ciclo_lectivo,
+                tipo_documento, dni, cuil, apellido, nombre, fecha_nacimiento,
+                email, celular, telefono,
+                direccion, localidad_id, localidad, departamento, provincia,
+                contacto_emergencia_nombre, contacto_emergencia_vinculo,
+                contacto_emergencia_telefono,
+                carrera_id, plan_id, estado
+            ) VALUES (
+                %s, %s,
+                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, 'pendiente'
+            ) RETURNING id
+        """, (
+            token_id, ciclo,
+            tipo_doc, documento, cuil or None, apellido, nombre, fecha_nac,
+            email, celular, telefono,
+            direccion, localidad_id, localidad, departamento, provincia,
+            ce_nombre, ce_vinculo, ce_telefono,
+            carrera_id, plan_id
+        ))
+        preinscripcion_id = cur.fetchone()[0]
+ 
+        # El token se quema recién ahora, con los datos ya guardados.
+        cur.execute("""
+            UPDATE tokens_inscripcion
+            SET estado = 'usado', usado_en = now()
+            WHERE id = %s
+        """, (token_id,))
+ 
+        conn.commit()
+        return jsonify({
+            'ok': True,
+            'preinscripcion_id': preinscripcion_id,
+            'tipo': tipo,
+            'mensaje': 'Tu inscripción fue registrada y está pendiente de revisión.'
+        })
+ 
+    except Exception:
+        conn.rollback()
+        return jsonify({
+            'error': 'No se pudo registrar la inscripción. Reintentá en unos minutos.'
+        }), 500
+    finally:
+        cur.close()
+        conn.close()
+ 
+
