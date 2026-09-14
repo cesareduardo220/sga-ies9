@@ -19,6 +19,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 import os
 from openpyxl.styles import Font, PatternFill, Alignment
 from datetime import date, datetime, timedelta
+import secrets
 
 auth = Blueprint('auth', __name__)
 
@@ -6929,3 +6930,277 @@ def api_localidades_buscar():
         {'id': f[0], 'nombre': f[1], 'departamento': f[2], 'provincia': f[3]}
         for f in filas
     ])
+
+# ============================================================
+# TOKENS DE INSCRIPCIÓN
+#
+# La preceptora controla la documentación en persona y recién
+# entonces genera el token. El token es la constancia de que
+# el papeleo ya se aprobó.
+# ============================================================
+ 
+# Sin caracteres que se confundan al dictarlos o escribirlos
+# a mano: sin O/0, sin I/1/L.
+_ALFABETO_TOKEN = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+ 
+ 
+def _get_config(cur, clave, default=None):
+    cur.execute("SELECT valor FROM configuracion WHERE clave = %s", (clave,))
+    r = cur.fetchone()
+    if not r or r[0] is None or r[0] == '':
+        return default
+    return r[0]
+ 
+ 
+def _generar_tokens(cur, cantidad):
+    """
+    Devuelve `cantidad` tokens nuevos con formato XXXX-XXXX,
+    garantizando que no choquen entre sí ni con los ya guardados.
+    """
+    cur.execute("SELECT token FROM tokens_inscripcion")
+    usados = {r[0] for r in cur.fetchall()}
+ 
+    nuevos = []
+    while len(nuevos) < cantidad:
+        bloque = ''.join(secrets.choice(_ALFABETO_TOKEN) for _ in range(8))
+        t = f"{bloque[:4]}-{bloque[4:]}"
+        if t in usados:
+            continue
+        usados.add(t)
+        nuevos.append(t)
+    return nuevos
+ 
+ 
+def _vencimiento_token(cur):
+    dias = _get_config(cur, 'autoinscripcion_vigencia_dias', '15')
+    try:
+        dias = int(dias)
+    except (TypeError, ValueError):
+        dias = 15
+    return date.today() + timedelta(days=dias)
+ 
+ 
+@auth.route('/api/tokens', methods=['GET'])
+@login_requerido(['admin', 'coordinador', 'preceptora'])
+def api_tokens_listar():
+    ciclo   = request.args.get('ciclo', type=int) or get_ciclo_lectivo()['anio_inicio']
+    carrera = request.args.get('carrera_id', type=int)
+    estado  = (request.args.get('estado') or '').strip()
+    tipo    = (request.args.get('tipo') or '').strip()
+ 
+    filtros = ["t.ciclo_lectivo = %s"]
+    params  = [ciclo]
+    if carrera:
+        filtros.append("t.carrera_id = %s")
+        params.append(carrera)
+    if estado in ('disponible', 'usado', 'anulado'):
+        filtros.append("t.estado = %s")
+        params.append(estado)
+    if tipo in ('ingresante', 'reinscripcion'):
+        filtros.append("t.tipo = %s")
+        params.append(tipo)
+ 
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(f"""
+        SELECT t.id, t.token, t.tipo, t.estado, t.vence_el,
+               t.alumno_id, a.apellido, a.nombre, a.dni, a.email, a.celular,
+               c.nombre_corto, c.nombre,
+               t.generado_en, t.usado_en,
+               u.apellido, u.nombre,
+               p.id, p.estado
+        FROM tokens_inscripcion t
+        LEFT JOIN alumnos  a ON a.id = t.alumno_id
+        LEFT JOIN carreras c ON c.id = t.carrera_id
+        LEFT JOIN usuarios u ON u.id = t.generado_por
+        LEFT JOIN preinscripciones p ON p.token_id = t.id
+        WHERE {' AND '.join(filtros)}
+        ORDER BY t.generado_en DESC, t.id DESC
+    """, params)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+ 
+    hoy = date.today()
+    return jsonify([{
+        'id':             r[0],
+        'token':          r[1],
+        'tipo':           r[2],
+        'estado':         r[3],
+        'vence_el':       r[4].isoformat() if r[4] else None,
+        'vencido':        bool(r[4] and r[4] < hoy and r[3] == 'disponible'),
+        'alumno_id':      r[5],
+        'alumno':         f"{r[6]}, {r[7]}" if r[6] else None,
+        'dni':            r[8],
+        'email':          r[9],
+        'celular':        r[10],
+        'carrera':        r[11] or r[12],
+        'generado_en':    r[13].isoformat() if r[13] else None,
+        'usado_en':       r[14].isoformat() if r[14] else None,
+        'generado_por':   f"{r[15]}, {r[16]}" if r[15] else None,
+        'preinscripcion_id':     r[17],
+        'preinscripcion_estado': r[18],
+    } for r in rows])
+ 
+ 
+@auth.route('/api/tokens/ingresante', methods=['POST'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_tokens_ingresante():
+    """Genera un token suelto para un aspirante que todavía no está en el sistema."""
+    data = request.get_json() or {}
+    carrera_id = data.get('carrera_id')
+    cantidad   = data.get('cantidad') or 1
+ 
+    if not carrera_id:
+        return jsonify({'error': 'La carrera es obligatoria'}), 400
+    try:
+        cantidad = int(cantidad)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Cantidad inválida'}), 400
+    if cantidad < 1 or cantidad > 50:
+        return jsonify({'error': 'La cantidad debe estar entre 1 y 50'}), 400
+ 
+    ciclo = get_ciclo_lectivo()['anio_inicio']
+ 
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        vence = _vencimiento_token(cur)
+        tokens = _generar_tokens(cur, cantidad)
+        generados = []
+        for t in tokens:
+            cur.execute("""
+                INSERT INTO tokens_inscripcion
+                    (token, tipo, alumno_id, carrera_id, ciclo_lectivo,
+                     vence_el, generado_por)
+                VALUES (%s, 'ingresante', NULL, %s, %s, %s, %s)
+                RETURNING id
+            """, (t, carrera_id, ciclo, vence, session['user_id']))
+            generados.append({'id': cur.fetchone()[0], 'token': t})
+        conn.commit()
+        return jsonify({
+            'ok': True,
+            'ciclo_lectivo': ciclo,
+            'vence_el': vence.isoformat(),
+            'tokens': generados
+        })
+    except Exception:
+        conn.rollback()
+        return jsonify({'error': 'No se pudieron generar los tokens'}), 500
+    finally:
+        cur.close()
+        conn.close()
+ 
+ 
+@auth.route('/api/tokens/reinscripcion', methods=['POST'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_tokens_reinscripcion():
+    """
+    Genera tokens en masa para los alumnos activos de una carrera que
+    todavía no tengan uno vivo en el ciclo. Si vienen `alumno_ids`, se
+    limita a esos.
+    """
+    data = request.get_json() or {}
+    carrera_id = data.get('carrera_id')
+    alumno_ids = data.get('alumno_ids') or None
+ 
+    if not carrera_id:
+        return jsonify({'error': 'La carrera es obligatoria'}), 400
+ 
+    ciclo = get_ciclo_lectivo()['anio_inicio']
+ 
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        filtro_ids = ""
+        params = [carrera_id, ciclo]
+        if alumno_ids:
+            filtro_ids = " AND a.id = ANY(%s)"
+            params.append(list(alumno_ids))
+ 
+        cur.execute(f"""
+            SELECT a.id, a.apellido, a.nombre, a.dni, a.email, a.celular
+            FROM alumnos a
+            WHERE a.carrera_id = %s
+              AND a.activo = TRUE
+              AND NOT EXISTS (
+                    SELECT 1 FROM tokens_inscripcion t
+                    WHERE t.alumno_id = a.id
+                      AND t.ciclo_lectivo = %s
+                      AND t.estado = 'disponible'
+              )
+              {filtro_ids}
+            ORDER BY a.apellido, a.nombre
+        """, params)
+        alumnos = cur.fetchall()
+ 
+        if not alumnos:
+            return jsonify({
+                'ok': True,
+                'generados': 0,
+                'tokens': [],
+                'mensaje': 'Todos los alumnos ya tienen un token vigente'
+            })
+ 
+        vence = _vencimiento_token(cur)
+        tokens = _generar_tokens(cur, len(alumnos))
+        generados = []
+ 
+        for a, t in zip(alumnos, tokens):
+            cur.execute("""
+                INSERT INTO tokens_inscripcion
+                    (token, tipo, alumno_id, carrera_id, ciclo_lectivo,
+                     vence_el, generado_por)
+                VALUES (%s, 'reinscripcion', %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (t, a[0], carrera_id, ciclo, vence, session['user_id']))
+            generados.append({
+                'id':        cur.fetchone()[0],
+                'token':     t,
+                'alumno_id': a[0],
+                'alumno':    f"{a[1]}, {a[2]}",
+                'dni':       a[3],
+                'email':     a[4],
+                'celular':   a[5],
+            })
+ 
+        conn.commit()
+        return jsonify({
+            'ok': True,
+            'ciclo_lectivo': ciclo,
+            'vence_el': vence.isoformat(),
+            'generados': len(generados),
+            'tokens': generados
+        })
+    except Exception:
+        conn.rollback()
+        return jsonify({'error': 'No se pudieron generar los tokens'}), 500
+    finally:
+        cur.close()
+        conn.close()
+ 
+ 
+@auth.route('/api/tokens/<int:tid>/anular', methods=['POST'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_tokens_anular(tid):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE tokens_inscripcion
+            SET estado = 'anulado', anulado_en = now(), anulado_por = %s
+            WHERE id = %s AND estado = 'disponible'
+            RETURNING id
+        """, (session['user_id'], tid))
+        if not cur.fetchone():
+            conn.rollback()
+            return jsonify({'error': 'El token no existe o ya fue usado'}), 409
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception:
+        conn.rollback()
+        return jsonify({'error': 'No se pudo anular el token'}), 500
+    finally:
+        cur.close()
+        conn.close()
+ 
