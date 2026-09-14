@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>SGA &mdash; IES N&deg; 9 | Inscripci&oacute;n</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='fonts/fuentes.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+<style>
+:root{
+  --verde-oscuro:#123626;
+  --verde-medio:#1B5E3F;
+  --verde-claro:#2D8C63;
+  --indigo:#473B73;
+  --crema:#FAF9F5;
+  --crema-2:#F1EFE8;
+  --texto-oscuro:#1C2321;
+  --texto-gris:#6B7280;
+  --borde:#E1E4DD;
+  --error:#D14343;
+  --ok:#1B5E3F;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{
+  font-family:'Inter',sans-serif; color:var(--texto-oscuro); background:var(--crema);
+  overflow-x:hidden;
+}
+h1,h2{font-family:'Raleway',sans-serif;}
+button{font-family:inherit; cursor:pointer;}
+ 
+.patron-cerebro{
+  position:absolute; inset:0; opacity:0.07; pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg transform='translate(70,68)' fill='none' stroke='%23ffffff' stroke-width='1.4'%3E%3Cpath d='M-65,-15 C-72,-40 -50,-55 -30,-50 C-22,-62 0,-62 8,-50 C30,-56 50,-40 42,-18 C58,-10 58,10 42,18 C50,40 30,56 8,50 C0,62 -22,62 -30,50 C-50,55 -72,40 -65,15 C-76,7 -76,-7 -65,-15 Z'/%3E%3Cpath d='M-11,-54 C-11,-20 -11,20 -11,54'/%3E%3C/g%3E%3C/svg%3E");
+  background-size:140px 140px;
+}
+ 
+/* ---------- Estructura ---------- */
+#screen{ display:flex; min-height:100vh; }
+ 
+.panel-izq{
+  position:relative; flex:0 0 44%;
+  background:linear-gradient(160deg, var(--verde-oscuro) 0%, var(--verde-medio) 100%);
+  color:#fff; display:flex; flex-direction:column; justify-content:space-between;
+  padding:56px 56px; overflow:hidden;
+}
+.logo-cerebro{ width:64px; height:64px; margin-bottom:28px; position:relative; z-index:2; }
+@keyframes respirarLogo{
+  0%,100%{ transform:scale(1); opacity:0.92; }
+  50%{ transform:scale(1.05); opacity:1; }
+}
+.logo-cerebro{ animation:respirarLogo 3.6s ease-in-out infinite; transform-origin:center; }
+ 
+.panel-izq h1{ font-size:2.6rem; font-weight:800; line-height:1.1; margin:0 0 14px; position:relative; z-index:2; }
+.panel-izq p.lead{ font-size:1.05rem; opacity:0.88; max-width:380px; line-height:1.55; position:relative; z-index:2; margin:0 0 30px; }
+ 
+.pasos{ position:relative; z-index:2; display:flex; flex-direction:column; gap:16px; margin-bottom:auto; }
+.paso-item{ display:flex; align-items:flex-start; gap:13px; opacity:0.55; transition:opacity .25s; }
+.paso-item.activo{ opacity:1; }
+.paso-num{
+  width:34px; height:34px; border-radius:9px; background:rgba(255,255,255,0.1);
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  font-weight:700; font-size:0.9rem;
+}
+.paso-item.activo .paso-num{ background:rgba(255,255,255,0.22); }
+.paso-info strong{ display:block; font-size:0.84rem; font-weight:700; margin-bottom:2px; }
+.paso-info span{ font-size:0.78rem; opacity:0.65; line-height:1.5; }
+ 
+.pie-institucional{ position:relative; z-index:2; font-size:0.85rem; opacity:0.7; letter-spacing:0.03em; margin-top:30px; }
+ 
+.panel-der{ flex:1; background:var(--crema); display:flex; align-items:center; justify-content:center; padding:40px; }
+.form-wrap{ width:100%; max-width:400px; }
+.form-wrap .eyebrow{ font-size:0.78rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--verde-medio); font-weight:700; margin-bottom:10px; }
+.form-wrap h2{ font-size:1.7rem; margin:0 0 6px; font-weight:700; }
+.form-wrap .sub{ color:var(--texto-gris); font-size:0.92rem; margin-bottom:28px; line-height:1.55; }
+ 
+/* ---------- Mensajes ---------- */
+.msg{
+  border-radius:9px; font-size:0.86rem; padding:11px 15px; margin-bottom:20px;
+  display:flex; align-items:flex-start; gap:8px; line-height:1.5;
+}
+.msg-error{ background:#FBEAEA; border:1px solid #F0C2C2; color:var(--error); }
+.msg-info{ background:#EAF2ED; border:1px solid #C9DED3; color:var(--verde-medio); }
+.oculto{ display:none !important; }
+ 
+/* ---------- Campos ---------- */
+.campo{ margin-bottom:20px; }
+.campo label{ display:block; font-size:0.83rem; font-weight:600; margin-bottom:7px; color:var(--texto-oscuro); }
+.input-wrap{ position:relative; }
+.input-wrap input{
+  width:100%; padding:13px 16px; border-radius:10px; border:1.5px solid var(--borde);
+  font-size:0.96rem; background:#fff; transition:border-color .15s, box-shadow .15s;
+  font-family:'Inter',sans-serif;
+}
+.input-wrap input:focus{ outline:none; border-color:var(--verde-medio); box-shadow:0 0 0 4px rgba(45,140,99,0.13); }
+ 
+.input-token input{
+  font-family:'Courier New',monospace; font-size:1.35rem; font-weight:700;
+  letter-spacing:0.16em; text-align:center; text-transform:uppercase;
+}
+.ayuda-campo{ font-size:0.78rem; color:var(--texto-gris); margin-top:7px; line-height:1.5; }
+ 
+/* Trampa para bots: invisible para personas, presente en el DOM. */
+.trampa{
+  position:absolute !important; left:-9999px !important;
+  width:1px; height:1px; opacity:0; pointer-events:none;
+}
+ 
+.btn-primario{
+  width:100%; padding:14px; border:none; border-radius:10px;
+  background:var(--verde-medio); color:#fff; font-weight:700; font-size:0.98rem;
+  transition:background .15s, transform .1s; margin-top:6px;
+}
+.btn-primario:hover:not(:disabled){ background:var(--verde-oscuro); }
+.btn-primario:active:not(:disabled){ transform:scale(0.99); }
+.btn-primario:disabled{ opacity:0.55; cursor:not-allowed; }
+ 
+.btn-secundario{
+  width:100%; padding:12px; border:1.5px solid var(--borde); border-radius:10px;
+  background:#fff; color:var(--texto-gris); font-weight:600; font-size:0.9rem;
+  margin-top:10px; transition:border-color .15s, color .15s;
+}
+.btn-secundario:hover{ border-color:var(--verde-medio); color:var(--verde-medio); }
+ 
+.form-footer{
+  margin-top:26px; padding-top:20px; border-top:1px solid var(--borde);
+  font-size:0.78rem; color:var(--texto-gris); text-align:center; line-height:1.6;
+}
+ 
+/* ---------- Ficha del alumno (reinscripción) ---------- */
+.ficha{
+  background:#fff; border:1px solid var(--borde); border-radius:12px;
+  padding:18px 20px; margin-bottom:22px;
+}
+.ficha-nombre{ font-size:1.1rem; font-weight:700; margin-bottom:4px; }
+.ficha-dato{ font-size:0.85rem; color:var(--texto-gris); line-height:1.7; }
+.ficha-dato strong{ color:var(--texto-oscuro); font-weight:600; }
+ 
+/* ---------- Estado cerrado ---------- */
+.cerrado-icono{
+  width:56px; height:56px; border-radius:14px; background:var(--crema-2);
+  display:flex; align-items:center; justify-content:center; margin-bottom:20px;
+}
+ 
+@media (max-width:720px){
+  #screen{ flex-direction:column; }
+  .panel-izq{ flex:0 0 auto; padding:36px 28px 40px; }
+  .panel-izq h1{ font-size:1.9rem; }
+  .pasos{ margin-bottom:24px; }
+  .panel-der{ padding:32px 24px 60px; }
+}
+</style>
+</head>
+<body>
+ 
+<div id="screen">
+ 
+  <!-- ============ PANEL IZQUIERDO ============ -->
+  <div class="panel-izq">
+    <div class="patron-cerebro"></div>
+    <div>
+      <svg class="logo-cerebro" viewBox="0 0 140 140" fill="none">
+        <path d="M-65,-15 C-72,-40 -50,-55 -30,-50 C-22,-62 0,-62 8,-50 C30,-56 50,-40 42,-18 C58,-10 58,10 42,18 C50,40 30,56 8,50 C0,62 -22,62 -30,50 C-50,55 -72,40 -65,15 C-76,7 -76,-7 -65,-15 Z"
+              transform="translate(70,68)" stroke="#fff" stroke-width="3.2" fill="none"/>
+        <path d="M-11,-54 C-11,-20 -11,20 -11,54"
+              transform="translate(70,68)" stroke="#fff" stroke-width="2.4" fill="none"/>
+      </svg>
+      <h1>Inscripci&oacute;n<br>en l&iacute;nea</h1>
+      <p class="lead" id="lead-texto">
+        Complet&aacute; tu inscripci&oacute;n desde tu casa. Necesit&aacute;s el token
+        que te entreg&oacute; preceptor&iacute;a al presentar la documentaci&oacute;n.
+      </p>
+ 
+      <div class="pasos">
+        <div class="paso-item activo" data-paso="1">
+          <div class="paso-num">1</div>
+          <div class="paso-info">
+            <strong>Ingres&aacute; tu token</strong>
+            <span>El c&oacute;digo de 8 caracteres que te dieron en preceptor&iacute;a.</span>
+          </div>
+        </div>
+        <div class="paso-item" data-paso="2">
+          <div class="paso-num">2</div>
+          <div class="paso-info">
+            <strong>Complet&aacute; tus datos</strong>
+            <span>Revis&aacute; que est&eacute; todo bien antes de enviar.</span>
+          </div>
+        </div>
+        <div class="paso-item" data-paso="3">
+          <div class="paso-num">3</div>
+          <div class="paso-info">
+            <strong>Esper&aacute; la confirmaci&oacute;n</strong>
+            <span>Preceptor&iacute;a revisa tu inscripci&oacute;n y la aprueba.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+ 
+    <div class="pie-institucional" id="pie-instituto">
+      IES N&deg; 9 &laquo;Juana Azurduy&raquo;
+    </div>
+  </div>
+ 
+  <!-- ============ PANEL DERECHO ============ -->
+  <div class="panel-der">
+    <div class="form-wrap">
+ 
+      <!-- ---- Cargando ---- -->
+      <div id="vista-cargando">
+        <div class="sub">Cargando&hellip;</div>
+      </div>
+ 
+      <!-- ---- Inscripciones cerradas ---- -->
+      <div id="vista-cerrada" class="oculto">
+        <div class="cerrado-icono">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+               stroke="#6B7280" stroke-width="2" stroke-linecap="round">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+        <h2>Inscripciones cerradas</h2>
+        <p class="sub" id="motivo-cerrada">
+          En este momento no hay inscripciones abiertas.
+        </p>
+        <div class="form-footer">
+          Consult&aacute; en preceptor&iacute;a por las fechas de inscripci&oacute;n.
+        </div>
+      </div>
+ 
+      <!-- ---- Paso 1: token ---- -->
+      <div id="vista-token" class="oculto">
+        <div class="eyebrow">Paso 1 de 3</div>
+        <h2>Ingres&aacute; tu token</h2>
+        <p class="sub">
+          Es el c&oacute;digo que te entregaron en preceptor&iacute;a despu&eacute;s
+          de presentar la documentaci&oacute;n.
+        </p>
+ 
+        <div id="error-token" class="msg msg-error oculto"></div>
+ 
+        <div class="campo input-token">
+          <label for="inp-token">Token de inscripci&oacute;n</label>
+          <div class="input-wrap">
+            <input type="text" id="inp-token" maxlength="9" autocomplete="off"
+                   spellcheck="false" placeholder="XXXX-XXXX">
+          </div>
+          <div class="ayuda-campo">
+            No distingue may&uacute;sculas de min&uacute;sculas. El gui&oacute;n se agrega solo.
+          </div>
+        </div>
+ 
+        <!-- Trampa para bots -->
+        <div class="trampa" aria-hidden="true">
+          <label for="website">No completar</label>
+          <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+ 
+        <button class="btn-primario" id="btn-validar-token">Continuar</button>
+ 
+        <div class="form-footer">
+          Si no ten&eacute;s token, acercate a preceptor&iacute;a con la
+          documentaci&oacute;n requerida.
+        </div>
+      </div>
+ 
+      <!-- ---- Paso 1b: confirmación de DNI (reinscripción) ---- -->
+      <div id="vista-dni" class="oculto">
+        <div class="eyebrow">Paso 1 de 3</div>
+        <h2>Confirm&aacute; tu identidad</h2>
+        <p class="sub">
+          Ingres&aacute; tu n&uacute;mero de documento para verificar que el token
+          es tuyo.
+        </p>
+ 
+        <div id="error-dni" class="msg msg-error oculto"></div>
+ 
+        <div class="campo">
+          <label for="inp-dni">N&uacute;mero de documento</label>
+          <div class="input-wrap">
+            <input type="text" id="inp-dni" maxlength="15" autocomplete="off"
+                   inputmode="numeric" placeholder="Sin puntos ni espacios">
+          </div>
+        </div>
+ 
+        <button class="btn-primario" id="btn-validar-dni">Continuar</button>
+        <button class="btn-secundario" id="btn-volver-token">Usar otro token</button>
+      </div>
+ 
+      <!-- ---- Paso 2: formulario (se arma en el próximo paso) ---- -->
+      <div id="vista-formulario" class="oculto">
+        <div class="eyebrow">Paso 2 de 3</div>
+        <h2 id="form-titulo">Complet&aacute; tus datos</h2>
+        <p class="sub" id="form-sub"></p>
+ 
+        <div id="ficha-alumno" class="ficha oculto"></div>
+ 
+        <div class="msg msg-info">
+          El formulario de carga se habilita en la pr&oacute;xima etapa del desarrollo.
+        </div>
+ 
+        <button class="btn-secundario" id="btn-reiniciar">Volver al inicio</button>
+      </div>
+ 
+    </div>
+  </div>
+</div>
+ 
+<script>
+(function(){
+  'use strict';
+ 
+  var estadoToken = null;   // token validado
+  var datosToken  = null;   // respuesta del servidor
+ 
+  function $(id){ return document.getElementById(id); }
+ 
+  function mostrarVista(nombre){
+    ['cargando','cerrada','token','dni','formulario'].forEach(function(v){
+      $('vista-' + v).classList.add('oculto');
+    });
+    $('vista-' + nombre).classList.remove('oculto');
+    window.scrollTo(0, 0);
+  }
+ 
+  function marcarPaso(n){
+    document.querySelectorAll('.paso-item').forEach(function(el){
+      el.classList.toggle('activo', parseInt(el.dataset.paso, 10) === n);
+    });
+  }
+ 
+  function mostrarError(idCaja, texto){
+    var caja = $(idCaja);
+    caja.textContent = texto;
+    caja.classList.remove('oculto');
+  }
+ 
+  function limpiarError(idCaja){
+    $(idCaja).classList.add('oculto');
+  }
+ 
+  // ---- Formateo del token mientras se escribe ----
+  var inpToken = $('inp-token');
+  inpToken.addEventListener('input', function(){
+    var v = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (v.length > 4) v = v.slice(0, 4) + '-' + v.slice(4, 8);
+    this.value = v;
+    limpiarError('error-token');
+  });
+ 
+  // ---- Enter para avanzar ----
+  inpToken.addEventListener('keydown', function(e){
+    if (e.key === 'Enter') { e.preventDefault(); $('btn-validar-token').click(); }
+  });
+  $('inp-dni').addEventListener('keydown', function(e){
+    if (e.key === 'Enter') { e.preventDefault(); $('btn-validar-dni').click(); }
+  });
+  $('inp-dni').addEventListener('input', function(){
+    this.value = this.value.replace(/[^0-9]/g, '');
+    limpiarError('error-dni');
+  });
+ 
+  // ---- Llamada de validación ----
+  function validar(token, dni, idCajaError, boton){
+    boton.disabled = true;
+    boton.textContent = 'Verificando\u2026';
+ 
+    fetch('/api/inscripcion/validar', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        token:   token,
+        dni:     dni || '',
+        website: $('website').value
+      })
+    })
+    .then(function(r){ return r.json().then(function(d){ return {status: r.status, data: d}; }); })
+    .then(function(res){
+      boton.disabled = false;
+      boton.textContent = 'Continuar';
+ 
+      var d = res.data;
+ 
+      if (d.error) {
+        mostrarError(idCajaError, d.error);
+        return;
+      }
+ 
+      // Reinscripción sin DNI todavía: pasa a la pantalla de confirmación
+      if (d.requiere_dni) {
+        estadoToken = token;
+        mostrarVista('dni');
+        $('inp-dni').focus();
+        return;
+      }
+ 
+      // Token válido: avanza al formulario
+      estadoToken = token;
+      datosToken  = d;
+      prepararFormulario(d);
+      marcarPaso(2);
+      mostrarVista('formulario');
+    })
+    .catch(function(){
+      boton.disabled = false;
+      boton.textContent = 'Continuar';
+      mostrarError(idCajaError, 'No se pudo conectar con el servidor. Reintent\u00e1 en unos segundos.');
+    });
+  }
+ 
+  function prepararFormulario(d){
+    var ficha = $('ficha-alumno');
+ 
+    if (d.tipo === 'reinscripcion' && d.alumno) {
+      $('form-titulo').textContent = 'Confirm\u00e1 tus datos';
+      $('form-sub').textContent =
+        'Revis\u00e1 que la informaci\u00f3n siga siendo correcta y actualiz\u00e1 lo que haga falta.';
+      ficha.innerHTML =
+        '<div class="ficha-nombre">' + d.alumno.apellido + ', ' + d.alumno.nombre + '</div>' +
+        '<div class="ficha-dato">' +
+          '<strong>' + d.alumno.tipo_documento + ':</strong> ' + d.alumno.dni + '<br>' +
+          '<strong>Carrera:</strong> ' + d.carrera + '<br>' +
+          '<strong>Ciclo lectivo:</strong> ' + d.ciclo_lectivo +
+        '</div>';
+      ficha.classList.remove('oculto');
+    } else {
+      $('form-titulo').textContent = 'Complet\u00e1 tus datos';
+      $('form-sub').textContent =
+        'Carg\u00e1 tus datos personales para la carrera ' + d.carrera + '.';
+      ficha.innerHTML =
+        '<div class="ficha-dato">' +
+          '<strong>Carrera:</strong> ' + d.carrera + '<br>' +
+          '<strong>Ciclo lectivo:</strong> ' + d.ciclo_lectivo +
+        '</div>';
+      ficha.classList.remove('oculto');
+    }
+  }
+ 
+  // ---- Botones ----
+  $('btn-validar-token').addEventListener('click', function(){
+    var t = inpToken.value.trim();
+    limpiarError('error-token');
+    if (t.length < 8) {
+      mostrarError('error-token', 'El token tiene 8 caracteres. Revis\u00e1 que est\u00e9 completo.');
+      return;
+    }
+    validar(t, '', 'error-token', this);
+  });
+ 
+  $('btn-validar-dni').addEventListener('click', function(){
+    var dni = $('inp-dni').value.trim();
+    limpiarError('error-dni');
+    if (dni.length < 7) {
+      mostrarError('error-dni', 'Ingres\u00e1 tu n\u00famero de documento completo.');
+      return;
+    }
+    validar(estadoToken, dni, 'error-dni', this);
+  });
+ 
+  $('btn-volver-token').addEventListener('click', function(){
+    estadoToken = null;
+    inpToken.value = '';
+    $('inp-dni').value = '';
+    limpiarError('error-token');
+    limpiarError('error-dni');
+    marcarPaso(1);
+    mostrarVista('token');
+    inpToken.focus();
+  });
+ 
+  $('btn-reiniciar').addEventListener('click', function(){
+    estadoToken = null;
+    datosToken  = null;
+    inpToken.value = '';
+    $('inp-dni').value = '';
+    marcarPaso(1);
+    mostrarVista('token');
+    inpToken.focus();
+  });
+ 
+  // ---- Arranque: consulta si el módulo está operativo ----
+  fetch('/api/inscripcion/estado')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.instituto) {
+        $('pie-instituto').textContent = d.instituto;
+      }
+      if (d.abierta) {
+        mostrarVista('token');
+        inpToken.focus();
+      } else {
+        $('motivo-cerrada').textContent = d.motivo || 'En este momento no hay inscripciones abiertas.';
+        mostrarVista('cerrada');
+      }
+    })
+    .catch(function(){
+      $('motivo-cerrada').textContent =
+        'No se pudo conectar con el servidor. Reintent\u00e1 en unos minutos.';
+      mostrarVista('cerrada');
+    });
+ 
+})();
+</script>
+</body>
+</html>
+ 
+
