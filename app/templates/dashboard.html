@@ -813,6 +813,18 @@
         }
         .notas-tab-btn:hover { color: var(--verde); }
         .notas-tab-btn.activo { color: var(--verde); border-bottom-color: var(--verde); font-weight: 600; }
+
+/* Autocompletado de localidades */
+.loc-wrap { position: relative; }
+.loc-sugerencias {
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: #fff; border: 1px solid #d0d0d0; border-radius: 6px;
+    max-height: 240px; overflow-y: auto; z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12); display: none;
+}
+.loc-item { padding: 8px 12px; cursor: pointer; font-size: 14px; }
+.loc-item:hover, .loc-item.activo { background: #eef4ee; }
+.loc-item .loc-prov { color: #777; font-size: 12px; display: block; }
     </style>
 
 
@@ -6063,6 +6075,8 @@
             fecha_nacimiento: fechaNac,
             direccion:      document.getElementById('input-al-direccion').value.trim(),
             localidad:      document.getElementById('input-al-localidad').value.trim(),
+            localidad_id:   document.getElementById('input-al-localidad').dataset.locId || null,
+            departamento:   document.getElementById('input-al-localidad').dataset.locDepto || null,
             email:          document.getElementById('input-al-email').value.trim(),
             celular:        document.getElementById('input-al-celular').value.trim(),
             contacto_emergencia_nombre:   document.getElementById('input-al-cem-nombre').value.trim(),
@@ -6330,6 +6344,8 @@
             fecha_nacimiento: fechaNac,
             direccion:      document.getElementById('fe-direccion').value.trim(),
             localidad:      document.getElementById('fe-localidad').value.trim(),
+            localidad_id:   document.getElementById('fe-localidad').dataset.locId || null,
+            departamento:   document.getElementById('fe-localidad').dataset.locDepto || null,
             email:          document.getElementById('fe-email').value.trim(),
             celular:        document.getElementById('fe-celular').value.trim(),
             contacto_emergencia_nombre:   document.getElementById('fe-cem-nombre').value.trim(),
@@ -9241,6 +9257,93 @@
             errDiv.textContent = data.error || 'Error al guardar.';
         }
     }
+
+// ══════════════════════════════════════════════════════════
+// AUTOCOMPLETADO DE LOCALIDADES
+// ══════════════════════════════════════════════════════════
+function activarAutocompletadoLocalidad(idInput, idProvincia) {
+    const inp  = document.getElementById(idInput);
+    const prov = document.getElementById(idProvincia);
+    if (!inp || !prov || inp.dataset.locListo) return;
+    inp.dataset.locListo = '1';
+
+    const cont = inp.parentElement;
+    cont.classList.add('loc-wrap');
+
+    const panel = document.createElement('div');
+    panel.className = 'loc-sugerencias';
+    cont.appendChild(panel);
+
+    let timer = null, datos = [], idx = -1;
+
+    function cerrar() { panel.style.display = 'none'; idx = -1; }
+
+    function marcar() {
+        [...panel.children].forEach((el, i) => el.classList.toggle('activo', i === idx));
+        const act = panel.children[idx];
+        if (act) act.scrollIntoView({ block: 'nearest' });
+    }
+
+    function elegir(i) {
+        const d = datos[i];
+        if (!d) return;
+        inp.value = d.nombre;
+        inp.dataset.locId = d.id;
+        inp.dataset.locDepto = d.departamento || '';
+        if (d.provincia) prov.value = d.provincia;
+        cerrar();
+    }
+
+    function pintar() {
+        panel.innerHTML = '';
+        if (!datos.length) { cerrar(); return; }
+        datos.forEach((d, i) => {
+            const div = document.createElement('div');
+            div.className = 'loc-item';
+            div.innerHTML = d.nombre +
+                '<span class="loc-prov">' + d.provincia +
+                (d.departamento ? ' - ' + d.departamento : '') + '</span>';
+            div.onclick = () => elegir(i);
+            panel.appendChild(div);
+        });
+        panel.style.display = 'block';
+    }
+
+    inp.addEventListener('input', () => {
+        inp.dataset.locId = '';
+        inp.dataset.locDepto = '';
+        clearTimeout(timer);
+        const q = inp.value.trim();
+        if (q.length < 2) { cerrar(); return; }
+        timer = setTimeout(async () => {
+            let url = '/api/localidades?q=' + encodeURIComponent(q);
+            if (prov.value) url += '&provincia=' + encodeURIComponent(prov.value);
+            try {
+                const r = await fetch(url);
+                datos = await r.json();
+                idx = -1;
+                pintar();
+            } catch (e) { cerrar(); }
+        }, 250);
+    });
+
+    inp.addEventListener('keydown', (e) => {
+        if (panel.style.display !== 'block') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, datos.length - 1); marcar(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); marcar(); }
+        else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); elegir(idx); }
+        else if (e.key === 'Escape') { cerrar(); }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!cont.contains(e.target)) cerrar();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    activarAutocompletadoLocalidad('input-al-localidad', 'input-al-provincia');
+    activarAutocompletadoLocalidad('fe-localidad', 'fe-provincia');
+});
 </script>
 <div class="modal-overlay" id="modal-nueva-mesa" style="display:none">
     <div class="modal-card">

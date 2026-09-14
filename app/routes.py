@@ -1935,8 +1935,8 @@ def api_alumnos_crear():
                 carrera_id, apellido, nombre, dni, tipo_documento, cuil,
                 email, celular, fecha_nacimiento, direccion, localidad, provincia,
                 contacto_emergencia_nombre, contacto_emergencia_telefono,
-                anio_ingreso, legajo
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                anio_ingreso, legajo, localidad_id, departamento
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             carrera_id, apellido, nombre, dni, tipo_documento, cuil,
@@ -1949,6 +1949,8 @@ def api_alumnos_crear():
             data.get('contacto_emergencia_nombre', '').strip() or None,
             data.get('contacto_emergencia_telefono', '').strip() or None,
             anio_ingreso, legajo,
+            data.get('localidad_id') or None,
+            (data.get('departamento') or '').strip() or None,
         ))
         nuevo_id = cur.fetchone()[0]
         conn.commit()
@@ -2048,7 +2050,8 @@ def api_alumnos_editar(aid):
                 direccion = %s, localidad = %s, provincia = %s,
                 contacto_emergencia_nombre = %s,
                 contacto_emergencia_telefono = %s,
-                anio_ingreso = %s, legajo = %s
+                anio_ingreso = %s, legajo = %s,
+                localidad_id = %s, departamento = %s
             WHERE id = %s AND carrera_id = %s
         """, (
             apellido, nombre, dni, tipo_documento, cuil,
@@ -2061,6 +2064,8 @@ def api_alumnos_editar(aid):
             data.get('contacto_emergencia_nombre', '').strip() or None,
             data.get('contacto_emergencia_telefono', '').strip() or None,
             anio_ingreso, legajo,
+            data.get('localidad_id') or None,
+            (data.get('departamento') or '').strip() or None,
             aid, carrera_id
         ))
         conn.commit()
@@ -6876,3 +6881,51 @@ def api_stats_admin():
     cur.close()
     conn.close()
     return jsonify({'anio': anio})
+
+
+# ══════════════════════════════════════════════════════════
+# API — LOCALIDADES (autocompletado de provincia/localidad)
+# ══════════════════════════════════════════════════════════
+
+@auth.route('/api/localidades', methods=['GET'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_localidades_buscar():
+    """Busca localidades por nombre. Filtra por provincia si se indica."""
+    q         = (request.args.get('q') or '').strip()
+    provincia = (request.args.get('provincia') or '').strip()
+
+    if len(q) < 2:
+        return jsonify([])
+
+    conn = get_db()
+    cur  = conn.cursor()
+
+    sql = """
+        SELECT id, nombre, departamento, provincia
+        FROM localidades
+        WHERE lower(nombre) LIKE lower(%s)
+    """
+    params = ['%' + q + '%']
+
+    if provincia:
+        sql += " AND provincia = %s"
+        params.append(provincia)
+
+    sql += """
+        ORDER BY
+            CASE WHEN lower(nombre) = lower(%s) THEN 0
+                 WHEN lower(nombre) LIKE lower(%s) THEN 1
+                 ELSE 2 END,
+            nombre
+        LIMIT 20
+    """
+    params.extend([q, q + '%'])
+
+    cur.execute(sql, params)
+    filas = cur.fetchall()
+    cur.close()
+
+    return jsonify([
+        {'id': f[0], 'nombre': f[1], 'departamento': f[2], 'provincia': f[3]}
+        for f in filas
+    ])
