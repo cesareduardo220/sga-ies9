@@ -30,6 +30,8 @@ auth = Blueprint('auth', __name__)
 
 @auth.before_request
 def renovar_sesion():
+    if 'rol' not in session:
+        return
     session.modified = True
     session.permanent = True
     # Resolución automática de promociones provisorias vencidas.
@@ -7200,6 +7202,185 @@ def api_tokens_anular(tid):
     except Exception:
         conn.rollback()
         return jsonify({'error': 'No se pudo anular el token'}), 500
+    finally:
+        cur.close()
+        conn.close()
+ 
+
+# ============================================================
+# AUTOINSCRIPCIÓN — ENDPOINTS PÚBLICOS
+#
+# Todo lo que está debajo de esta línea se sirve SIN sesión,
+# expuesto a Internet. Nada acá confía en el cliente: cada
+# validación se rehace del lado del servidor.
+# ============================================================
+ 
+ 
+def _autoinscripcion_abierta(cur):
+    """
+    Devuelve (True, None) si el formulario público está operativo,
+    o (False, motivo) si no.
+    """
+    habilitada = (_get_config(cur, 'autoinscripcion_habilitada', 'false') or '').lower()
+    if habilitada not in ('true', '1', 'si', 'sí'):
+        return False, 'En este momento no hay inscripciones abiertas.'
+ 
+    hoy = date.today()
+    desde = _get_config(cur, 'autoinscripcion_fecha_inicio')
+    hasta = _get_config(cur, 'autoinscripcion_fecha_fin')
+ 
+    try:
+        if desde and hoy < datetime.strptime(desde, '%Y-%m-%d').date():
+            return False, 'El período de inscripción todavía no comenzó.'
+        if hasta and hoy > datetime.strptime(hasta, '%Y-%m-%d').date():
+            return False, 'El período de inscripción ya finalizó.'
+    except ValueError:
+        # Fecha mal cargada en configuración: se cierra por las dudas.
+        return False, 'En este momento no hay inscripciones abiertas.'
+ 
+    return True, None
+ 
+ 
+@auth.route('/inscripcion')
+def inscripcion_publica():
+    """Página pública del formulario. No requiere sesión."""
+    return render_template('inscripcion.html')
+ 
+ 
+@auth.route('/api/inscripcion/estado', methods=['GET'])
+def api_inscripcion_estado():
+    """Le dice a la página si el formulario está operativo, sin exponer nada más."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        abierta, motivo = _autoinscripcion_abierta(cur)
+        instituto = _get_config(cur, 'nombre_instituto', 'Instituto')
+        return jsonify({
+            'abierta': abierta,
+            'motivo': motivo,
+            'instituto': instituto
+        })
+    finally:
+        cur.close()
+        conn.close()
+ 
+ 
+@auth.route('/api/inscripcion/validar', methods=['POST'])
+def api_inscripcion_validar():
+    """
+    Valida un token y devuelve qué pantalla corresponde.
+ 
+    - ingresante    -> formulario en blanco
+    - reinscripcion -> datos del alumno precargados, previa confirmación de DNI
+    """
+    data  = request.get_json(silent=True) or {}
+    token = (data.get('token') or '').strip().upper()
+    dni   = limpiar_dni(data.get('dni') or '')
+ 
+    # Trampa para bots: campo oculto que un humano nunca completa.
+    if (data.get('website') or '').strip():
+        return jsonify({'error': 'Token inválido.'}), 400
+ 
+    if not token:
+        return jsonify({'error': 'Ingresá el token que te entregó la preceptoría.'}), 400
+ 
+    # Normaliza el guión: el alumno puede escribirlo o no.
+    token = token.replace(' ', '')
+    if '-' not in token and len(token) == 8:
+        token = f"{token[:4]}-{token[4:]}"
+ 
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        abierta, motivo = _autoinscripcion_abierta(cur)
+        if not abierta:
+            return jsonify({'error': motivo}), 403
+ 
+        cur.execute("""
+            SELECT t.id, t.tipo, t.estado, t.vence_el, t.ciclo_lectivo,
+                   t.carrera_id, c.nombre, c.nombre_corto,
+                   t.alumno_id
+            FROM tokens_inscripcion t
+            LEFT JOIN carreras c ON c.id = t.carrera_id
+            WHERE t.token = %s
+        """, (token,))
+        t = cur.fetchone()
+ 
+        # Token inexistente y token anulado devuelven lo mismo a propósito:
+        # no se le confirma a nadie que un token existió.
+        if not t or t[2] == 'anulado':
+            return jsonify({'error': 'El token no es válido.'}), 404
+ 
+        if t[2] == 'usado':
+            return jsonify({'error': 'Este token ya fue utilizado.'}), 409
+ 
+        if t[3] and t[3] < date.today():
+            return jsonify({
+                'error': f"Este token venció el {t[3].strftime('%d/%m/%Y')}. "
+                         f"Acercate a preceptoría para que te generen uno nuevo."
+            }), 410
+ 
+        base = {
+            'ok':            True,
+            'tipo':          t[1],
+            'ciclo_lectivo': t[4],
+            'carrera_id':    t[5],
+            'carrera':       t[6],
+            'carrera_corta': t[7],
+        }
+ 
+        if t[1] == 'ingresante':
+            return jsonify(base)
+ 
+        # --- Reinscripción: el DNI confirma que el token está en las manos correctas
+        if not dni:
+            return jsonify({
+                'requiere_dni': True,
+                'mensaje': 'Ingresá tu DNI para confirmar tu identidad.'
+            }), 200
+ 
+        cur.execute("""
+            SELECT a.id, a.dni, a.tipo_documento, a.cuil,
+                   a.apellido, a.nombre, a.fecha_nacimiento,
+                   a.email, a.celular, a.telefono,
+                   a.direccion, a.localidad_id, a.localidad,
+                   a.departamento, a.provincia,
+                   a.contacto_emergencia_nombre,
+                   a.contacto_emergencia_vinculo,
+                   a.contacto_emergencia_telefono,
+                   a.plan_id
+            FROM alumnos a
+            WHERE a.id = %s AND a.activo = TRUE
+        """, (t[8],))
+        a = cur.fetchone()
+ 
+        if not a:
+            return jsonify({'error': 'El token no es válido.'}), 404
+ 
+        if limpiar_dni(a[1] or '') != dni:
+            return jsonify({'error': 'El DNI no coincide con el titular del token.'}), 403
+ 
+        base['alumno'] = {
+            'tipo_documento':               a[2],
+            'dni':                          a[1],
+            'cuil':                         a[3],
+            'apellido':                     a[4],
+            'nombre':                       a[5],
+            'fecha_nacimiento':             a[6].isoformat() if a[6] else None,
+            'email':                        a[7],
+            'celular':                      a[8],
+            'telefono':                     a[9],
+            'direccion':                    a[10],
+            'localidad_id':                 a[11],
+            'localidad':                    a[12],
+            'departamento':                 a[13],
+            'provincia':                    a[14],
+            'contacto_emergencia_nombre':   a[15],
+            'contacto_emergencia_vinculo':  a[16],
+            'contacto_emergencia_telefono': a[17],
+            'plan_id':                      a[18],
+        }
+        return jsonify(base)
     finally:
         cur.close()
         conn.close()
