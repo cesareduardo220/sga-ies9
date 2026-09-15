@@ -1740,6 +1740,29 @@
     </div>
 </div>
 
+<!-- Modal de guardia: tildes de inscripción sin guardar -->
+<div id="modal-insc-cambios" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:520px;">
+        <div class="modal-card-header">
+            <h3>⚠️ Cambios sin guardar</h3>
+        </div>
+        <div class="modal-card-body">
+            <p>
+                Marcaste o desmarcaste materias para este alumno y
+                <strong>todavía no guardaste las inscripciones</strong>.
+            </p>
+            <p>Si salís ahora, esos cambios se van a perder.</p>
+            <p style="color:var(--sga-texto-gris); font-size:0.85rem;">
+                Si volvés al panel podés terminar con <strong>"Guardar inscripciones"</strong>.
+            </p>
+        </div>
+        <div class="modal-card-footer">
+            <button class="modal-btn-cancelar"  onclick="inscCambiosVolverAlPanel()">Volver al panel</button>
+            <button class="modal-btn-confirmar" onclick="inscCambiosDescartarYSalir()">Descartar cambios y salir</button>
+        </div>
+    </div>
+</div>
+
 <!-- Modal de autorización de modificación (solo coordinador) -->
 <div id="modal-insc-autorizar" class="modal-overlay" style="display:none;">
     <div class="modal-card" style="max-width:520px;">
@@ -3739,6 +3762,13 @@
     }
 
     function chequearCambiosYContinuar(callback) {
+        // ── Guardia: tildes de inscripción sin guardar ──
+        // Va primero para que no la confunda la guardia de Notas, que usa la misma variable hayCambios.
+        if (typeof inscHayCambiosSinGuardar === 'function' && inscHayCambiosSinGuardar()) {
+            inscAbrirModalCambios(() => chequearCambiosYContinuar(callback));
+            return;
+        }
+
         // ── Guardia: si hay cambios sin guardar en Notas, confirmar antes de salir ──
         if (typeof hayCambios !== 'undefined' && hayCambios && typeof notasMateriaId !== 'undefined' && notasMateriaId !== null) {
             const confirmar = confirm(
@@ -3900,6 +3930,21 @@
         }
 
         if (!e.state || !e.state.seccionId) return;
+
+        // Guardia inscripciones: tildes sin guardar y nos estamos yendo del panel del alumno
+        if (typeof inscHayCambiosSinGuardar === 'function' && inscHayCambiosSinGuardar()) {
+            const saliendoDelPanel = !e.state.inscAlumnoId
+                                  || e.state.inscAlumnoId !== inscAlumnoActual.id;
+            if (saliendoDelPanel) {
+                // Reponer el panel en el historial hasta que la usuaria decida
+                history.pushState({ seccionId: 'inscripciones', label: '',
+                                    inscAlumnoId: inscAlumnoActual.id },
+                                  '', '#inscripciones-alumno-' + inscAlumnoActual.id);
+                // Al descartar se repite el "atrás", que ya pasa sin cambios pendientes
+                inscAbrirModalCambios(() => history.back());
+                return;
+            }
+        }
 
         const enMateriaConCambios =
             document.getElementById('notas-detalle') &&
@@ -6951,14 +6996,26 @@
         wrap.innerHTML = Object.keys(porAnio).sort().map(anio => {
             const lista = porAnio[anio];
             const inscriptos = lista.filter(m => m.inscripta).length;
+            const habilitadas = lista.filter(m => m.puede_inscribirse || m.inscripta).length;
+            const mostrarSelector = puedeEditar && habilitadas > 0;
             return `
-            <div style="margin-bottom:22px;">
+            <div style="margin-bottom:22px;" data-insc-anio="${anio}">
                 <div style="font-size:0.78rem; color:var(--sga-texto-gris); margin-bottom:10px;
                             font-weight:700; font-family:'Raleway',sans-serif; letter-spacing:0.04em;">
                     ${anio}° AÑO
                     <span style="font-weight:400; margin-left:8px;">${inscriptos} / ${lista.length} ${lista.length === 1 ? 'inscripto' : 'inscriptos'}</span>
                 </div>
                 <div class="tabla-card">
+                ${mostrarSelector ? `
+                    <label style="display:flex; align-items:center; gap:12px; padding:11px 16px;
+                                  border-bottom:1px solid var(--sga-borde); background:var(--sga-crema-2);
+                                  cursor:pointer; font-size:0.85rem; font-weight:700;">
+                        <input type="checkbox" id="insc-todas-${anio}"
+                               onchange="inscSeleccionarTodasAnio('${anio}', this.checked)"
+                               style="width:16px; height:16px; flex-shrink:0; cursor:pointer; accent-color:var(--sga-verde-medio);">
+                        Seleccionar todas las habilitadas
+                        <span style="font-weight:400; color:var(--sga-texto-gris);">(${habilitadas})</span>
+                    </label>` : ''}
                 ${lista.map(m => {
                     const bloq = !m.puede_inscribirse && !m.inscripta;
                     const bg = m.inscripta ? 'background:#DCF5E5;'
@@ -6972,7 +7029,8 @@
                                data-id="${m.id}"
                                ${m.inscripta ? 'checked' : ''}
                                ${deshabilitado ? 'disabled' : ''}
-                               onchange="hayCambios = true;"
+                               class="insc-cb-materia"
+                               onchange="hayCambios = true; inscActualizarSelectorAnio('${anio}');"
                                style="width:16px; height:16px; flex-shrink:0;
                                       cursor:${deshabilitado ? 'not-allowed' : 'pointer'}; accent-color:var(--sga-verde-medio);">
                         <div style="flex:1; min-width:0;">
@@ -6986,6 +7044,31 @@
                 </div>
             </div>`;
         }).join('');
+
+        Object.keys(porAnio).forEach(anio => inscActualizarSelectorAnio(anio));
+    }
+
+    // Marca o desmarca todas las materias habilitadas de un año.
+    // Las bloqueadas por correlatividad quedan deshabilitadas y no se tocan.
+    function inscSeleccionarTodasAnio(anio, marcar) {
+        const cont = document.querySelector(`#insc-materias-wrap [data-insc-anio="${anio}"]`);
+        if (!cont) return;
+        cont.querySelectorAll('input.insc-cb-materia:not(:disabled)').forEach(cb => {
+            cb.checked = marcar;
+        });
+        hayCambios = true;
+        inscActualizarSelectorAnio(anio);
+    }
+
+    // Refleja en el selector del año si están todas, ninguna o algunas marcadas.
+    function inscActualizarSelectorAnio(anio) {
+        const sel = document.getElementById(`insc-todas-${anio}`);
+        const cont = document.querySelector(`#insc-materias-wrap [data-insc-anio="${anio}"]`);
+        if (!sel || !cont) return;
+        const cbs = Array.from(cont.querySelectorAll('input.insc-cb-materia:not(:disabled)'));
+        const marcadas = cbs.filter(cb => cb.checked).length;
+        sel.checked = cbs.length > 0 && marcadas === cbs.length;
+        sel.indeterminate = marcadas > 0 && marcadas < cbs.length;
     }
 
     async function guardarInscripciones() {
@@ -7104,6 +7187,35 @@
         }
     }
 
+    // ── Modal de guardia: tildes de inscripción sin guardar ──
+    var inscNavegacionCambiosPendiente = null;
+
+    function inscHayCambiosSinGuardar() {
+        const sec   = document.getElementById('sec-inscripciones');
+        const panel = document.getElementById('insc-panel-materias');
+        return hayCambios === true && inscAlumnoActual !== null &&
+               !!sec && sec.classList.contains('activa') &&
+               !!panel && panel.style.display !== 'none';
+    }
+
+    function inscAbrirModalCambios(callbackContinuar) {
+        inscNavegacionCambiosPendiente = callbackContinuar || null;
+        abrirModal('modal-insc-cambios');
+    }
+
+    function inscCambiosVolverAlPanel() {
+        cerrarModal('modal-insc-cambios');
+        inscNavegacionCambiosPendiente = null;
+    }
+
+    function inscCambiosDescartarYSalir() {
+        hayCambios = false;
+        cerrarModal('modal-insc-cambios');
+        const cb = inscNavegacionCambiosPendiente;
+        inscNavegacionCambiosPendiente = null;
+        if (typeof cb === 'function') cb();
+    }
+
     // ── Modal de guardia: salir con autorización activa sin finalizar ──
     function inscHayAutorizacionPendiente() {
         return inscAutorizacionActiva === true && inscAlumnoActual !== null;
@@ -7124,6 +7236,7 @@
             await _inscEjecutarCancelarAutorizacion(inscAlumnoActual.id, 'cancelada_por_salida');
         }
         inscAutorizacionActiva = false;
+        hayCambios = false;
         cerrarModal('modal-insc-guardia');
         const cb = inscNavegacionPendiente;
         inscNavegacionPendiente = null;

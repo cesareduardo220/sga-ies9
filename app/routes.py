@@ -2903,30 +2903,14 @@ def api_constancia_validar(aid):
 # API — INSCRIPCIONES (coordinador + preceptora)
 # ================================================================
 
-@auth.route('/api/inscripciones/alumno/<int:aid>', methods=['GET'])
-@login_requerido(['coordinador', 'preceptora'])
-def api_inscripciones_alumno(aid):
+def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
     """
-    Devuelve todas las materias del plan de la carrera,
-    indicando para cada una:
-      - si el alumno está inscripto este año lectivo
-      - si cumple correlatividades (y si no, por qué)
+    Evalúa todas las materias activas de la carrera para un alumno en el
+    ciclo lectivo `anio`: si ya está inscripto, si cumple correlatividades
+    (y si no, por qué), y si ya la regularizó o aprobó en ciclos anteriores.
+    La usan el panel de Inscripciones (carrera de la sesión) y la
+    reinscripción pública (carrera y ciclo del token). No cierra el cursor.
     """
-    carrera_id = session.get('carrera_id')
-    conn = get_db()
-    cur = conn.cursor()
-
-    # Año lectivo actual
-    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
-    anio = int(cur.fetchone()[0])
-
-    # Verificar que el alumno pertenece a esta carrera
-    cur.execute("SELECT id, apellido, nombre, dni, tipo_documento FROM alumnos WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
-    alumno = cur.fetchone()
-    if not alumno:
-        cur.close(); conn.close()
-        return jsonify({'error': 'Alumno no encontrado'}), 404
-
     # Todas las materias activas de la carrera
     cur.execute("""
         SELECT id, nombre, anio, orden, regimen, regimen_aprobacion
@@ -3002,9 +2986,6 @@ def api_inscripciones_alumno(aid):
     # Mapa id → año de la materia (para saber a qué año pertenece cada materia del historial)
     materia_anio = {r[0]: r[3] for r in rows_mat}
 
-    cur.close()
-    conn.close()
-
     # Años desbloqueados para este alumno (Opción C):
     # - 1° año: siempre disponible
     # - Año X (X > 1): disponible si el alumno tiene al menos 1 materia
@@ -3059,7 +3040,40 @@ def api_inscripciones_alumno(aid):
             'inscripta': inscripta,
             'puede_inscribirse': puede,
             'bloqueada_por': bloqueada_por,
+            'regularizada': mid in cursadas_ok,
+            'aprobada': mid in aprobadas_ok,
         })
+
+    return resultado
+
+
+@auth.route('/api/inscripciones/alumno/<int:aid>', methods=['GET'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_inscripciones_alumno(aid):
+    """
+    Devuelve todas las materias del plan de la carrera,
+    indicando para cada una:
+      - si el alumno está inscripto este año lectivo
+      - si cumple correlatividades (y si no, por qué)
+    """
+    carrera_id = session.get('carrera_id')
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Año lectivo actual
+    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
+    anio = int(cur.fetchone()[0])
+
+    # Verificar que el alumno pertenece a esta carrera
+    cur.execute("SELECT id, apellido, nombre, dni, tipo_documento FROM alumnos WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
+    alumno = cur.fetchone()
+    if not alumno:
+        cur.close(); conn.close()
+        return jsonify({'error': 'Alumno no encontrado'}), 404
+
+    resultado = _evaluar_materias_alumno(cur, aid, carrera_id, anio)
+    cur.close()
+    conn.close()
 
     # ── Estado de bloqueo (post-guardado) ──
     # ¿Ya tiene inscripciones guardadas este ciclo lectivo?
