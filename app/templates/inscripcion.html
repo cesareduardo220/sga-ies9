@@ -733,7 +733,10 @@ button{font-family:inherit; cursor:pointer;}
     // El año de ingreso solo se pide en un alta de alumno que ya cursa.
     var esAlta = (d.tipo === 'alta');
     $('seccion-ingreso').classList.toggle('oculto', !esAlta);
-    $('f-anio-ingreso').max = (d.ciclo_lectivo || new Date().getFullYear()) - 1;
+    $('f-anio-ingreso').max = d.anio_ingreso_max || ((d.ciclo_lectivo || new Date().getFullYear()) - 1);
+    $('f-anio-ingreso').min = d.anio_ingreso_min || 1990;
+    $('f-anio-ingreso').placeholder = d.anio_ingreso_min
+      ? ('Entre ' + d.anio_ingreso_min + ' y ' + d.anio_ingreso_max) : '2025';
     if (!esAlta) $('f-anio-ingreso').value = '';
   }
  

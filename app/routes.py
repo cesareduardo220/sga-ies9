@@ -6578,6 +6578,20 @@ def _get_config(cur, clave, default=None):
     return r[0]
  
  
+def _rango_anio_ingreso(cur, ciclo):
+    """
+    Años de ingreso aceptados en un alta de alumno que ya cursa:
+    desde (ciclo - antigüedad máxima) hasta el año anterior al ciclo.
+    La antigüedad sale de configuración (por defecto 6 años).
+    """
+    try:
+        antiguedad = int(_get_config(cur, 'autoinscripcion_antiguedad_max', '6'))
+    except (TypeError, ValueError):
+        antiguedad = 6
+    antiguedad = max(1, antiguedad)
+    return ciclo - antiguedad, ciclo - 1
+
+
 def _generar_tokens(cur, cantidad):
     """
     Devuelve `cantidad` tokens nuevos con formato XXXX-XXXX,
@@ -6975,6 +6989,8 @@ def api_inscripcion_validar():
             'carrera_corta': t[7],
         }
  
+        if t[1] == 'alta':
+            base['anio_ingreso_min'], base['anio_ingreso_max'] = _rango_anio_ingreso(cur, t[4])
         if t[1] in ('ingresante', 'alta'):
             return jsonify(base)
  
@@ -7162,10 +7178,12 @@ def api_inscripcion_guardar():
             except ValueError:
                 conn.rollback()
                 return jsonify({'error': 'Indicá el año en que empezaste la carrera.'}), 400
-            if anio_ingreso < 1990 or anio_ingreso >= ciclo:
+            anio_min, anio_max = _rango_anio_ingreso(cur, ciclo)
+            if anio_ingreso < anio_min or anio_ingreso > anio_max:
                 conn.rollback()
                 return jsonify({
-                    'error': f'El año de ingreso tiene que estar entre 1990 y {ciclo - 1}.'
+                    'error': f'El año de ingreso tiene que estar entre {anio_min} y {anio_max}. '
+                             f'Si empezaste la carrera antes, acercate a preceptoría.'
                 }), 400
  
         # ---------- Identidad ----------
