@@ -7221,16 +7221,19 @@ def api_inscripcion_guardar():
                 return jsonify({'error': err}), 400
             plan_id = None
 
-            # Quien ya está cargado en la carrera se reinscribe, no se da de alta.
-            cur.execute("""
-                SELECT 1 FROM alumnos WHERE dni = %s AND carrera_id = %s
-            """, (documento, carrera_id))
-            if cur.fetchone():
+            # Quien ya está cargado se reinscribe, no se da de alta.
+            # El DNI es único en todo el sistema, no solo en la carrera.
+            cur.execute("SELECT carrera_id FROM alumnos WHERE dni = %s", (documento,))
+            existente = cur.fetchone()
+            if existente:
                 conn.rollback()
-                return jsonify({
-                    'error': 'Ya hay un alumno registrado con este documento en la carrera. '
-                             'Acercate a preceptoría para que te den un token de reinscripción.'
-                }), 409
+                if existente[0] == carrera_id:
+                    msg = ('Ya hay un alumno registrado con este documento en la carrera. '
+                           'Acercate a preceptoría para que te den un token de reinscripción.')
+                else:
+                    msg = ('Ya hay un alumno registrado con este documento. '
+                           'Acercate a preceptoría para revisar tu situación.')
+                return jsonify({'error': msg}), 409
 
         # ---------- Año de ingreso (solo altas) ----------
         anio_ingreso = None
@@ -7331,6 +7334,10 @@ def api_inscripcion_guardar():
         cur.execute("""
             SELECT id FROM preinscripciones
             WHERE dni = %s AND ciclo_lectivo = %s
+              -- No cuentan las rechazadas ni las altas ya aprobadas
+              -- (después del alta el alumno se reinscribe para elegir materias).
+              AND (estado = 'pendiente'
+                   OR (estado = 'aprobada' AND anio_ingreso IS NULL))
         """, (documento, ciclo))
         if cur.fetchone():
             conn.rollback()
@@ -7397,5 +7404,444 @@ def api_inscripcion_guardar():
     finally:
         cur.close()
         conn.close()
- 
 
+
+
+# ================================================================
+# COLA DE REVISIÓN DE PREINSCRIPCIONES (preceptora / coordinador)
+# ================================================================
+
+_CAMPOS_COMPARABLES = [
+    # (columna, etiqueta) para mostrar qué cambió en una reinscripción
+    ('apellido',                     'Apellido'),
+    ('nombre',                       'Nombre'),
+    ('fecha_nacimiento',             'Fecha de nacimiento'),
+    ('cuil',                         'CUIL'),
+    ('email',                        'Correo electrónico'),
+    ('celular',                      'Celular'),
+    ('telefono',                     'Teléfono'),
+    ('direccion',                    'Dirección'),
+    ('localidad',                    'Localidad'),
+    ('provincia',                    'Provincia'),
+    ('contacto_emergencia_nombre',   'Contacto de emergencia'),
+    ('contacto_emergencia_vinculo',  'Vínculo del contacto'),
+    ('contacto_emergencia_telefono', 'Teléfono de emergencia'),
+]
+
+
+def _interpretar_busqueda_preinscripcion(q):
+    """
+    Decide qué buscó la preceptora en la cola:
+      - solo números, hasta 6 dígitos -> número de inscripción (exacto)
+      - solo números, 7 o más         -> DNI
+      - cualquier otra cosa           -> apellido / nombre
+    Acepta "#12", "N° 12" o "40.123.897".
+    """
+    q = (q or '').strip()
+    if not q:
+        return None, None
+    limpio = re.sub(r'^(n[°ºo]\.?|#)', '', q, flags=re.IGNORECASE)
+    limpio = re.sub(r'[\s.]', '', limpio)
+    if limpio.isdigit():
+        if len(limpio) <= 6:
+            return 'numero', int(limpio)
+        return 'dni', limpio
+    return 'texto', q
+
+
+def _texto_para_like(t):
+    return t.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
+
+@auth.route('/api/preinscripciones', methods=['GET'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_preinscripciones_listar():
+    """
+    Lista las preinscripciones de la carrera de la sesión.
+    Sin búsqueda, filtra por estado (pendiente por defecto).
+    Con búsqueda, busca en todos los estados.
+    """
+    carrera_id = session.get('carrera_id')
+    estado = (request.args.get('estado') or 'pendiente').strip()
+    tipo_busq, valor = _interpretar_busqueda_preinscripcion(request.args.get('q'))
+
+    where  = ["p.carrera_id = %s"]
+    params = [carrera_id]
+    if tipo_busq == 'numero':
+        where.append("p.id = %s")
+        params.append(valor)
+    elif tipo_busq == 'dni':
+        where.append("p.dni LIKE %s")
+        params.append(valor + '%')
+    elif tipo_busq == 'texto':
+        for palabra in valor.split():
+            patron = f"%{_texto_para_like(palabra)}%"
+            where.append("(p.apellido ILIKE %s OR p.nombre ILIKE %s)")
+            params += [patron, patron]
+    elif estado in ('pendiente', 'aprobada', 'rechazada'):
+        where.append("p.estado = %s")
+        params.append(estado)
+
+    orden = "p.creado_en ASC" if (not tipo_busq and estado == 'pendiente') else "p.creado_en DESC"
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(f"""
+            SELECT p.id, t.tipo, p.estado, p.apellido, p.nombre,
+                   p.tipo_documento, p.dni, p.creado_en, p.revisado_en,
+                   (SELECT count(*) FROM preinscripcion_materias pm
+                     WHERE pm.preinscripcion_id = p.id)
+            FROM preinscripciones p
+            JOIN tokens_inscripcion t ON t.id = p.token_id
+            WHERE {' AND '.join(where)}
+            ORDER BY {orden}
+            LIMIT 500
+        """, params)
+        filas = cur.fetchall()
+
+        cur.execute("""
+            SELECT estado, count(*) FROM preinscripciones
+            WHERE carrera_id = %s GROUP BY estado
+        """, (carrera_id,))
+        conteos = {'pendiente': 0, 'aprobada': 0, 'rechazada': 0}
+        conteos.update({r[0]: r[1] for r in cur.fetchall()})
+
+        return jsonify({
+            'busqueda': tipo_busq,
+            'conteos':  conteos,
+            'items': [{
+                'id':             f[0],
+                'tipo':           f[1],
+                'estado':         f[2],
+                'apellido':       f[3],
+                'nombre':         f[4],
+                'dni':            formatear_documento(f[5], f[6]),
+                'creado_en':      f[7].strftime('%d/%m/%Y %H:%M') if f[7] else None,
+                'revisado_en':    f[8].strftime('%d/%m/%Y %H:%M') if f[8] else None,
+                'cant_materias':  f[9],
+            } for f in filas],
+        })
+    finally:
+        cur.close()
+        conn.close()
+
+
+@auth.route('/api/preinscripciones/<int:pid>', methods=['GET'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_preinscripciones_detalle(pid):
+    """Datos completos de una preinscripción para revisarla."""
+    carrera_id = session.get('carrera_id')
+    columnas = [c for c, _ in _CAMPOS_COMPARABLES]
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(f"""
+            SELECT p.id, t.tipo, p.estado, p.ciclo_lectivo, p.tipo_documento, p.dni,
+                   p.departamento, p.anio_ingreso, p.observaciones,
+                   p.creado_en, p.revisado_en, p.alumno_id, t.alumno_id,
+                   u.apellido, u.nombre,
+                   {', '.join('p.' + c for c in columnas)}
+            FROM preinscripciones p
+            JOIN tokens_inscripcion t ON t.id = p.token_id
+            LEFT JOIN usuarios u ON u.id = p.revisado_por
+            WHERE p.id = %s AND p.carrera_id = %s
+        """, (pid, carrera_id))
+        f = cur.fetchone()
+        if not f:
+            return jsonify({'error': 'Preinscripción no encontrada'}), 404
+
+        tipo = f[1]
+        datos = dict(zip(columnas, f[15:]))
+        if datos.get('fecha_nacimiento'):
+            datos['fecha_nacimiento'] = datos['fecha_nacimiento'].strftime('%d/%m/%Y')
+
+        # Materias: las elegidas (reinscripción) o las de 1° año (ingresante)
+        if tipo == 'reinscripcion':
+            cur.execute("""
+                SELECT m.nombre, m.anio FROM preinscripcion_materias pm
+                JOIN materias m ON m.id = pm.materia_id
+                WHERE pm.preinscripcion_id = %s
+                ORDER BY m.anio, m.orden
+            """, (pid,))
+        elif tipo == 'ingresante':
+            cur.execute("""
+                SELECT nombre, anio FROM materias
+                WHERE carrera_id = %s AND activa = TRUE AND anio = 1
+                ORDER BY orden
+            """, (carrera_id,))
+        materias = ([{'nombre': r[0], 'anio': r[1]} for r in cur.fetchall()]
+                    if tipo in ('reinscripcion', 'ingresante') else [])
+
+        # Reinscripción pendiente: qué datos cambió respecto del legajo
+        cambios = []
+        alumno_ref = f[11] or f[12]
+        if tipo == 'reinscripcion' and f[2] == 'pendiente' and f[12]:
+            cur.execute(f"""
+                SELECT {', '.join(columnas)} FROM alumnos WHERE id = %s
+            """, (f[12],))
+            actual = cur.fetchone()
+            if actual:
+                for (col, etiqueta), antes in zip(_CAMPOS_COMPARABLES, actual):
+                    if col == 'fecha_nacimiento' and antes:
+                        antes = antes.strftime('%d/%m/%Y')
+                    despues = datos.get(col)
+                    if (antes or '') != (despues or ''):
+                        cambios.append({'campo': etiqueta, 'antes': antes, 'despues': despues})
+
+        return jsonify({
+            'id':            f[0],
+            'tipo':          tipo,
+            'estado':        f[2],
+            'ciclo_lectivo': f[3],
+            'documento':     formatear_documento(f[4], f[5]),
+            'tipo_doc_label': etiqueta_documento(f[4]),
+            'departamento':  f[6],
+            'anio_ingreso':  f[7],
+            'motivo_rechazo': f[8],
+            'creado_en':     f[9].strftime('%d/%m/%Y %H:%M') if f[9] else None,
+            'revisado_en':   f[10].strftime('%d/%m/%Y %H:%M') if f[10] else None,
+            'revisado_por':  f"{f[13]}, {f[14]}" if f[13] else None,
+            'alumno_id':     alumno_ref,
+            'datos':         datos,
+            'materias':      materias,
+            'cambios':       cambios,
+        })
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _mensaje_unico(e):
+    """Traduce una violación de unicidad de alumnos a un mensaje claro."""
+    texto = str(e).lower()
+    if 'cuil' in texto:
+        return 'Ya existe otro alumno con ese CUIL. Revisá los datos antes de aprobar.'
+    if 'dni' in texto:
+        return 'Ya existe un alumno con ese documento.'
+    return None
+
+
+@auth.route('/api/preinscripciones/<int:pid>/aprobar', methods=['POST'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_preinscripciones_aprobar(pid):
+    """
+    Aprueba una preinscripción y la vuelca al sistema según el tipo de token:
+      - ingresante:    crea el alumno y lo inscribe a todas las materias de 1° año
+      - alta:          crea el alumno con su año de ingreso, sin inscripciones
+      - reinscripcion: actualiza los datos del alumno y lo inscribe a las
+                       materias elegidas que sigan habilitadas hoy
+    """
+    carrera_id = session.get('carrera_id')
+    user_id    = session.get('user_id')
+
+    estado_ventana = get_estado_inscripciones()
+    if not estado_ventana['abierto']:
+        return jsonify({
+            'error': f'No se pueden aprobar preinscripciones. {estado_ventana["motivo"]}.',
+            'ventana_cerrada': True
+        }), 403
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT p.estado, p.ciclo_lectivo, t.tipo, t.alumno_id,
+                   p.tipo_documento, p.dni, p.cuil, p.apellido, p.nombre,
+                   p.fecha_nacimiento, p.email, p.celular, p.telefono,
+                   p.direccion, p.localidad_id, p.localidad, p.departamento,
+                   p.provincia, p.contacto_emergencia_nombre,
+                   p.contacto_emergencia_vinculo, p.contacto_emergencia_telefono,
+                   p.plan_id, p.anio_ingreso
+            FROM preinscripciones p
+            JOIN tokens_inscripcion t ON t.id = p.token_id
+            WHERE p.id = %s AND p.carrera_id = %s
+            FOR UPDATE OF p
+        """, (pid, carrera_id))
+        f = cur.fetchone()
+        if not f:
+            conn.rollback()
+            return jsonify({'error': 'Preinscripción no encontrada'}), 404
+
+        (estado, ciclo, tipo, alumno_token, tipo_doc, dni, cuil, apellido, nombre,
+         fnac, email, celular, telefono, direccion, loc_id, localidad, depto,
+         provincia, ce_nombre, ce_vinculo, ce_tel, plan_id, anio_ingreso) = f
+
+        if estado != 'pendiente':
+            conn.rollback()
+            return jsonify({'error': f'Esta preinscripción ya fue {estado}.'}), 409
+
+        inscriptas = 0
+        omitidas   = []
+
+        if tipo in ('ingresante', 'alta'):
+            cur.execute("SELECT 1 FROM alumnos WHERE dni = %s", (dni,))
+            if cur.fetchone():
+                conn.rollback()
+                return jsonify({
+                    'error': 'Ya existe un alumno con este documento. '
+                             'Rechazá la preinscripción indicando el motivo.'
+                }), 409
+
+            cur.execute("""
+                INSERT INTO alumnos (
+                    carrera_id, apellido, nombre, dni, tipo_documento, cuil,
+                    email, celular, telefono, fecha_nacimiento,
+                    direccion, localidad, localidad_id, departamento, provincia,
+                    contacto_emergencia_nombre, contacto_emergencia_vinculo,
+                    contacto_emergencia_telefono, anio_ingreso, plan_id
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                          %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                carrera_id, apellido, nombre, dni, tipo_doc, cuil,
+                email, celular, telefono, fnac,
+                direccion, localidad, loc_id, depto, provincia,
+                ce_nombre, ce_vinculo, ce_tel,
+                anio_ingreso if tipo == 'alta' else ciclo, plan_id
+            ))
+            alumno_id = cur.fetchone()[0]
+
+            if tipo == 'ingresante':
+                cur.execute("""
+                    INSERT INTO inscripciones (alumno_id, materia_id, anio_lectivo)
+                    SELECT %s, m.id, %s FROM materias m
+                    WHERE m.carrera_id = %s AND m.activa = TRUE AND m.anio = 1
+                    ON CONFLICT DO NOTHING
+                """, (alumno_id, ciclo, carrera_id))
+                inscriptas = cur.rowcount
+
+        else:  # reinscripción
+            alumno_id = alumno_token
+            cur.execute("""
+                SELECT 1 FROM alumnos
+                WHERE id = %s AND carrera_id = %s AND activo = TRUE
+            """, (alumno_id, carrera_id))
+            if not cur.fetchone():
+                conn.rollback()
+                return jsonify({'error': 'El alumno ya no está activo en la carrera.'}), 409
+
+            # El documento no se toca. Si el CUIL vino vacío se conserva el del legajo.
+            cur.execute("""
+                UPDATE alumnos SET
+                    apellido = %s, nombre = %s, cuil = COALESCE(%s, cuil),
+                    email = %s, celular = %s, telefono = %s, fecha_nacimiento = %s,
+                    direccion = %s, localidad = %s, localidad_id = %s,
+                    departamento = %s, provincia = %s,
+                    contacto_emergencia_nombre = %s,
+                    contacto_emergencia_vinculo = %s,
+                    contacto_emergencia_telefono = %s
+                WHERE id = %s
+            """, (
+                apellido, nombre, cuil, email, celular, telefono, fnac,
+                direccion, localidad, loc_id, depto, provincia,
+                ce_nombre, ce_vinculo, ce_tel, alumno_id
+            ))
+
+            # Las materias se revalidan contra el historial de HOY: entre el envío
+            # y la aprobación pudo cerrarse una cursada o aprobarse un final.
+            opciones  = _materias_para_reinscripcion(cur, alumno_id, carrera_id, ciclo)
+            elegibles = {m['id'] for m in opciones if not m['ya_inscripta']}
+            cur.execute("""
+                SELECT pm.materia_id, m.nombre
+                FROM preinscripcion_materias pm
+                JOIN materias m ON m.id = pm.materia_id
+                WHERE pm.preinscripcion_id = %s
+                ORDER BY m.anio, m.orden
+            """, (pid,))
+            for materia_id, materia_nombre in cur.fetchall():
+                if materia_id in elegibles:
+                    cur.execute("""
+                        INSERT INTO inscripciones (alumno_id, materia_id, anio_lectivo)
+                        VALUES (%s, %s, %s) ON CONFLICT DO NOTHING
+                    """, (alumno_id, materia_id, ciclo))
+                    inscriptas += cur.rowcount
+                else:
+                    omitidas.append(materia_nombre)
+
+        cur.execute("""
+            UPDATE preinscripciones
+            SET estado = 'aprobada', revisado_por = %s, revisado_en = now(),
+                alumno_id = %s
+            WHERE id = %s
+        """, (user_id, alumno_id, pid))
+        conn.commit()
+
+        if tipo == 'reinscripcion':
+            partes = ['Datos del alumno actualizados']
+        else:
+            partes = ['Alumno registrado']
+        if inscriptas:
+            partes.append(f"{inscriptas} {'materia inscripta' if inscriptas == 1 else 'materias inscriptas'}")
+        mensaje = '. '.join(partes) + '.'
+        if omitidas:
+            mensaje += (' No se lo inscribió en ' + ', '.join(omitidas) +
+                        ' porque ya no cumple las condiciones para ' +
+                        ('cursarla.' if len(omitidas) == 1 else 'cursarlas.'))
+        if tipo == 'alta':
+            mensaje += (' Falta cargar su historial académico. Después se lo puede inscribir '
+                        'desde Inscripciones o con un token de reinscripción.')
+
+        return jsonify({
+            'ok': True,
+            'alumno_id': alumno_id,
+            'tipo': tipo,
+            'inscriptas': inscriptas,
+            'omitidas': omitidas,
+            'mensaje': mensaje,
+        })
+
+    except Exception as e:
+        conn.rollback()
+        msg = _mensaje_unico(e) if ('unique' in str(e).lower() or 'duplicate' in str(e).lower()) else None
+        if msg:
+            return jsonify({'error': msg}), 409
+        return jsonify({'error': 'No se pudo aprobar la preinscripción.'}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@auth.route('/api/preinscripciones/<int:pid>/rechazar', methods=['POST'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_preinscripciones_rechazar(pid):
+    """Rechaza una preinscripción pendiente. El motivo es obligatorio."""
+    carrera_id = session.get('carrera_id')
+    user_id    = session.get('user_id')
+    data       = request.get_json(silent=True) or {}
+    motivo     = _limpiar_texto(data.get('motivo'), 500)
+
+    if not motivo or len(motivo) < 5:
+        return jsonify({'error': 'Indicá el motivo del rechazo.'}), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE preinscripciones
+            SET estado = 'rechazada', observaciones = %s,
+                revisado_por = %s, revisado_en = now()
+            WHERE id = %s AND carrera_id = %s AND estado = 'pendiente'
+            RETURNING id
+        """, (motivo, user_id, pid, carrera_id))
+        if not cur.fetchone():
+            cur.execute("""
+                SELECT estado FROM preinscripciones
+                WHERE id = %s AND carrera_id = %s
+            """, (pid, carrera_id))
+            fila = cur.fetchone()
+            conn.rollback()
+            if not fila:
+                return jsonify({'error': 'Preinscripción no encontrada'}), 404
+            return jsonify({'error': f'Esta preinscripción ya fue {fila[0]}.'}), 409
+
+        conn.commit()
+        return jsonify({
+            'ok': True,
+            'mensaje': 'Preinscripción rechazada. Si el alumno tiene que volver a '
+                       'cargarla, generale un token nuevo.'
+        })
+    finally:
+        cur.close()
+        conn.close()

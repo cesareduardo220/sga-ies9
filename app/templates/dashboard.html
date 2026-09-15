@@ -201,6 +201,7 @@
     font-size:0.87rem; font-family:'Inter',sans-serif; color:var(--sga-texto-oscuro);
   }
         .barra-filtros input{ flex:1; min-width:220px; }
+        .barra-filtros > div > input[type="text"]{ width:100%; }
         .barra-filtros input:focus, .barra-filtros select:focus{ outline:none; border-color:var(--sga-verde-medio); }
         .tabla-card{ background:#fff; border-radius:14px; box-shadow:var(--sga-sombra); overflow:hidden; border:1px solid var(--sga-borde); }
         .tabla-alumnos{ width:100%; border-collapse:collapse; }
@@ -331,6 +332,24 @@
         .modal-card-footer{ padding:18px 26px; background:var(--sga-crema-2); display:flex; justify-content:flex-end; gap:10px; }
         .modal-btn-confirmar{ background:var(--sga-error); color:#fff; border:none; padding:10px 20px; border-radius:9px; font-weight:700; font-size:0.86rem; cursor:pointer; }
         .modal-btn-confirmar:hover{ background:#B22F2F; }
+
+        /* ── PREINSCRIPCIONES ── */
+        .prei-tipo{ padding:3px 10px; border-radius:20px; font-size:0.72rem; font-weight:700; display:inline-block; white-space:nowrap; }
+        .prei-tipo.ingresante{ background:#E5F0F8; color:#2D6CA8; }
+        .prei-tipo.alta{ background:#EEEAF7; color:var(--sga-indigo); }
+        .prei-tipo.reinscripcion{ background:#DCF5E5; color:var(--sga-exito); }
+        .badge-estado.pendiente{ background:#FFF4D6; color:#7A5500; }
+        .prei-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px; margin-bottom:16px; }
+        .prei-bloque{ background:#fff; border:1px solid var(--sga-borde); border-radius:14px; padding:16px 20px; box-shadow:var(--sga-sombra); }
+        .prei-bloque h4{ margin:0 0 10px; font-size:0.74rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sga-verde-medio); }
+        .prei-dato{ display:flex; justify-content:space-between; gap:12px; padding:6px 0; font-size:0.86rem; border-bottom:1px solid var(--sga-crema-2); }
+        .prei-dato:last-child{ border-bottom:none; }
+        .prei-dato .et{ color:var(--sga-texto-gris); flex-shrink:0; }
+        .prei-dato .va{ font-weight:600; text-align:right; word-break:break-word; }
+        .prei-aviso{ padding:14px 18px; border-radius:10px; margin-bottom:16px; font-size:0.88rem; line-height:1.55; }
+        .prei-antes{ color:var(--sga-texto-gris); text-decoration:line-through; }
+        .prei-materia{ padding:7px 0; font-size:0.86rem; border-bottom:1px solid var(--sga-crema-2); }
+        .prei-materia:last-child{ border-bottom:none; }
 
         /* ── MESAS DE EXAMEN ── */
         .mesas-stats-fila{ display:flex; gap:14px; margin-bottom:22px; flex-wrap:wrap; }
@@ -859,6 +878,9 @@
 
         /* ── Aviso solo lectura ── */
         #aviso-solo-lectura-mobile { display: block !important; }
+
+        /* ── Preinscripciones: sin aprobar ni rechazar ── */
+        #prei-acciones { display: none !important; }
 
         /* ── Notas: ocultar edición, mostrar tabla en modo lectura ── */
         #notas-header-btns,
@@ -1710,6 +1732,111 @@
 
         <!-- Mensaje -->
         <div id="insc-mensaje" style="display:none; margin-top:14px;"></div>
+    </div>
+</div>
+
+<!-- PREINSCRIPCIONES: cola de revisión -->
+<div class="seccion" id="sec-preinscripciones">
+    <div class="seccion-header">
+        <div>
+            <h2>Preinscripciones</h2>
+            <div class="sub">Inscripciones cargadas en línea por los alumnos, para revisar y aprobar</div>
+        </div>
+    </div>
+
+    <!-- ─── Lista ─── -->
+    <div id="prei-vista-lista">
+        <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+            <button class="btn-secundario prei-filtro" data-estado="pendiente"
+                    onclick="preiCambiarEstado('pendiente')" style="padding:7px 14px; font-size:0.85rem;">
+                ⏳ Pendientes <span id="prei-cont-pendiente" style="font-weight:700; margin-left:4px;">0</span>
+            </button>
+            <button class="btn-secundario prei-filtro" data-estado="aprobada"
+                    onclick="preiCambiarEstado('aprobada')" style="padding:7px 14px; font-size:0.85rem;">
+                ✓ Aprobadas <span id="prei-cont-aprobada" style="font-weight:700; margin-left:4px;">0</span>
+            </button>
+            <button class="btn-secundario prei-filtro" data-estado="rechazada"
+                    onclick="preiCambiarEstado('rechazada')" style="padding:7px 14px; font-size:0.85rem;">
+                ✖ Rechazadas <span id="prei-cont-rechazada" style="font-weight:700; margin-left:4px;">0</span>
+            </button>
+        </div>
+
+        <div class="barra-filtros" style="margin-bottom:8px;">
+            <div style="position:relative; flex:1;">
+                <input type="text" id="prei-buscar" autocomplete="off"
+                       placeholder="Buscar por número de inscripción, DNI, apellido o nombre..."
+                       oninput="preiBuscarDemorado()" onkeydown="preiBuscarTeclado(event)">
+            </div>
+        </div>
+        <div id="prei-aviso-busqueda" style="display:none; font-size:0.8rem; color:var(--sga-texto-gris); margin:0 4px 12px;"></div>
+
+        <div class="tabla-card" style="margin-top:6px;">
+            <div id="prei-cargando" class="cargando" style="display:none">Cargando preinscripciones...</div>
+            <div id="prei-vacio" class="empty-state" style="display:none; padding:40px;"></div>
+            <div id="prei-tabla-wrap" style="display:none"></div>
+        </div>
+    </div>
+
+    <!-- ─── Detalle ─── -->
+    <div id="prei-cargando-detalle" class="cargando" style="display:none">Cargando preinscripción...</div>
+
+    <div id="prei-panel" style="display:none">
+        <div id="prei-mensaje" style="display:none"></div>
+        <div class="seccion-header" style="margin-bottom:18px;">
+            <div>
+                <h2 id="prei-titulo" style="font-size:1.3rem"></h2>
+                <div class="sub" id="prei-subtitulo"></div>
+            </div>
+            <div id="prei-acciones" style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn-cerrar-cursada" onclick="preiAbrirRechazo()">✖ Rechazar</button>
+                <button class="btn-nuevo" onclick="preiAbrirAprobacion()">✓ Aprobar</button>
+            </div>
+        </div>
+        <div id="prei-detalle"></div>
+    </div>
+</div>
+
+<!-- Modal: aprobar preinscripción -->
+<div id="modal-prei-aprobar" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:520px;">
+        <div class="modal-card-header">
+            <h3>Aprobar preinscripción</h3>
+        </div>
+        <div class="modal-card-body">
+            <div id="modal-prei-aprobar-texto"></div>
+            <div id="modal-prei-aprobar-error" style="display:none; color:var(--sga-error); font-size:0.84rem; margin-top:8px;"></div>
+        </div>
+        <div class="modal-card-footer">
+            <button class="modal-btn-cancelar" onclick="cerrarModal('modal-prei-aprobar')">Cancelar</button>
+            <button class="modal-btn-confirmar" id="modal-prei-aprobar-btn"
+                    style="background:var(--sga-verde-medio);" onclick="preiConfirmarAprobacion()">Aprobar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: rechazar preinscripción -->
+<div id="modal-prei-rechazo" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:520px;">
+        <div class="modal-card-header">
+            <h3>Rechazar preinscripción</h3>
+        </div>
+        <div class="modal-card-body">
+            <p>
+                Indicá el motivo del rechazo. Queda registrado con tu usuario y la fecha.
+                Si el alumno tiene que volver a cargarla, vas a tener que generarle un token nuevo.
+            </p>
+            <div class="campo-edit">
+                <label>Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
+                <textarea id="modal-prei-rechazo-motivo" class="input-edit-ficha" rows="4" maxlength="500"
+                          placeholder="Ej: La documentación presentada no coincide con los datos cargados"
+                          style="font-family:inherit; resize:vertical;"></textarea>
+            </div>
+            <div id="modal-prei-rechazo-error" style="display:none; color:var(--sga-error); font-size:0.84rem; margin-top:8px;"></div>
+        </div>
+        <div class="modal-card-footer">
+            <button class="modal-btn-cancelar" onclick="cerrarModal('modal-prei-rechazo')">Cancelar</button>
+            <button class="modal-btn-confirmar" id="modal-prei-rechazo-btn" onclick="preiConfirmarRechazo()">Rechazar preinscripción</button>
+        </div>
     </div>
 </div>
 
@@ -3347,6 +3474,7 @@
             { seccion: 'académico', items: [
                 { id: 'alumnos',      icon: '👥', label: 'Alumnos' },
                 { id: 'inscripciones',icon: '📝', label: 'Inscripciones' },
+                { id: 'preinscripciones', icon: '📨', label: 'Preinscripciones' },
                 { id: 'materias',     icon: '📚', label: 'Plan de Estudios' },
                 { id: 'notas',        icon: '📋', label: 'Notas' },
                 { id: 'mesas',        icon: '🎓', label: 'Mesas de Examen' },
@@ -3364,6 +3492,7 @@
             { seccion: 'académico', items: [
                 { id: 'alumnos',      icon: '👥', label: 'Alumnos' },
                 { id: 'inscripciones',icon: '📝', label: 'Inscripciones' },
+                { id: 'preinscripciones', icon: '📨', label: 'Preinscripciones' },
                 { id: 'materias',     icon: '📚', label: 'Plan de Estudios' },
                 { id: 'notas',        icon: '📋', label: 'Notas' },
                 { id: 'mesas',        icon: '🎓', label: 'Mesas de Examen' },
@@ -3385,6 +3514,7 @@
         'config':      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
         'alumnos':     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
         'inscripciones': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        'preinscripciones': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
         'materias':    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
         'notas':       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>',
         'mesas':       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5-10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
@@ -3478,8 +3608,8 @@
 
     // ── SECCIONES MOBILE POR ROL ────────────────────────────
     const SECCIONES_MOBILE = {
-        coordinador: ['alumnos','notas','mesas','materias','reportes','inscripciones','usuarios','profesores'],
-        preceptora:  ['alumnos','notas','mesas','materias','reportes','inscripciones','profesores'],
+        coordinador: ['alumnos','notas','mesas','materias','reportes','inscripciones','preinscripciones','usuarios','profesores'],
+        preceptora:  ['alumnos','notas','mesas','materias','reportes','inscripciones','preinscripciones','profesores'],
         admin:       ['carreras','coordinadores','config'],
         sys:         ['administradores'],
     };
@@ -3722,6 +3852,7 @@
         if (id === 'materias') cargarMaterias();
         if (id === 'alumnos') cargarAlumnos();
         if (id === 'inscripciones') cargarInscripciones();
+        if (id === 'preinscripciones') cargarPreinscripciones();
         if (id === 'notas') cargarNotasMaterias();
         if (id === 'profesores') cargarProfesores();
         if (id === 'usuarios') cargarPreceptoras();
@@ -3860,6 +3991,17 @@
                 abrirDetalleMesa(state.mesaId, true);
             } else {
                 volverAMesas();
+            }
+        } else if (state.seccionId === 'preinscripciones') {
+            const secActiva = document.querySelector('.seccion.activa');
+            const yaEnSeccion = secActiva && secActiva.id === 'sec-preinscripciones';
+            if (state.preiId) {
+                if (!yaEnSeccion) _ejecutarNavegacion('preinscripciones', state.label, true);
+                _preiAbrirSinPushState(state.preiId);
+            } else if (yaEnSeccion) {
+                _preiVolverALista();
+            } else {
+                _ejecutarNavegacion('preinscripciones', state.label, true);
             }
         } else if (state.seccionId === 'inscripciones') {
             // Si tiene alumno_id en el state → estamos en el panel del alumno
@@ -6865,6 +7007,403 @@
         }
     });
 
+
+    // ══════════════════════════════════════════════════════
+    // PREINSCRIPCIONES — cola de revisión
+    // ══════════════════════════════════════════════════════
+    let preiEstado = 'pendiente';
+    let preiItems = [];
+    let preiActual = null;
+    let preiTimerBusqueda = null;
+    let preiPedido = 0;
+
+    const PREI_TIPOS = {
+        ingresante:    'Ingresante',
+        alta:          'Alta (ya cursa)',
+        reinscripcion: 'Reinscripción',
+    };
+    const PREI_ESTADOS = {
+        pendiente: '<span class="badge-estado pendiente">⏳ Pendiente</span>',
+        aprobada:  '<span class="badge-estado activo">✓ Aprobada</span>',
+        rechazada: '<span class="badge-estado inactivo">✖ Rechazada</span>',
+    };
+
+    function preiEsc(t) {
+        return String(t == null ? '' : t)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function cargarPreinscripciones() {
+        preiEstado = 'pendiente';
+        preiActual = null;
+        document.getElementById('prei-buscar').value = '';
+        _preiVolverALista();
+    }
+
+    function _preiVolverALista() {
+        preiActual = null;
+        document.getElementById('prei-panel').style.display = 'none';
+        document.getElementById('prei-cargando-detalle').style.display = 'none';
+        document.getElementById('prei-vista-lista').style.display = 'block';
+        preiCargarLista();
+    }
+
+    function preiCambiarEstado(estado) {
+        preiEstado = estado;
+        document.getElementById('prei-buscar').value = '';
+        preiCargarLista();
+    }
+
+    function preiBuscarDemorado() {
+        clearTimeout(preiTimerBusqueda);
+        preiTimerBusqueda = setTimeout(preiCargarLista, 300);
+    }
+
+    function preiBuscarTeclado(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(preiTimerBusqueda);
+            // Con un solo resultado (por ejemplo, un número de inscripción) se abre directo
+            preiCargarLista().then(() => {
+                if (preiItems.length === 1) preiAbrir(preiItems[0].id);
+            });
+        } else if (e.key === 'Escape') {
+            e.target.value = '';
+            preiCargarLista();
+        }
+    }
+
+    async function preiCargarLista() {
+        const q = document.getElementById('prei-buscar').value.trim();
+        const pedido = ++preiPedido;
+        const cargando = document.getElementById('prei-cargando');
+        const vacio    = document.getElementById('prei-vacio');
+        const wrap     = document.getElementById('prei-tabla-wrap');
+        const aviso    = document.getElementById('prei-aviso-busqueda');
+
+        document.querySelectorAll('.prei-filtro').forEach(b => {
+            const activo = !q && b.dataset.estado === preiEstado;
+            b.style.background  = activo ? 'var(--sga-verde-medio)' : '';
+            b.style.color       = activo ? '#fff' : '';
+            b.style.borderColor = activo ? 'var(--sga-verde-medio)' : '';
+        });
+
+        cargando.style.display = 'block';
+        vacio.style.display = 'none';
+        wrap.style.display = 'none';
+
+        let data;
+        try {
+            const url = '/api/preinscripciones?estado=' + encodeURIComponent(preiEstado) +
+                        (q ? '&q=' + encodeURIComponent(q) : '');
+            data = await (await fetch(url)).json();
+        } catch (err) {
+            data = { error: 'No se pudo conectar con el servidor.' };
+        }
+        if (pedido !== preiPedido) return;   // llegó una búsqueda más nueva
+        cargando.style.display = 'none';
+
+        if (data.error) {
+            vacio.innerHTML = '<div class="empty-icon">⚠️</div>' + preiEsc(data.error);
+            vacio.style.display = 'block';
+            preiItems = [];
+            return;
+        }
+
+        ['pendiente', 'aprobada', 'rechazada'].forEach(k => {
+            document.getElementById('prei-cont-' + k).textContent = (data.conteos || {})[k] || 0;
+        });
+
+        const textosBusqueda = {
+            numero: 'Buscando por número de inscripción, en todos los estados.',
+            dni:    'Buscando por DNI, en todos los estados.',
+            texto:  'Buscando por apellido o nombre, en todos los estados.',
+        };
+        aviso.textContent = textosBusqueda[data.busqueda] || '';
+        aviso.style.display = data.busqueda ? 'block' : 'none';
+
+        preiItems = data.items || [];
+        if (!preiItems.length) {
+            const textos = {
+                pendiente: '🎉 No hay preinscripciones pendientes de revisión.',
+                aprobada:  'Todavía no hay preinscripciones aprobadas.',
+                rechazada: 'No hay preinscripciones rechazadas.',
+            };
+            const txt = q
+                ? (data.busqueda === 'numero'
+                    ? `No existe la preinscripción n° ${preiEsc(q.replace(/\D/g, ''))} en esta carrera.`
+                    : 'No se encontraron preinscripciones con ese criterio.')
+                : textos[preiEstado];
+            vacio.innerHTML = `<div class="empty-icon">${q ? '🔍' : '📨'}</div>${txt}`;
+            vacio.style.display = 'block';
+            return;
+        }
+
+        wrap.innerHTML = `
+        <table class="tabla-alumnos">
+            <thead><tr>
+                <th>N°</th>
+                <th>Tipo</th>
+                <th>Apellido y nombre</th>
+                <th>Documento</th>
+                <th>Enviada</th>
+                <th>Estado</th>
+            </tr></thead>
+            <tbody>
+            ${preiItems.map(p => `
+                <tr class="fila-alumno" onclick="preiAbrir(${p.id})">
+                    <td data-label="N°"><strong>${p.id}</strong></td>
+                    <td data-label="Tipo"><span class="prei-tipo ${p.tipo}">${PREI_TIPOS[p.tipo] || p.tipo}</span></td>
+                    <td data-label="Alumno"><strong>${preiEsc(p.apellido)}, ${preiEsc(p.nombre)}</strong>
+                        ${p.tipo === 'reinscripcion'
+                            ? `<div style="font-size:0.76rem; color:var(--sga-texto-gris);">${p.cant_materias} ${p.cant_materias === 1 ? 'materia elegida' : 'materias elegidas'}</div>`
+                            : ''}
+                    </td>
+                    <td data-label="Documento">${preiEsc(p.dni)}</td>
+                    <td data-label="Enviada">${preiEsc(p.creado_en || '')}</td>
+                    <td data-label="Estado">${PREI_ESTADOS[p.estado] || p.estado}</td>
+                </tr>
+            `).join('')}
+            </tbody>
+        </table>`;
+        wrap.style.display = 'block';
+    }
+
+    function preiAbrir(id) {
+        history.pushState({ seccionId: 'preinscripciones', label: '', preiId: id },
+                          '', '#preinscripciones-' + id);
+        _preiAbrirSinPushState(id);
+    }
+
+    async function _preiAbrirSinPushState(id, mensaje) {
+        document.getElementById('prei-vista-lista').style.display = 'none';
+        document.getElementById('prei-panel').style.display = 'none';
+        document.getElementById('prei-cargando-detalle').style.display = 'block';
+
+        let d;
+        try {
+            d = await (await fetch('/api/preinscripciones/' + id)).json();
+        } catch (err) {
+            d = { error: 'No se pudo conectar con el servidor.' };
+        }
+        document.getElementById('prei-cargando-detalle').style.display = 'none';
+
+        if (d.error) {
+            alert('❌ ' + d.error);
+            history.back();
+            return;
+        }
+
+        preiActual = d;
+        _preiRenderDetalle(d);
+        document.getElementById('prei-panel').style.display = 'block';
+        window.scrollTo(0, 0);
+
+        const caja = document.getElementById('prei-mensaje');
+        if (mensaje) {
+            mostrarMensaje('prei-mensaje', mensaje.texto, mensaje.tipo, 0);
+        } else {
+            caja.style.display = 'none';
+        }
+    }
+
+    function _preiDato(etiqueta, valor) {
+        return `<div class="prei-dato"><span class="et">${etiqueta}</span>` +
+               `<span class="va">${valor ? preiEsc(valor) : '<span style="color:var(--sga-texto-gris); font-weight:400;">—</span>'}</span></div>`;
+    }
+
+    function _preiRenderDetalle(d) {
+        const x = d.datos || {};
+        document.getElementById('prei-titulo').textContent =
+            `Preinscripción n° ${d.id} · ${x.apellido || ''}, ${x.nombre || ''}`;
+        document.getElementById('prei-subtitulo').innerHTML =
+            `<span class="prei-tipo ${d.tipo}">${PREI_TIPOS[d.tipo] || d.tipo}</span>` +
+            ` &nbsp;${PREI_ESTADOS[d.estado] || ''}` +
+            ` &nbsp;· Ciclo ${d.ciclo_lectivo} · Enviada el ${preiEsc(d.creado_en || '')}`;
+        document.getElementById('prei-acciones').style.display = (d.estado === 'pendiente') ? 'flex' : 'none';
+
+        let html = '';
+
+        // Resultado de la revisión
+        if (d.estado === 'rechazada') {
+            html += `<div class="prei-aviso" style="background:#FBEAEA; border:1.5px solid #F0C2C2; color:#9e2a2a;">
+                <strong>Rechazada</strong> por ${preiEsc(d.revisado_por || '—')} el ${preiEsc(d.revisado_en || '')}.<br>
+                <strong>Motivo:</strong> ${preiEsc(d.motivo_rechazo || '')}</div>`;
+        } else if (d.estado === 'aprobada') {
+            html += `<div class="prei-aviso" style="background:#E6F9EE; border:1.5px solid #B7E4C7; color:#1a6e3c;">
+                <strong>Aprobada</strong> por ${preiEsc(d.revisado_por || '—')} el ${preiEsc(d.revisado_en || '')}.</div>`;
+        }
+
+        // Qué va a pasar al aprobar, según el tipo
+        if (d.estado === 'pendiente') {
+            const explicaciones = {
+                ingresante:    'Al aprobarla se registra al alumno y se lo inscribe a todas las materias de 1° año.',
+                alta:          `Alumno que ya cursa la carrera (ingresó en <strong>${preiEsc(d.anio_ingreso || '—')}</strong>). ` +
+                               'Al aprobarla se lo registra <strong>sin inscribirlo a materias</strong>: primero hay que cargar su historial académico.',
+                reinscripcion: 'Al aprobarla se actualizan sus datos y se lo inscribe a las materias elegidas que sigan habilitadas.',
+            };
+            html += `<div class="prei-aviso" style="background:#FFF8E1; border:1.5px solid #F2D27A; color:#7a5c00;">
+                ${explicaciones[d.tipo] || ''}<br>
+                Antes de aprobar, verificá que los datos coincidan con la documentación presentada.</div>`;
+        }
+
+        // Cambios respecto del legajo (reinscripción pendiente)
+        if (d.cambios && d.cambios.length) {
+            html += `<div class="prei-bloque" style="margin-bottom:16px; border-color:#F2D27A;">
+                <h4 style="color:#7A5500;">Datos que cambió respecto del legajo</h4>
+                ${d.cambios.map(c => `
+                    <div class="prei-dato"><span class="et">${preiEsc(c.campo)}</span>
+                        <span class="va"><span class="prei-antes">${preiEsc(c.antes || '(vacío)')}</span>
+                        &nbsp;→&nbsp; ${preiEsc(c.despues || '(vacío)')}</span></div>`).join('')}
+            </div>`;
+        } else if (d.tipo === 'reinscripcion' && d.estado === 'pendiente') {
+            html += `<div style="font-size:0.84rem; color:var(--sga-texto-gris); margin:-4px 4px 14px;">
+                No modificó ningún dato respecto del legajo.</div>`;
+        }
+
+        html += `<div class="prei-grid">
+            <div class="prei-bloque"><h4>Datos personales</h4>
+                ${_preiDato(d.tipo_doc_label || 'Documento', d.documento)}
+                ${_preiDato('Apellido', x.apellido)}
+                ${_preiDato('Nombre', x.nombre)}
+                ${_preiDato('Fecha de nacimiento', x.fecha_nacimiento)}
+                ${_preiDato('CUIL', x.cuil)}
+                ${d.tipo === 'alta' ? _preiDato('Año de ingreso', d.anio_ingreso) : ''}
+            </div>
+            <div class="prei-bloque"><h4>Contacto y domicilio</h4>
+                ${_preiDato('Correo', x.email)}
+                ${_preiDato('Celular', x.celular)}
+                ${_preiDato('Teléfono', x.telefono)}
+                ${_preiDato('Dirección', x.direccion)}
+                ${_preiDato('Localidad', [x.localidad, d.departamento && d.departamento !== x.localidad ? d.departamento : ''].filter(Boolean).join(' · '))}
+                ${_preiDato('Provincia', x.provincia)}
+            </div>
+            <div class="prei-bloque"><h4>Contacto de emergencia</h4>
+                ${_preiDato('Nombre', x.contacto_emergencia_nombre)}
+                ${_preiDato('Vínculo', x.contacto_emergencia_vinculo)}
+                ${_preiDato('Teléfono', x.contacto_emergencia_telefono)}
+            </div>
+        </div>`;
+
+        // Materias
+        const mostrarMaterias = d.tipo === 'reinscripcion' ||
+                                (d.tipo === 'ingresante' && d.estado !== 'rechazada');
+        if (mostrarMaterias) {
+            const titulos = {
+                ingresante:    { pendiente: 'Materias a las que se lo va a inscribir',
+                                 aprobada:  'Materias de 1° año en las que se lo inscribió' },
+                reinscripcion: { pendiente: 'Materias elegidas',
+                                 aprobada:  'Materias elegidas',
+                                 rechazada: 'Materias que había elegido' },
+            };
+            const titulo = (titulos[d.tipo] || {})[d.estado] || 'Materias';
+            const porAnio = {};
+            (d.materias || []).forEach(m => { (porAnio[m.anio] = porAnio[m.anio] || []).push(m); });
+            const cuerpo = Object.keys(porAnio).length
+                ? Object.keys(porAnio).sort((a, b) => a - b).map(anio => `
+                    <div style="font-size:0.78rem; font-weight:700; color:var(--sga-texto-gris); margin:10px 0 2px;">${anio}° año</div>
+                    ${porAnio[anio].map(m => `<div class="prei-materia">${preiEsc(m.nombre)}</div>`).join('')}
+                `).join('')
+                : '<div style="font-size:0.86rem; color:var(--sga-texto-gris);">No hay materias para mostrar.</div>';
+            html += `<div class="prei-bloque"><h4>${titulo} (${(d.materias || []).length})</h4>${cuerpo}</div>`;
+        }
+
+        document.getElementById('prei-detalle').innerHTML = html;
+    }
+
+    // ── Aprobar ──
+    function preiAbrirAprobacion() {
+        if (!preiActual) return;
+        const d = preiActual, x = d.datos || {};
+        const nombre = `<strong>${preiEsc(x.apellido)}, ${preiEsc(x.nombre)}</strong>`;
+        const textos = {
+            ingresante:    `Se va a registrar a ${nombre} como alumno y se lo va a inscribir a <strong>${(d.materias || []).length} materias de 1° año</strong>.`,
+            alta:          `Se va a registrar a ${nombre} como alumno, con año de ingreso ${preiEsc(d.anio_ingreso)}, <strong>sin inscripciones</strong>. Después hay que cargar su historial académico.`,
+            reinscripcion: `Se van a actualizar los datos de ${nombre} y se lo va a inscribir a <strong>${(d.materias || []).length} ${(d.materias || []).length === 1 ? 'materia' : 'materias'}</strong>, si siguen habilitadas.`,
+        };
+        document.getElementById('modal-prei-aprobar-texto').innerHTML =
+            `<p>${textos[d.tipo] || ''}</p><p>Esta acción no se puede deshacer desde esta pantalla.</p>`;
+        document.getElementById('modal-prei-aprobar-error').style.display = 'none';
+        const btn = document.getElementById('modal-prei-aprobar-btn');
+        btn.disabled = false;
+        btn.textContent = 'Aprobar';
+        abrirModal('modal-prei-aprobar');
+    }
+
+    async function preiConfirmarAprobacion() {
+        if (!preiActual) return;
+        const btn = document.getElementById('modal-prei-aprobar-btn');
+        const err = document.getElementById('modal-prei-aprobar-error');
+        btn.disabled = true;
+        btn.textContent = 'Aprobando…';
+        err.style.display = 'none';
+
+        let data;
+        try {
+            data = await (await fetch(`/api/preinscripciones/${preiActual.id}/aprobar`, { method: 'POST' })).json();
+        } catch (e) {
+            data = { error: 'No se pudo conectar con el servidor.' };
+        }
+        btn.disabled = false;
+        btn.textContent = 'Aprobar';
+
+        if (data.error) {
+            err.textContent = data.error;
+            err.style.display = 'block';
+            return;
+        }
+        cerrarModal('modal-prei-aprobar');
+        const tipo = (data.omitidas && data.omitidas.length) || data.tipo === 'alta' ? 'alerta' : 'exito';
+        _preiAbrirSinPushState(preiActual.id, { texto: '✓ ' + data.mensaje, tipo });
+    }
+
+    // ── Rechazar ──
+    function preiAbrirRechazo() {
+        if (!preiActual) return;
+        document.getElementById('modal-prei-rechazo-motivo').value = '';
+        document.getElementById('modal-prei-rechazo-error').style.display = 'none';
+        const btn = document.getElementById('modal-prei-rechazo-btn');
+        btn.disabled = false;
+        btn.textContent = 'Rechazar preinscripción';
+        abrirModal('modal-prei-rechazo');
+        setTimeout(() => document.getElementById('modal-prei-rechazo-motivo').focus(), 50);
+    }
+
+    async function preiConfirmarRechazo() {
+        if (!preiActual) return;
+        const motivo = document.getElementById('modal-prei-rechazo-motivo').value.trim();
+        const err = document.getElementById('modal-prei-rechazo-error');
+        if (motivo.length < 5) {
+            err.textContent = 'El motivo es obligatorio (mínimo 5 caracteres).';
+            err.style.display = 'block';
+            return;
+        }
+        const btn = document.getElementById('modal-prei-rechazo-btn');
+        btn.disabled = true;
+        btn.textContent = 'Rechazando…';
+
+        let data;
+        try {
+            data = await (await fetch(`/api/preinscripciones/${preiActual.id}/rechazar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ motivo })
+            })).json();
+        } catch (e) {
+            data = { error: 'No se pudo conectar con el servidor.' };
+        }
+        btn.disabled = false;
+        btn.textContent = 'Rechazar preinscripción';
+
+        if (data.error) {
+            err.textContent = data.error;
+            err.style.display = 'block';
+            return;
+        }
+        cerrarModal('modal-prei-rechazo');
+        _preiAbrirSinPushState(preiActual.id, { texto: data.mensaje, tipo: 'info' });
+    }
 
     // ══ AUTO-DISMISS MENSAJES ══
     const _msgTimers = {};
