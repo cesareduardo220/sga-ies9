@@ -179,6 +179,25 @@ button{font-family:inherit; cursor:pointer;}
 .loc-item:hover, .loc-item.activo{ background:var(--crema-2); }
 .loc-prov{ display:block; font-size:0.76rem; color:var(--texto-gris); margin-top:2px; }
  
+/* ---------- Materias (reinscripción) ---------- */
+.mat-anio{ margin-bottom:16px; }
+.mat-anio-titulo{ font-size:0.8rem; font-weight:700; color:var(--texto-gris); margin-bottom:8px; }
+.mat-tarjeta{ background:#fff; border:1px solid var(--borde); border-radius:12px; overflow:hidden; }
+.mat-item{
+  display:flex; align-items:center; gap:12px; padding:11px 16px;
+  border-bottom:1px solid var(--crema-2); cursor:pointer; font-size:0.9rem; line-height:1.35;
+}
+.mat-item:last-child{ border-bottom:none; }
+.mat-item input{ width:17px; height:17px; flex-shrink:0; accent-color:var(--verde-medio); cursor:pointer; }
+.mat-item.mat-todas{ background:var(--crema-2); font-weight:700; font-size:0.85rem; }
+.mat-item.mat-fija{ cursor:default; color:var(--texto-gris); }
+.mat-item.mat-fija input{ cursor:default; }
+.mat-sub{ display:block; font-size:0.76rem; color:var(--texto-gris); margin-top:2px; font-weight:400; }
+.mat-vacio{
+  background:var(--crema-2); border-radius:10px; padding:14px 16px;
+  font-size:0.86rem; color:var(--texto-gris); line-height:1.55;
+}
+
 /* ---------- Confirmación final ---------- */
 .ok-icono{
   width:62px; height:62px; border-radius:50%; background:#EAF2ED;
@@ -467,6 +486,16 @@ button{font-family:inherit; cursor:pointer;}
           </div>
         </div>
  
+        <!-- Materias: solo reinscripción -->
+        <div class="seccion oculto" id="seccion-materias">
+          <div class="seccion-titulo">Materias a cursar</div>
+          <p class="ayuda-campo" style="margin:-4px 0 14px;">
+            Solo aparecen las materias que pod&eacute;s cursar este ciclo, seg&uacute;n tus
+            correlativas y las materias que ya regularizaste o aprobaste.
+          </p>
+          <div id="lista-materias"></div>
+        </div>
+
         <button class="btn-primario" id="btn-enviar">Enviar inscripci&oacute;n</button>
         <button class="btn-secundario" id="btn-cancelar">Cancelar</button>
  
@@ -738,8 +767,66 @@ button{font-family:inherit; cursor:pointer;}
     $('f-anio-ingreso').placeholder = d.anio_ingreso_min
       ? ('Entre ' + d.anio_ingreso_min + ' y ' + d.anio_ingreso_max) : '2025';
     if (!esAlta) $('f-anio-ingreso').value = '';
+
+    // Las materias solo se eligen en una reinscripción.
+    var esReinsc = (d.tipo === 'reinscripcion');
+    $('seccion-materias').classList.toggle('oculto', !esReinsc);
+    if (esReinsc) pintarMaterias(d.materias || []);
+    else $('lista-materias').innerHTML = '';
   }
  
+  function escaparHtml(t){
+    return String(t == null ? '' : t).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c];
+    });
+  }
+
+  // ---- Materias elegibles, agrupadas por año ----
+  function pintarMaterias(lista){
+    var cont = $('lista-materias');
+    if (!lista.length) {
+      cont.innerHTML = '<div class="mat-vacio">No ten\u00e9s materias habilitadas para inscribirte ' +
+        'en l\u00ednea. Acercate a preceptor\u00eda para revisar tu situaci\u00f3n.</div>';
+      return;
+    }
+    var porAnio = {};
+    lista.forEach(function(m){ (porAnio[m.anio] = porAnio[m.anio] || []).push(m); });
+
+    cont.innerHTML = Object.keys(porAnio)
+      .sort(function(a, b){ return a - b; })
+      .map(function(anio){
+        var mats = porAnio[anio];
+        var libres = mats.filter(function(m){ return !m.ya_inscripta; }).length;
+        var html = '<div class="mat-anio" data-mat-anio="' + anio + '">' +
+          '<div class="mat-anio-titulo">' + anio + '\u00b0 a\u00f1o</div>' +
+          '<div class="mat-tarjeta">';
+        if (libres > 1) {
+          html += '<label class="mat-item mat-todas">' +
+            '<input type="checkbox" class="mat-todas-cb" data-anio="' + anio + '">' +
+            '<span>Seleccionar todas <span class="mat-sub" style="display:inline;">(' + libres + ')</span></span>' +
+            '</label>';
+        }
+        mats.forEach(function(m){
+          var fija = !!m.ya_inscripta;
+          html += '<label class="mat-item' + (fija ? ' mat-fija' : '') + '">' +
+            '<input type="checkbox" class="mat-cb" data-anio="' + anio + '" value="' + m.id + '"' +
+              (fija ? ' checked disabled' : '') + '>' +
+            '<span>' + escaparHtml(m.nombre) +
+              '<span class="mat-sub">' +
+                (fija ? 'Ya est\u00e1s inscripto/a' : escaparHtml(m.regimen_aprobacion || '')) +
+              '</span></span>' +
+            '</label>';
+        });
+        return html + '</div></div>';
+      }).join('');
+  }
+
+  function materiasElegidas(){
+    return [].slice.call(
+      document.querySelectorAll('#lista-materias input.mat-cb:checked:not(:disabled)')
+    ).map(function(x){ return parseInt(x.value, 10); });
+  }
+
   function recolectarFormulario(){
     var loc = $('f-localidad');
     return {
@@ -753,6 +840,7 @@ button{font-family:inherit; cursor:pointer;}
       fecha_nacimiento: $('f-fecha-nac').value,
       cuil:             $('f-cuil').value.trim(),
       anio_ingreso:     $('f-anio-ingreso').value.trim(),
+      materias:         materiasElegidas(),
  
       email:    $('f-email').value.trim(),
       celular:  $('f-celular').value.trim(),
@@ -791,6 +879,9 @@ button{font-family:inherit; cursor:pointer;}
     if (!payload.provincia)  faltantes.push('provincia');
     if (!payload.contacto_emergencia_nombre)   faltantes.push('contacto de emergencia');
     if (!payload.contacto_emergencia_telefono) faltantes.push('tel\u00e9fono de emergencia');
+    if (datosToken && datosToken.tipo === 'reinscripcion' && !payload.materias.length &&
+        document.querySelector('#lista-materias input.mat-cb:not(:disabled)'))
+      faltantes.push('al menos una materia para cursar');
  
     if (faltantes.length) {
       mostrarError('error-form', 'Falta completar: ' + faltantes.join(', ') + '.');
@@ -823,6 +914,9 @@ button{font-family:inherit; cursor:pointer;}
           '<strong>Alumno:</strong> ' + payload.apellido + ', ' + payload.nombre + '<br>' +
           '<strong>Documento:</strong> ' + payload.dni + '<br>' +
           '<strong>Carrera:</strong> ' + (datosToken ? datosToken.carrera : '') + '<br>' +
+          ((d.materias && d.materias.length)
+            ? '<strong>Materias elegidas:</strong> ' + d.materias.map(escaparHtml).join(', ') + '<br>'
+            : '') +
           '<strong>Estado:</strong> Pendiente de revisi\u00f3n' +
         '</div>';
  
@@ -869,6 +963,24 @@ button{font-family:inherit; cursor:pointer;}
     inpToken.focus();
   });
  
+  $('lista-materias').addEventListener('change', function(e){
+    var cb = e.target;
+    if (!cb.dataset || !cb.dataset.anio) return;
+    var grupo = this.querySelector('[data-mat-anio="' + cb.dataset.anio + '"]');
+    if (!grupo) return;
+    var cbs = [].slice.call(grupo.querySelectorAll('input.mat-cb:not(:disabled)'));
+    if (cb.classList.contains('mat-todas-cb')) {
+      cbs.forEach(function(x){ x.checked = cb.checked; });
+    }
+    var sel = grupo.querySelector('input.mat-todas-cb');
+    if (sel) {
+      var n = cbs.filter(function(x){ return x.checked; }).length;
+      sel.checked = cbs.length > 0 && n === cbs.length;
+      sel.indeterminate = n > 0 && n < cbs.length;
+    }
+    limpiarError('error-form');
+  });
+
   $('btn-enviar').addEventListener('click', enviarFormulario);
  
   $('btn-cancelar').addEventListener('click', function(){

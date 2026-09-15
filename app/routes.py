@@ -6924,6 +6924,31 @@ def api_inscripcion_estado():
         conn.close()
  
  
+def _materias_para_reinscripcion(cur, alumno_id, carrera_id, ciclo):
+    """
+    Materias que el alumno puede elegir en la reinscripción en línea:
+    cumplen correlativas y año habilitado, y todavía no las regularizó
+    ni aprobó. Las que ya tiene inscriptas en el ciclo se devuelven con
+    `ya_inscripta` para mostrarlas fijas. Ordenadas por año y orden.
+    """
+    lista = []
+    for m in _evaluar_materias_alumno(cur, alumno_id, carrera_id, ciclo):
+        if m['inscripta']:
+            ya_inscripta = True
+        elif m['puede_inscribirse'] and not m['regularizada'] and not m['aprobada']:
+            ya_inscripta = False
+        else:
+            continue
+        lista.append({
+            'id':                 m['id'],
+            'nombre':             m['nombre'],
+            'anio':               m['anio'],
+            'regimen_aprobacion': m['regimen_aprobacion'],
+            'ya_inscripta':       ya_inscripta,
+        })
+    return lista
+
+
 @auth.route('/api/inscripcion/validar', methods=['POST'])
 def api_inscripcion_validar():
     """
@@ -7042,6 +7067,7 @@ def api_inscripcion_validar():
             'contacto_emergencia_telefono': a[17],
             'plan_id':                      a[18],
         }
+        base['materias'] = _materias_para_reinscripcion(cur, a[0], t[5], t[4])
         return jsonify(base)
     finally:
         cur.close()
@@ -7130,6 +7156,9 @@ def api_inscripcion_guardar():
  
         token_id, tipo, _, _, ciclo, carrera_id, alumno_id = t
  
+        materias_elegidas = []   # ids, solo en reinscripción
+        nombres_materias  = []
+
         # ---------- Documento ----------
         if tipo == 'reinscripcion':
             # El documento no se edita en una reinscripción: sale del legajo.
@@ -7150,6 +7179,39 @@ def api_inscripcion_guardar():
             tipo_doc = al[0]
             documento = al[1]
             plan_id = al[2]
+
+            # ---------- Materias elegidas ----------
+            # Se recalculan acá: no se confía en la lista que mostró el navegador.
+            pedidas = data.get('materias') or []
+            if not isinstance(pedidas, list):
+                conn.rollback()
+                return jsonify({'error': 'La selección de materias no es válida.'}), 400
+            try:
+                pedidas = {int(x) for x in pedidas}
+            except (TypeError, ValueError):
+                conn.rollback()
+                return jsonify({'error': 'La selección de materias no es válida.'}), 400
+
+            opciones  = _materias_para_reinscripcion(cur, alumno_id, carrera_id, ciclo)
+            elegibles = {m['id'] for m in opciones if not m['ya_inscripta']}
+            if not opciones:
+                conn.rollback()
+                return jsonify({
+                    'error': 'No tenés materias habilitadas para inscribirte en línea. '
+                             'Acercate a preceptoría para revisar tu situación.'
+                }), 409
+            if elegibles and not pedidas:
+                conn.rollback()
+                return jsonify({'error': 'Elegí al menos una materia para cursar.'}), 400
+            if pedidas - elegibles:
+                conn.rollback()
+                return jsonify({
+                    'error': 'Alguna de las materias elegidas no está habilitada para vos. '
+                             'Recargá la página y volvé a elegir.'
+                }), 400
+
+            materias_elegidas = [m['id'] for m in opciones if m['id'] in pedidas]
+            nombres_materias  = [m['nombre'] for m in opciones if m['id'] in pedidas]
         else:
             tipo_doc = (data.get('tipo_documento') or 'DNI').upper()
             documento = limpiar_documento(data.get('dni') or '')
@@ -7304,6 +7366,12 @@ def api_inscripcion_guardar():
             carrera_id, plan_id, anio_ingreso
         ))
         preinscripcion_id = cur.fetchone()[0]
+
+        for materia_id in materias_elegidas:
+            cur.execute("""
+                INSERT INTO preinscripcion_materias (preinscripcion_id, materia_id)
+                VALUES (%s, %s)
+            """, (preinscripcion_id, materia_id))
  
         # El token se quema recién ahora, con los datos ya guardados.
         cur.execute("""
@@ -7317,6 +7385,7 @@ def api_inscripcion_guardar():
             'ok': True,
             'preinscripcion_id': preinscripcion_id,
             'tipo': tipo,
+            'materias': nombres_materias,
             'mensaje': 'Tu inscripción fue registrada y está pendiente de revisión.'
         })
  
