@@ -6622,7 +6622,7 @@ def api_tokens_listar():
     if estado in ('disponible', 'usado', 'anulado'):
         filtros.append("t.estado = %s")
         params.append(estado)
-    if tipo in ('ingresante', 'reinscripcion'):
+    if tipo in ('ingresante', 'reinscripcion', 'alta'):
         filtros.append("t.tipo = %s")
         params.append(tipo)
  
@@ -6669,10 +6669,13 @@ def api_tokens_listar():
     } for r in rows])
  
  
-@auth.route('/api/tokens/ingresante', methods=['POST'])
-@login_requerido(['coordinador', 'preceptora'])
-def api_tokens_ingresante():
-    """Genera un token suelto para un aspirante que todavía no está en el sistema."""
+def _generar_tokens_sin_alumno(tipo):
+    """
+    Genera tokens sueltos, sin alumno asociado, para quien todavía no
+    está en el sistema:
+      - ingresante: empieza la carrera este ciclo.
+      - alta: ya cursa la carrera pero no está cargado (carga inicial).
+    """
     data = request.get_json() or {}
     carrera_id = data.get('carrera_id')
     cantidad   = data.get('cantidad') or 1
@@ -6699,9 +6702,9 @@ def api_tokens_ingresante():
                 INSERT INTO tokens_inscripcion
                     (token, tipo, alumno_id, carrera_id, ciclo_lectivo,
                      vence_el, generado_por)
-                VALUES (%s, 'ingresante', NULL, %s, %s, %s, %s)
+                VALUES (%s, %s, NULL, %s, %s, %s, %s)
                 RETURNING id
-            """, (t, carrera_id, ciclo, vence, session['user_id']))
+            """, (t, tipo, carrera_id, ciclo, vence, session['user_id']))
             generados.append({'id': cur.fetchone()[0], 'token': t})
         conn.commit()
         return jsonify({
@@ -6718,6 +6721,24 @@ def api_tokens_ingresante():
         conn.close()
  
  
+@auth.route('/api/tokens/ingresante', methods=['POST'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_tokens_ingresante():
+    """Genera tokens para aspirantes que empiezan la carrera este ciclo."""
+    return _generar_tokens_sin_alumno('ingresante')
+
+
+@auth.route('/api/tokens/alta', methods=['POST'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_tokens_alta():
+    """
+    Genera tokens para alumnos que ya cursan la carrera pero todavía no
+    están en el sistema. Al aprobarse no se inscriben a 1° año: primero
+    se carga su historial académico.
+    """
+    return _generar_tokens_sin_alumno('alta')
+
+
 @auth.route('/api/tokens/reinscripcion', methods=['POST'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_tokens_reinscripcion():
@@ -6895,6 +6916,7 @@ def api_inscripcion_validar():
     Valida un token y devuelve qué pantalla corresponde.
  
     - ingresante    -> formulario en blanco
+    - alta          -> formulario en blanco + año de ingreso a la carrera
     - reinscripcion -> datos del alumno precargados, previa confirmación de DNI
     """
     data  = request.get_json(silent=True) or {}
@@ -6953,7 +6975,7 @@ def api_inscripcion_validar():
             'carrera_corta': t[7],
         }
  
-        if t[1] == 'ingresante':
+        if t[1] in ('ingresante', 'alta'):
             return jsonify(base)
  
         # --- Reinscripción: el DNI confirma que el token está en las manos correctas
@@ -7120,6 +7142,31 @@ def api_inscripcion_guardar():
                 conn.rollback()
                 return jsonify({'error': err}), 400
             plan_id = None
+
+            # Quien ya está cargado en la carrera se reinscribe, no se da de alta.
+            cur.execute("""
+                SELECT 1 FROM alumnos WHERE dni = %s AND carrera_id = %s
+            """, (documento, carrera_id))
+            if cur.fetchone():
+                conn.rollback()
+                return jsonify({
+                    'error': 'Ya hay un alumno registrado con este documento en la carrera. '
+                             'Acercate a preceptoría para que te den un token de reinscripción.'
+                }), 409
+
+        # ---------- Año de ingreso (solo altas) ----------
+        anio_ingreso = None
+        if tipo == 'alta':
+            try:
+                anio_ingreso = int(str(data.get('anio_ingreso') or '').strip())
+            except ValueError:
+                conn.rollback()
+                return jsonify({'error': 'Indicá el año en que empezaste la carrera.'}), 400
+            if anio_ingreso < 1990 or anio_ingreso >= ciclo:
+                conn.rollback()
+                return jsonify({
+                    'error': f'El año de ingreso tiene que estar entre 1990 y {ciclo - 1}.'
+                }), 400
  
         # ---------- Identidad ----------
         apellido = _limpiar_texto(data.get('apellido'), 100)
@@ -7221,14 +7268,14 @@ def api_inscripcion_guardar():
                 direccion, localidad_id, localidad, departamento, provincia,
                 contacto_emergencia_nombre, contacto_emergencia_vinculo,
                 contacto_emergencia_telefono,
-                carrera_id, plan_id, estado
+                carrera_id, plan_id, anio_ingreso, estado
             ) VALUES (
                 %s, %s,
                 %s, %s, %s, %s, %s, %s,
                 %s, %s, %s,
                 %s, %s, %s, %s, %s,
                 %s, %s, %s,
-                %s, %s, 'pendiente'
+                %s, %s, %s, 'pendiente'
             ) RETURNING id
         """, (
             token_id, ciclo,
@@ -7236,7 +7283,7 @@ def api_inscripcion_guardar():
             email, celular, telefono,
             direccion, localidad_id, localidad, departamento, provincia,
             ce_nombre, ce_vinculo, ce_telefono,
-            carrera_id, plan_id
+            carrera_id, plan_id, anio_ingreso
         ))
         preinscripcion_id = cur.fetchone()[0]
  

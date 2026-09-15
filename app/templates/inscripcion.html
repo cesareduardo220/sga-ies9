@@ -393,6 +393,16 @@ button{font-family:inherit; cursor:pointer;}
           </div>
         </div>
  
+        <!-- Cursada: solo alumnos que ya cursan (token de alta) -->
+        <div class="seccion oculto" id="seccion-ingreso">
+          <div class="seccion-titulo">Cursada</div>
+
+          <div class="campo requerido">
+            <label for="f-anio-ingreso">A&ntilde;o en que empezaste la carrera</label>
+            <div class="input-wrap"><input type="number" id="f-anio-ingreso" min="1990" step="1" inputmode="numeric" placeholder="2025"></div>
+          </div>
+        </div>
+
         <!-- Contacto -->
         <div class="seccion">
           <div class="seccion-titulo">Contacto</div>
@@ -713,11 +723,18 @@ button{font-family:inherit; cursor:pointer;}
       }
     } else {
       $('form-titulo').textContent = 'Complet\u00e1 tus datos';
-      $('form-sub').textContent =
-        'Carg\u00e1 tus datos para inscribirte en ' + d.carrera + '.';
+      $('form-sub').textContent = (d.tipo === 'alta')
+        ? 'Carg\u00e1 tus datos para registrarte como alumno de ' + d.carrera + '.'
+        : 'Carg\u00e1 tus datos para inscribirte en ' + d.carrera + '.';
       $('f-tipo-doc').disabled = false;
       $('f-dni').disabled      = false;
     }
+
+    // El año de ingreso solo se pide en un alta de alumno que ya cursa.
+    var esAlta = (d.tipo === 'alta');
+    $('seccion-ingreso').classList.toggle('oculto', !esAlta);
+    $('f-anio-ingreso').max = (d.ciclo_lectivo || new Date().getFullYear()) - 1;
+    if (!esAlta) $('f-anio-ingreso').value = '';
   }
  
   function recolectarFormulario(){
@@ -732,6 +749,7 @@ button{font-family:inherit; cursor:pointer;}
       nombre:           $('f-nombre').value.trim(),
       fecha_nacimiento: $('f-fecha-nac').value,
       cuil:             $('f-cuil').value.trim(),
+      anio_ingreso:     $('f-anio-ingreso').value.trim(),
  
       email:    $('f-email').value.trim(),
       celular:  $('f-celular').value.trim(),
@@ -761,6 +779,8 @@ button{font-family:inherit; cursor:pointer;}
     if (!payload.apellido)   faltantes.push('apellido');
     if (!payload.nombre)     faltantes.push('nombre');
     if (!payload.fecha_nacimiento) faltantes.push('fecha de nacimiento');
+    if (datosToken && datosToken.tipo === 'alta' && !payload.anio_ingreso)
+      faltantes.push('a\u00f1o de ingreso a la carrera');
     if (!payload.email)      faltantes.push('correo electr\u00f3nico');
     if (!payload.celular)    faltantes.push('celular');
     if (!payload.direccion)  faltantes.push('direcci\u00f3n');
