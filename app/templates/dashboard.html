@@ -364,6 +364,30 @@
         .prei-materia{ padding:7px 0; font-size:0.86rem; border-bottom:1px solid var(--sga-crema-2); }
         .prei-materia:last-child{ border-bottom:none; }
 
+        /* ── TOKENS ── */
+        .tok-codigo{ font-family:ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+                     font-weight:700; letter-spacing:0.06em; font-size:0.95rem; white-space:nowrap; }
+        .tok-card{ background:#fff; border:1px solid var(--sga-borde); border-radius:14px; padding:18px 20px;
+                   box-shadow:var(--sga-sombra); margin-bottom:18px; }
+        .tok-card h4{ margin:0 0 12px; font-size:0.74rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sga-verde-medio); }
+        .tok-fila{ display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; }
+        .tok-fila .campo-edit{ margin-bottom:0; }
+        .tok-accion{ padding:5px 10px !important; font-size:0.78rem !important; white-space:nowrap; }
+        .tok-acciones{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+        .tok-estado{ padding:3px 10px; border-radius:20px; font-size:0.72rem; font-weight:700; display:inline-block; white-space:nowrap; }
+        .tok-estado.disponible{ background:#DCF5E5; color:var(--sga-exito); }
+        .tok-estado.vencido{ background:#F1EFE8; color:#6B7280; }
+        .tok-estado.usado{ background:#E5F0F8; color:#2D6CA8; }
+        .tok-estado.anulado{ background:#FBEAEA; color:var(--sga-error); }
+        .tok-lista-alumnos{ position:absolute; left:0; right:0; top:100%; z-index:50; background:#fff;
+                            border:1px solid var(--sga-borde); border-radius:10px; box-shadow:var(--sga-sombra);
+                            max-height:260px; overflow-y:auto; margin-top:4px; }
+        .tok-lista-alumnos div{ padding:9px 12px; cursor:pointer; font-size:0.86rem; border-bottom:1px solid var(--sga-crema-2); }
+        .tok-lista-alumnos div:hover{ background:var(--sga-crema-2); }
+        .tok-elegido{ display:inline-flex; align-items:center; gap:8px; background:#DCF5E5; color:var(--sga-exito);
+                      border-radius:20px; padding:6px 12px; font-size:0.85rem; font-weight:600; }
+        .tok-elegido button{ border:none; background:none; color:inherit; cursor:pointer; font-size:1rem; line-height:1; }
+
         /* ── MESAS DE EXAMEN ── */
         .mesas-stats-fila{ display:flex; gap:14px; margin-bottom:22px; flex-wrap:wrap; }
         .mesas-stat-card{
@@ -891,6 +915,9 @@
 
         /* ── Aviso solo lectura ── */
         #aviso-solo-lectura-mobile { display: block !important; }
+
+        /* ── Tokens: sin generar, anular ni configurar ── */
+        .tok-solo-pc { display: none !important; }
 
         /* ── Preinscripciones: sin aprobar ni rechazar ── */
         #prei-acciones { display: none !important; }
@@ -1849,6 +1876,134 @@
         <div class="modal-card-footer">
             <button class="modal-btn-cancelar" onclick="cerrarModal('modal-prei-rechazo')">Cancelar</button>
             <button class="modal-btn-confirmar" id="modal-prei-rechazo-btn" onclick="preiConfirmarRechazo()">Rechazar preinscripción</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOKENS DE INSCRIPCIÓN -->
+<div class="seccion" id="sec-tokens">
+    <div class="seccion-header">
+        <div>
+            <h2>Tokens de inscripción</h2>
+            <div class="sub">Códigos que se entregan en preceptoría para que el alumno complete la inscripción en línea</div>
+        </div>
+    </div>
+
+    <!-- Estado de la inscripción en línea -->
+    <div id="tok-ventana" class="prei-aviso" style="display:none;"></div>
+
+    <!-- Generar -->
+    <div class="tok-card tok-solo-pc">
+        <h4>Generar tokens</h4>
+        <div class="tok-fila">
+            <div class="campo-edit" style="min-width:240px;">
+                <label>Tipo</label>
+                <select id="tok-tipo" class="input-edit-ficha" onchange="tokCambiarTipo()">
+                    <option value="ingresante">Ingresante (empieza la carrera)</option>
+                    <option value="alta">Alta de alumno que ya cursa</option>
+                    <option value="reinscripcion">Reinscripción (alumno ya cargado)</option>
+                </select>
+            </div>
+            <div class="campo-edit" id="tok-cantidad-wrap" style="width:120px;">
+                <label>Cantidad</label>
+                <input type="number" id="tok-cantidad" class="input-edit-ficha" min="1" max="50" value="1">
+            </div>
+            <div id="tok-alcance-wrap" style="display:none; padding-bottom:8px;">
+                <label style="margin-right:14px; font-size:0.86rem; cursor:pointer;">
+                    <input type="radio" name="tok-alcance" value="uno" checked onchange="tokCambiarAlcance()"> Un alumno
+                </label>
+                <label style="font-size:0.86rem; cursor:pointer;">
+                    <input type="radio" name="tok-alcance" value="todos" onchange="tokCambiarAlcance()"> Todos los que no tengan un token disponible
+                </label>
+            </div>
+            <button class="btn-nuevo" id="tok-btn-generar" onclick="tokGenerar()">🔑 Generar</button>
+        </div>
+        <div id="tok-alumno-wrap" style="display:none; margin-top:14px; max-width:520px;">
+            <div id="tok-alumno-buscador" style="position:relative;">
+                <input type="text" id="tok-alumno-buscar" class="input-edit-ficha" autocomplete="off"
+                       placeholder="Buscar alumno por apellido, nombre o DNI..." oninput="tokBuscarAlumno()">
+                <div id="tok-alumno-lista" class="tok-lista-alumnos" style="display:none;"></div>
+            </div>
+            <div id="tok-alumno-elegido" style="display:none;"></div>
+        </div>
+        <div id="tok-gen-ayuda" style="font-size:0.8rem; color:var(--sga-texto-gris); margin-top:12px; line-height:1.5;"></div>
+        <div id="tok-gen-mensaje" style="display:none"></div>
+    </div>
+
+    <!-- Resultado de la última generación -->
+    <div class="tok-card" id="tok-resultado" style="display:none; border-color:#B7E4C7;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+            <h4 style="margin:0;" id="tok-resultado-titulo">Tokens generados</h4>
+            <div style="display:flex; gap:8px;">
+                <button class="btn-secundario tok-accion" onclick="tokCopiarGenerados(this)">📋 Copiar todos</button>
+                <button class="btn-secundario tok-accion" onclick="document.getElementById('tok-resultado').style.display='none'">Cerrar</button>
+            </div>
+        </div>
+        <div id="tok-resultado-tabla"></div>
+    </div>
+
+    <!-- Lista -->
+    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+        <button class="btn-secundario tok-filtro" data-estado="disponible" onclick="tokCambiarEstado('disponible')" style="padding:7px 14px; font-size:0.85rem;">Disponibles</button>
+        <button class="btn-secundario tok-filtro" data-estado="usado" onclick="tokCambiarEstado('usado')" style="padding:7px 14px; font-size:0.85rem;">Usados</button>
+        <button class="btn-secundario tok-filtro" data-estado="anulado" onclick="tokCambiarEstado('anulado')" style="padding:7px 14px; font-size:0.85rem;">Anulados</button>
+        <button class="btn-secundario tok-filtro" data-estado="" onclick="tokCambiarEstado('')" style="padding:7px 14px; font-size:0.85rem;">Todos</button>
+        <select id="tok-filtro-tipo" class="input-edit-ficha" style="width:auto; margin-left:auto;" onchange="tokRenderLista()">
+            <option value="">Todos los tipos</option>
+            <option value="ingresante">Ingresantes</option>
+            <option value="alta">Altas</option>
+            <option value="reinscripcion">Reinscripciones</option>
+        </select>
+    </div>
+    <div class="barra-filtros" style="margin-bottom:12px;">
+        <div style="position:relative; flex:1;">
+            <input type="text" id="tok-buscar" autocomplete="off"
+                   placeholder="Buscar por token, apellido, nombre o DNI..." oninput="tokRenderLista()">
+        </div>
+    </div>
+    <div class="tabla-card">
+        <div id="tok-cargando" class="cargando" style="display:none">Cargando tokens...</div>
+        <div id="tok-vacio" class="empty-state" style="display:none; padding:40px;"></div>
+        <div id="tok-tabla-wrap" style="display:none; overflow-x:auto;"></div>
+    </div>
+</div>
+
+<!-- Modal: configurar la inscripción en línea (coordinador) -->
+<div id="modal-tok-ventana" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:520px;">
+        <div class="modal-card-header"><h3>Inscripción en línea</h3></div>
+        <div class="modal-card-body">
+            <label style="display:flex; align-items:center; gap:10px; font-weight:700; margin-bottom:14px; cursor:pointer;">
+                <input type="checkbox" id="tok-v-habilitada" style="width:18px; height:18px;">
+                Habilitar el formulario público de inscripción
+            </label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div class="campo-edit"><label>Desde (opcional)</label>
+                    <input type="date" id="tok-v-inicio" class="input-edit-ficha"></div>
+                <div class="campo-edit"><label>Hasta (opcional)</label>
+                    <input type="date" id="tok-v-fin" class="input-edit-ficha"></div>
+            </div>
+            <div class="campo-edit"><label>Días de validez de los tokens nuevos</label>
+                <input type="number" id="tok-v-vigencia" class="input-edit-ficha" min="1" max="90" style="max-width:120px;"></div>
+            <p style="font-size:0.8rem;">Si dejás las fechas vacías, el formulario queda abierto mientras esté habilitado.</p>
+            <div id="tok-v-error" style="display:none; color:var(--sga-error); font-size:0.84rem;"></div>
+        </div>
+        <div class="modal-card-footer">
+            <button class="modal-btn-cancelar" onclick="cerrarModal('modal-tok-ventana')">Cancelar</button>
+            <button class="modal-btn-confirmar" style="background:var(--sga-verde-medio);" onclick="tokGuardarVentana()">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: confirmar una acción de tokens -->
+<div id="modal-tok-confirmar" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:480px;">
+        <div class="modal-card-header"><h3 id="tok-conf-titulo"></h3></div>
+        <div class="modal-card-body"><p id="tok-conf-texto"></p>
+            <div id="tok-conf-error" style="display:none; color:var(--sga-error); font-size:0.84rem;"></div></div>
+        <div class="modal-card-footer">
+            <button class="modal-btn-cancelar" onclick="cerrarModal('modal-tok-confirmar')">Cancelar</button>
+            <button class="modal-btn-confirmar" id="tok-conf-btn" onclick="tokConfirmar()"></button>
         </div>
     </div>
 </div>
@@ -3488,6 +3643,7 @@
                 { id: 'alumnos',      icon: '👥', label: 'Alumnos' },
                 { id: 'inscripciones',icon: '📝', label: 'Inscripciones' },
                 { id: 'preinscripciones', icon: '📨', label: 'Preinscripciones' },
+                { id: 'tokens',           icon: '🔑', label: 'Tokens' },
                 { id: 'materias',     icon: '📚', label: 'Plan de Estudios' },
                 { id: 'notas',        icon: '📋', label: 'Notas' },
                 { id: 'mesas',        icon: '🎓', label: 'Mesas de Examen' },
@@ -3506,6 +3662,7 @@
                 { id: 'alumnos',      icon: '👥', label: 'Alumnos' },
                 { id: 'inscripciones',icon: '📝', label: 'Inscripciones' },
                 { id: 'preinscripciones', icon: '📨', label: 'Preinscripciones' },
+                { id: 'tokens',           icon: '🔑', label: 'Tokens' },
                 { id: 'materias',     icon: '📚', label: 'Plan de Estudios' },
                 { id: 'notas',        icon: '📋', label: 'Notas' },
                 { id: 'mesas',        icon: '🎓', label: 'Mesas de Examen' },
@@ -3527,6 +3684,7 @@
         'config':      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
         'alumnos':     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
         'inscripciones': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        'tokens': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6"/><path d="M15.5 7.5l3 3L22 7l-3-3"/></svg>',
         'preinscripciones': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
         'materias':    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
         'notas':       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>',
@@ -3621,8 +3779,8 @@
 
     // ── SECCIONES MOBILE POR ROL ────────────────────────────
     const SECCIONES_MOBILE = {
-        coordinador: ['alumnos','notas','mesas','materias','reportes','inscripciones','preinscripciones','usuarios','profesores'],
-        preceptora:  ['alumnos','notas','mesas','materias','reportes','inscripciones','preinscripciones','profesores'],
+        coordinador: ['alumnos','notas','mesas','materias','reportes','inscripciones','preinscripciones','tokens','usuarios','profesores'],
+        preceptora:  ['alumnos','notas','mesas','materias','reportes','inscripciones','preinscripciones','tokens','profesores'],
         admin:       ['carreras','coordinadores','config'],
         sys:         ['administradores'],
     };
@@ -3866,6 +4024,7 @@
         if (id === 'alumnos') cargarAlumnos();
         if (id === 'inscripciones') cargarInscripciones();
         if (id === 'preinscripciones') cargarPreinscripciones();
+        if (id === 'tokens') cargarTokens();
         if (id === 'notas') cargarNotasMaterias();
         if (id === 'profesores') cargarProfesores();
         if (id === 'usuarios') cargarPreceptoras();
@@ -7437,6 +7596,397 @@
         cerrarModal('modal-prei-rechazo');
         _preiAbrirSinPushState(preiActual.id, { texto: data.mensaje, tipo: 'info' });
     }
+
+    // ══════════════════════════════════════════════════════
+    // TOKENS DE INSCRIPCIÓN
+    // ══════════════════════════════════════════════════════
+    let tokLista = [];
+    let tokGenerados = [];
+    let tokEstado = 'disponible';
+    let tokAlumnos = null;
+    let tokAlumnoElegido = null;
+    let tokVentana = null;
+    let tokAccionPendiente = null;
+
+    const TOK_TIPOS = { ingresante: 'Ingresante', alta: 'Alta (ya cursa)', reinscripcion: 'Reinscripción' };
+
+    function tokFecha(iso) {
+        if (!iso) return '';
+        const p = String(iso).slice(0, 10).split('-');
+        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso;
+    }
+
+    function cargarTokens() {
+        tokEstado = 'disponible';
+        document.getElementById('tok-buscar').value = '';
+        document.getElementById('tok-filtro-tipo').value = '';
+        document.getElementById('tok-resultado').style.display = 'none';
+        document.getElementById('tok-gen-mensaje').style.display = 'none';
+        tokLimpiarAlumno();
+        tokCambiarTipo();
+        tokCargarVentana();
+        tokCargarLista();
+    }
+
+    // ── Estado de la inscripción en línea ──
+    async function tokCargarVentana() {
+        const caja = document.getElementById('tok-ventana');
+        let v;
+        try { v = await (await fetch('/api/autoinscripcion/ventana')).json(); }
+        catch (e) { return; }
+        if (v.error) return;
+        tokVentana = v;
+        const rango = (v.fecha_inicio || v.fecha_fin)
+            ? ` · ${v.fecha_inicio ? 'desde el ' + tokFecha(v.fecha_inicio) : ''}${v.fecha_inicio && v.fecha_fin ? ' ' : ''}${v.fecha_fin ? 'hasta el ' + tokFecha(v.fecha_fin) : ''}`
+            : '';
+        caja.style.cssText = v.abierta
+            ? 'display:flex; background:#E6F9EE; border:1.5px solid #B7E4C7; color:#1a6e3c;'
+            : 'display:flex; background:#F7F5F0; border:1.5px solid var(--sga-borde); color:var(--sga-texto-gris);';
+        caja.style.justifyContent = 'space-between';
+        caja.style.alignItems = 'center';
+        caja.style.gap = '12px';
+        caja.style.flexWrap = 'wrap';
+        caja.innerHTML = `<div>
+                <strong>${v.abierta ? '🟢 Inscripción en línea abierta' : '⚪ Inscripción en línea cerrada'}</strong>${rango}<br>
+                <span style="font-size:0.82rem;">${v.abierta ? 'Los alumnos pueden usar sus tokens ahora.' : preiEsc(v.motivo || '')}
+                · Los tokens nuevos valen ${v.vigencia_dias} días.</span>
+            </div>
+            ${v.puede_editar ? '<button class="btn-secundario tok-accion tok-solo-pc" onclick="tokAbrirVentana()">⚙ Configurar</button>' : ''}`;
+    }
+
+    function tokAbrirVentana() {
+        if (!tokVentana) return;
+        document.getElementById('tok-v-habilitada').checked = !!tokVentana.habilitada;
+        document.getElementById('tok-v-inicio').value = tokVentana.fecha_inicio || '';
+        document.getElementById('tok-v-fin').value = tokVentana.fecha_fin || '';
+        document.getElementById('tok-v-vigencia').value = tokVentana.vigencia_dias || 15;
+        document.getElementById('tok-v-error').style.display = 'none';
+        abrirModal('modal-tok-ventana');
+    }
+
+    async function tokGuardarVentana() {
+        const err = document.getElementById('tok-v-error');
+        err.style.display = 'none';
+        const cuerpo = {
+            habilitada:    document.getElementById('tok-v-habilitada').checked,
+            fecha_inicio:  document.getElementById('tok-v-inicio').value,
+            fecha_fin:     document.getElementById('tok-v-fin').value,
+            vigencia_dias: document.getElementById('tok-v-vigencia').value,
+        };
+        let d;
+        try {
+            d = await (await fetch('/api/autoinscripcion/ventana', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo)
+            })).json();
+        } catch (e) { d = { error: 'No se pudo conectar con el servidor.' }; }
+        if (d.error) { err.textContent = d.error; err.style.display = 'block'; return; }
+        cerrarModal('modal-tok-ventana');
+        tokCargarVentana();
+    }
+
+    // ── Generar ──
+    function tokCambiarTipo() {
+        const tipo = document.getElementById('tok-tipo').value;
+        const reinsc = tipo === 'reinscripcion';
+        document.getElementById('tok-cantidad-wrap').style.display = reinsc ? 'none' : '';
+        document.getElementById('tok-alcance-wrap').style.display = reinsc ? '' : 'none';
+        tokCambiarAlcance();
+        const ayudas = {
+            ingresante:    'Para quien empieza la carrera. Carga sus datos en un formulario en blanco y, al aprobarse, queda inscripto a todas las materias de 1° año.',
+            alta:          'Para quien ya cursa la carrera pero todavía no está en el sistema. Carga sus datos y su año de ingreso; al aprobarse no se lo inscribe a materias hasta cargar su historial.',
+            reinscripcion: 'Para alumnos ya cargados. Confirma sus datos con el DNI y elige las materias que puede cursar según sus correlativas.',
+        };
+        document.getElementById('tok-gen-ayuda').textContent = ayudas[tipo] || '';
+    }
+
+    function tokCambiarAlcance() {
+        const reinsc = document.getElementById('tok-tipo').value === 'reinscripcion';
+        const uno = document.querySelector('input[name="tok-alcance"]:checked').value === 'uno';
+        document.getElementById('tok-alumno-wrap').style.display = (reinsc && uno) ? 'block' : 'none';
+    }
+
+    async function tokBuscarAlumno() {
+        const q = document.getElementById('tok-alumno-buscar').value.trim().toLowerCase();
+        const lista = document.getElementById('tok-alumno-lista');
+        if (q.length < 2) { lista.style.display = 'none'; return; }
+        if (!tokAlumnos) {
+            try { tokAlumnos = await (await fetch('/api/alumnos')).json(); }
+            catch (e) { tokAlumnos = []; }
+            if (!Array.isArray(tokAlumnos)) tokAlumnos = [];
+        }
+        const qn = q.replace(/\./g, '');
+        const res = tokAlumnos.filter(a => a.activo && (
+            `${a.apellido} ${a.nombre}`.toLowerCase().includes(q) ||
+            `${a.nombre} ${a.apellido}`.toLowerCase().includes(q) ||
+            String(a.dni_raw || '').includes(qn))).slice(0, 8);
+        lista.innerHTML = res.length
+            ? res.map(a => `<div onclick="tokElegirAlumno(${a.id})"><strong>${preiEsc(a.apellido)}, ${preiEsc(a.nombre)}</strong>
+                   <span style="color:var(--sga-texto-gris);"> · ${preiEsc(a.dni)}</span></div>`).join('')
+            : '<div style="cursor:default; color:var(--sga-texto-gris);">No hay alumnos activos con ese criterio.</div>';
+        lista.style.display = 'block';
+    }
+
+    function tokElegirAlumno(id) {
+        tokAlumnoElegido = (tokAlumnos || []).find(a => a.id === id) || null;
+        if (!tokAlumnoElegido) return;
+        document.getElementById('tok-alumno-lista').style.display = 'none';
+        document.getElementById('tok-alumno-buscador').style.display = 'none';
+        const caja = document.getElementById('tok-alumno-elegido');
+        caja.innerHTML = `<span class="tok-elegido">${preiEsc(tokAlumnoElegido.apellido)}, ${preiEsc(tokAlumnoElegido.nombre)}
+            · ${preiEsc(tokAlumnoElegido.dni)} <button onclick="tokLimpiarAlumno()" title="Cambiar alumno">✕</button></span>`;
+        caja.style.display = 'block';
+    }
+
+    function tokLimpiarAlumno() {
+        tokAlumnoElegido = null;
+        document.getElementById('tok-alumno-buscar').value = '';
+        document.getElementById('tok-alumno-lista').style.display = 'none';
+        document.getElementById('tok-alumno-buscador').style.display = 'block';
+        document.getElementById('tok-alumno-elegido').style.display = 'none';
+    }
+
+    function tokGenerar() {
+        const tipo = document.getElementById('tok-tipo').value;
+        document.getElementById('tok-gen-mensaje').style.display = 'none';
+        if (tipo === 'reinscripcion') {
+            const uno = document.querySelector('input[name="tok-alcance"]:checked').value === 'uno';
+            if (uno) {
+                if (!tokAlumnoElegido) {
+                    mostrarMensaje('tok-gen-mensaje', 'Elegí un alumno para generarle el token.', 'alerta');
+                    return;
+                }
+                tokEjecutarGeneracion('/api/tokens/reinscripcion', { alumno_ids: [tokAlumnoElegido.id] },
+                    'Ese alumno ya tiene un token disponible. Buscalo en la lista de abajo para copiarlo o compartirlo.');
+            } else {
+                tokPedirConfirmacion('Generar tokens de reinscripción',
+                    'Se va a generar un token para cada alumno activo de la carrera que no tenga uno disponible. ¿Continuar?',
+                    'Generar', () => tokEjecutarGeneracion('/api/tokens/reinscripcion', {}));
+            }
+            return;
+        }
+        const cantidad = parseInt(document.getElementById('tok-cantidad').value, 10);
+        if (!(cantidad >= 1 && cantidad <= 50)) {
+            mostrarMensaje('tok-gen-mensaje', 'La cantidad tiene que estar entre 1 y 50.', 'alerta');
+            return;
+        }
+        tokEjecutarGeneracion('/api/tokens/' + tipo, { cantidad });
+    }
+
+    async function tokEjecutarGeneracion(url, cuerpo, mensajeSinNuevos) {
+        const btn = document.getElementById('tok-btn-generar');
+        btn.disabled = true;
+        const tipo = url.endsWith('reinscripcion') ? 'reinscripcion' : url.split('/').pop();
+        let d;
+        try {
+            d = await (await fetch(url, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo)
+            })).json();
+        } catch (e) { d = { error: 'No se pudo conectar con el servidor.' }; }
+        btn.disabled = false;
+        if (d.error) { mostrarMensaje('tok-gen-mensaje', d.error, 'error', 6000); return; }
+        if (!d.tokens || !d.tokens.length) {
+            mostrarMensaje('tok-gen-mensaje', mensajeSinNuevos || d.mensaje || 'No se generó ningún token.', 'info', 8000);
+            return;
+        }
+        tokGenerados = d.tokens.map(t => Object.assign({ tipo, vence_el: d.vence_el, estado: 'disponible' }, t));
+        document.getElementById('tok-resultado-titulo').textContent =
+            `${tokGenerados.length} ${tokGenerados.length === 1 ? 'token generado' : 'tokens generados'} · vencen el ${tokFecha(d.vence_el)}`;
+        document.getElementById('tok-resultado-tabla').innerHTML = tokTabla(tokGenerados, 'gen', false);
+        document.getElementById('tok-resultado').style.display = 'block';
+        tokLimpiarAlumno();
+        tokCargarLista();
+    }
+
+    // ── Compartir ──
+    function tokNumeroWhatsApp(cel) {
+        let d = String(cel || '').replace(/\D/g, '');
+        if (d.startsWith('00')) d = d.slice(2);
+        if (d.startsWith('549')) return d.length >= 12 ? d : '';
+        if (d.startsWith('54'))  return d.length >= 11 ? '549' + d.slice(2) : '';
+        if (d.startsWith('0'))   d = d.slice(1);
+        return d.length === 10 ? '549' + d : '';
+    }
+
+    function tokMensaje(t) {
+        const nombre = t.alumno ? (t.alumno.split(',')[1] || '').trim().split(' ')[0] : '';
+        const que = { ingresante: 'tu inscripción', alta: 'tu registro como alumno', reinscripcion: 'tu reinscripción' }[t.tipo] || 'tu inscripción';
+        const inst = (tokVentana && tokVentana.instituto) ? ` en ${tokVentana.instituto}` : '';
+        return `¡Hola${nombre ? ' ' + nombre : ''}! Este es tu código para completar ${que} en línea${inst}:\n\n` +
+               `*${t.token}*\n\nIngresá en ${location.origin}/inscripcion\n` +
+               `El código vence el ${tokFecha(t.vence_el)} y es personal: no lo compartas.`;
+    }
+
+    function tokWhatsApp(origen, i) {
+        const t = (origen === 'gen' ? tokGenerados : tokLista)[i];
+        if (!t) return;
+        const num = tokNumeroWhatsApp(t.celular);
+        window.open(`https://wa.me/${num}?text=${encodeURIComponent(tokMensaje(t))}`, '_blank', 'noopener');
+    }
+
+    async function tokCopiar(texto, btn) {
+        try { await navigator.clipboard.writeText(texto); }
+        catch (e) {
+            const ta = document.createElement('textarea');
+            ta.value = texto; document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); ta.remove();
+        }
+        if (btn) {
+            const antes = btn.textContent;
+            btn.textContent = '✓ Copiado';
+            setTimeout(() => { btn.textContent = antes; }, 1500);
+        }
+    }
+
+    function tokCopiarGenerados(btn) {
+        tokCopiar(tokGenerados.map(t => t.alumno ? `${t.token} — ${t.alumno}` : t.token).join('\n'), btn);
+    }
+
+    // ── Lista ──
+    function tokCambiarEstado(estado) {
+        tokEstado = estado;
+        tokCargarLista();
+    }
+
+    async function tokCargarLista() {
+        const cargando = document.getElementById('tok-cargando');
+        document.querySelectorAll('.tok-filtro').forEach(b => {
+            const activo = b.dataset.estado === tokEstado;
+            b.style.background  = activo ? 'var(--sga-verde-medio)' : '';
+            b.style.color       = activo ? '#fff' : '';
+            b.style.borderColor = activo ? 'var(--sga-verde-medio)' : '';
+        });
+        cargando.style.display = 'block';
+        document.getElementById('tok-vacio').style.display = 'none';
+        document.getElementById('tok-tabla-wrap').style.display = 'none';
+        let d;
+        try { d = await (await fetch('/api/tokens' + (tokEstado ? '?estado=' + tokEstado : ''))).json(); }
+        catch (e) { d = { error: 'No se pudo conectar con el servidor.' }; }
+        cargando.style.display = 'none';
+        tokLista = Array.isArray(d) ? d : [];
+        if (d.error) {
+            const v = document.getElementById('tok-vacio');
+            v.innerHTML = '<div class="empty-icon">⚠️</div>' + preiEsc(d.error);
+            v.style.display = 'block';
+            return;
+        }
+        tokRenderLista();
+    }
+
+    function tokRenderLista() {
+        const tipo = document.getElementById('tok-filtro-tipo').value;
+        const q = document.getElementById('tok-buscar').value.trim().toLowerCase();
+        const qn = q.replace(/[.\-\s]/g, '');
+        const indices = [];
+        tokLista.forEach((t, i) => {
+            if (tipo && t.tipo !== tipo) return;
+            if (q) {
+                const texto = `${t.token} ${t.alumno || ''}`.toLowerCase();
+                const tokenPlano = t.token.replace(/-/g, '').toLowerCase();
+                if (!texto.includes(q) && !(qn && (tokenPlano.includes(qn) || String(t.dni || '').includes(qn)))) return;
+            }
+            indices.push(i);
+        });
+        const vacio = document.getElementById('tok-vacio');
+        const wrap  = document.getElementById('tok-tabla-wrap');
+        if (!indices.length) {
+            const textos = { disponible: 'No hay tokens disponibles.', usado: 'Todavía no se usó ningún token.', anulado: 'No hay tokens anulados.', '': 'Todavía no se generaron tokens en este ciclo.' };
+            vacio.innerHTML = `<div class="empty-icon">🔑</div>${(q || tipo) ? 'No hay tokens con ese criterio.' : textos[tokEstado]}`;
+            vacio.style.display = 'block';
+            wrap.style.display = 'none';
+            return;
+        }
+        vacio.style.display = 'none';
+        wrap.innerHTML = tokTabla(indices.map(i => Object.assign({ _i: i }, tokLista[i])), 'lista', true);
+        wrap.style.display = 'block';
+    }
+
+    function tokTabla(filas, origen, conAnular) {
+        return `<table class="tabla-alumnos">
+            <thead><tr><th>Token</th><th>Tipo</th><th>Alumno</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
+            <tbody>${filas.map((t, pos) => {
+                const i = origen === 'gen' ? pos : t._i;
+                const vencido = t.vencido;
+                let estado;
+                if (t.estado === 'usado') {
+                    estado = `<span class="tok-estado usado">Usado</span>` + (t.preinscripcion_id
+                        ? ` <a href="#" onclick="tokIrAPreinscripcion(${t.preinscripcion_id}); return false;" style="font-size:0.78rem;">n° ${t.preinscripcion_id}</a>` : '');
+                } else if (t.estado === 'anulado') {
+                    estado = '<span class="tok-estado anulado">Anulado</span>';
+                } else {
+                    estado = vencido ? '<span class="tok-estado vencido">Vencido</span>' : '<span class="tok-estado disponible">Disponible</span>';
+                }
+                const vivo = t.estado === 'disponible' && !vencido;
+                const acciones = [
+                    `<button class="btn-secundario tok-accion" onclick="tokCopiar('${t.token}', this)">📋 Copiar</button>`,
+                    vivo ? `<button class="btn-secundario tok-accion" onclick="tokWhatsApp('${origen}', ${i})">💬 WhatsApp</button>` : '',
+                    (conAnular && t.estado === 'disponible') ? `<button class="btn-secundario tok-accion tok-solo-pc" style="color:var(--sga-error);" onclick="tokPedirAnular(${i})">Anular</button>` : '',
+                ].join('');
+                return `<tr>
+                    <td data-label="Token"><span class="tok-codigo">${t.token}</span></td>
+                    <td data-label="Tipo"><span class="prei-tipo ${t.tipo}">${TOK_TIPOS[t.tipo] || t.tipo}</span></td>
+                    <td data-label="Alumno">${t.alumno ? preiEsc(t.alumno) : '<span style="color:var(--sga-texto-gris);">—</span>'}</td>
+                    <td data-label="Estado">${estado}</td>
+                    <td data-label="Vence">${tokFecha(t.vence_el)}</td>
+                    <td><div class="tok-acciones">${acciones}</div></td>
+                </tr>`;
+            }).join('')}</tbody></table>`;
+    }
+
+    function tokIrAPreinscripcion(id) {
+        navegarA('preinscripciones', '');
+        preiAbrir(id);
+    }
+
+    // ── Anular y confirmaciones ──
+    function tokPedirAnular(i) {
+        const t = tokLista[i];
+        if (!t) return;
+        tokPedirConfirmacion('Anular token',
+            `El token ${t.token}${t.alumno ? ' de ' + t.alumno : ''} va a dejar de funcionar. Esta acción no se puede deshacer.`,
+            'Anular', async () => {
+                const d = await (await fetch(`/api/tokens/${t.id}/anular`, { method: 'POST' })).json();
+                if (d.error) throw new Error(d.error);
+                tokCargarLista();
+            });
+    }
+
+    function tokPedirConfirmacion(titulo, texto, boton, accion) {
+        tokAccionPendiente = accion;
+        document.getElementById('tok-conf-titulo').textContent = titulo;
+        document.getElementById('tok-conf-texto').textContent = texto;
+        const btn = document.getElementById('tok-conf-btn');
+        btn.textContent = boton;
+        btn.disabled = false;
+        btn.style.background = boton === 'Anular' ? '' : 'var(--sga-verde-medio)';
+        document.getElementById('tok-conf-error').style.display = 'none';
+        abrirModal('modal-tok-confirmar');
+    }
+
+    async function tokConfirmar() {
+        const accion = tokAccionPendiente;
+        if (!accion) return;
+        const btn = document.getElementById('tok-conf-btn');
+        btn.disabled = true;
+        try {
+            cerrarModal('modal-tok-confirmar');
+            await accion();
+        } catch (e) {
+            abrirModal('modal-tok-confirmar');
+            const err = document.getElementById('tok-conf-error');
+            err.textContent = e.message || 'No se pudo completar la acción.';
+            err.style.display = 'block';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    // Cerrar la lista de alumnos al hacer clic afuera
+    document.addEventListener('click', e => {
+        const lista = document.getElementById('tok-alumno-lista');
+        if (lista && lista.style.display === 'block' && !e.target.closest('#tok-alumno-buscador')) {
+            lista.style.display = 'none';
+        }
+    });
 
     // ══ AUTO-DISMISS MENSAJES ══
     const _msgTimers = {};
