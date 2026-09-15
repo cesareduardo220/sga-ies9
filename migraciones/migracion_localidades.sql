@@ -18,3 +18,8 @@ ALTER TABLE alumnos ALTER COLUMN localidad TYPE VARCHAR(150);
 
 COMMENT ON COLUMN alumnos.localidad_id IS 'FK a localidades. NULL si se cargó texto libre.';
 COMMENT ON COLUMN alumnos.departamento IS 'Departamento de la localidad (se completa al elegir de la lista).';
+
+-- Georef expone algunas cabeceras de departamento dos veces (como localidad
+-- y como municipio). Este índice impide que vuelvan a entrar duplicadas.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_localidades_unica
+    ON localidades (lower(nombre), coalesce(departamento,''), provincia);

@@ -6891,7 +6891,7 @@ def api_stats_admin():
 # ══════════════════════════════════════════════════════════
 
 @auth.route('/api/localidades', methods=['GET'])
-@login_requerido(['coordinador', 'preceptora'])
+# Público: lo consume también el formulario de inscripción. Son datos abiertos.
 def api_localidades_buscar():
     """Busca localidades por nombre. Filtra por provincia si se indica."""
     q         = (request.args.get('q') or '').strip()

@@ -137,6 +137,60 @@ button{font-family:inherit; cursor:pointer;}
 .ficha-dato{ font-size:0.85rem; color:var(--texto-gris); line-height:1.7; }
 .ficha-dato strong{ color:var(--texto-oscuro); font-weight:600; }
  
+/* ---------- Formulario ---------- */
+.form-wrap.ancho{ max-width:560px; }
+ 
+.seccion{ margin-bottom:26px; }
+.seccion-titulo{
+  font-size:0.76rem; letter-spacing:0.1em; text-transform:uppercase;
+  color:var(--verde-medio); font-weight:700; margin-bottom:14px;
+  padding-bottom:8px; border-bottom:1px solid var(--borde);
+}
+ 
+.fila{ display:flex; gap:14px; }
+.fila > .campo{ flex:1; min-width:0; }
+ 
+.campo select{
+  width:100%; padding:13px 16px; border-radius:10px; border:1.5px solid var(--borde);
+  font-size:0.96rem; background:#fff; font-family:'Inter',sans-serif;
+  color:var(--texto-oscuro); appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 16px center;
+}
+.campo select:focus{ outline:none; border-color:var(--verde-medio); box-shadow:0 0 0 4px rgba(45,140,99,0.13); }
+ 
+.campo.requerido label::after{ content:' *'; color:var(--error); }
+.input-wrap input.error, .campo select.error{ border-color:var(--error); }
+.input-wrap input:disabled, .campo select:disabled{ background:var(--crema-2); color:var(--texto-gris); }
+ 
+/* ---------- Autocompletado de localidad ---------- */
+.loc-wrap{ position:relative; }
+.loc-sugerencias{
+  display:none; position:absolute; top:calc(100% + 4px); left:0; right:0;
+  background:#fff; border:1.5px solid var(--borde); border-radius:10px;
+  max-height:220px; overflow-y:auto; z-index:50;
+  box-shadow:0 8px 24px rgba(0,0,0,0.09);
+}
+.loc-item{
+  padding:10px 14px; font-size:0.9rem; cursor:pointer;
+  border-bottom:1px solid var(--crema-2);
+}
+.loc-item:last-child{ border-bottom:none; }
+.loc-item:hover, .loc-item.activo{ background:var(--crema-2); }
+.loc-prov{ display:block; font-size:0.76rem; color:var(--texto-gris); margin-top:2px; }
+ 
+/* ---------- Confirmación final ---------- */
+.ok-icono{
+  width:62px; height:62px; border-radius:50%; background:#EAF2ED;
+  display:flex; align-items:center; justify-content:center; margin-bottom:22px;
+}
+.resumen{
+  background:#fff; border:1px solid var(--borde); border-radius:12px;
+  padding:18px 20px; margin:22px 0;
+}
+.resumen-linea{ font-size:0.88rem; line-height:1.9; color:var(--texto-gris); }
+.resumen-linea strong{ color:var(--texto-oscuro); font-weight:600; }
+ 
 /* ---------- Estado cerrado ---------- */
 .cerrado-icono{
   width:56px; height:56px; border-radius:14px; background:var(--crema-2);
@@ -288,19 +342,153 @@ button{font-family:inherit; cursor:pointer;}
         <button class="btn-secundario" id="btn-volver-token">Usar otro token</button>
       </div>
  
-      <!-- ---- Paso 2: formulario (se arma en el próximo paso) ---- -->
+      <!-- ---- Paso 2: formulario ---- -->
       <div id="vista-formulario" class="oculto">
         <div class="eyebrow">Paso 2 de 3</div>
         <h2 id="form-titulo">Complet&aacute; tus datos</h2>
         <p class="sub" id="form-sub"></p>
  
-        <div id="ficha-alumno" class="ficha oculto"></div>
+        <div id="error-form" class="msg msg-error oculto"></div>
  
-        <div class="msg msg-info">
-          El formulario de carga se habilita en la pr&oacute;xima etapa del desarrollo.
+        <!-- Identidad -->
+        <div class="seccion">
+          <div class="seccion-titulo">Datos personales</div>
+ 
+          <div class="fila">
+            <div class="campo requerido" style="flex:0 0 40%;">
+              <label for="f-tipo-doc">Tipo</label>
+              <select id="f-tipo-doc">
+                <option value="DNI">DNI</option>
+                <option value="DNI_EXT">DNI extranjero</option>
+                <option value="PAS">Pasaporte</option>
+                <option value="CI">C&eacute;dula</option>
+              </select>
+            </div>
+            <div class="campo requerido">
+              <label for="f-dni">N&uacute;mero</label>
+              <div class="input-wrap"><input type="text" id="f-dni" maxlength="15" autocomplete="off"></div>
+            </div>
+          </div>
+ 
+          <div class="fila">
+            <div class="campo requerido">
+              <label for="f-apellido">Apellido</label>
+              <div class="input-wrap"><input type="text" id="f-apellido" maxlength="100" autocomplete="family-name"></div>
+            </div>
+            <div class="campo requerido">
+              <label for="f-nombre">Nombre</label>
+              <div class="input-wrap"><input type="text" id="f-nombre" maxlength="100" autocomplete="given-name"></div>
+            </div>
+          </div>
+ 
+          <div class="fila">
+            <div class="campo requerido">
+              <label for="f-fecha-nac">Fecha de nacimiento</label>
+              <div class="input-wrap"><input type="date" id="f-fecha-nac"></div>
+            </div>
+            <div class="campo">
+              <label for="f-cuil">CUIL <span style="color:var(--texto-gris);font-weight:400;">(opcional)</span></label>
+              <div class="input-wrap"><input type="text" id="f-cuil" maxlength="13" placeholder="20123456783" autocomplete="off"></div>
+            </div>
+          </div>
         </div>
  
-        <button class="btn-secundario" id="btn-reiniciar">Volver al inicio</button>
+        <!-- Contacto -->
+        <div class="seccion">
+          <div class="seccion-titulo">Contacto</div>
+ 
+          <div class="campo requerido">
+            <label for="f-email">Correo electr&oacute;nico</label>
+            <div class="input-wrap"><input type="email" id="f-email" maxlength="150" autocomplete="email"></div>
+            <div class="ayuda-campo">Ac&aacute; vas a recibir el token para reinscribirte el a&ntilde;o que viene.</div>
+          </div>
+ 
+          <div class="fila">
+            <div class="campo requerido">
+              <label for="f-celular">Celular</label>
+              <div class="input-wrap"><input type="tel" id="f-celular" maxlength="20" placeholder="3884123456"></div>
+            </div>
+            <div class="campo">
+              <label for="f-telefono">Tel&eacute;fono fijo</label>
+              <div class="input-wrap"><input type="tel" id="f-telefono" maxlength="20"></div>
+            </div>
+          </div>
+        </div>
+ 
+        <!-- Domicilio -->
+        <div class="seccion">
+          <div class="seccion-titulo">Domicilio</div>
+ 
+          <div class="campo requerido">
+            <label for="f-direccion">Direcci&oacute;n</label>
+            <div class="input-wrap"><input type="text" id="f-direccion" maxlength="200" placeholder="Calle y n&uacute;mero"></div>
+          </div>
+ 
+          <div class="campo requerido">
+            <label for="f-localidad">Localidad</label>
+            <div class="input-wrap"><input type="text" id="f-localidad" maxlength="150" autocomplete="off"></div>
+            <div class="ayuda-campo">Empez&aacute; a escribir y eleg&iacute; de la lista. Si no aparece, escribila igual.</div>
+          </div>
+ 
+          <div class="campo requerido">
+            <label for="f-provincia">Provincia</label>
+            <div class="input-wrap"><input type="text" id="f-provincia" maxlength="50" autocomplete="off"></div>
+          </div>
+        </div>
+ 
+        <!-- Emergencia -->
+        <div class="seccion">
+          <div class="seccion-titulo">Contacto de emergencia</div>
+ 
+          <div class="campo requerido">
+            <label for="f-ce-nombre">Nombre y apellido</label>
+            <div class="input-wrap"><input type="text" id="f-ce-nombre" maxlength="150"></div>
+          </div>
+ 
+          <div class="fila">
+            <div class="campo requerido">
+              <label for="f-ce-telefono">Tel&eacute;fono</label>
+              <div class="input-wrap"><input type="tel" id="f-ce-telefono" maxlength="30"></div>
+            </div>
+            <div class="campo">
+              <label for="f-ce-vinculo">V&iacute;nculo</label>
+              <div class="input-wrap"><input type="text" id="f-ce-vinculo" maxlength="50" placeholder="Madre, hermano..."></div>
+            </div>
+          </div>
+        </div>
+ 
+        <button class="btn-primario" id="btn-enviar">Enviar inscripci&oacute;n</button>
+        <button class="btn-secundario" id="btn-cancelar">Cancelar</button>
+ 
+        <div class="form-footer">
+          Los datos que cargues quedan pendientes de revisi&oacute;n por preceptor&iacute;a.
+        </div>
+      </div>
+ 
+      <!-- ---- Paso 3: confirmación ---- -->
+      <div id="vista-fin" class="oculto">
+        <div class="ok-icono">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
+               stroke="#1B5E3F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+        </div>
+        <h2>&iexcl;Listo!</h2>
+        <p class="sub">
+          Tu inscripci&oacute;n qued&oacute; registrada y est&aacute; pendiente de
+          revisi&oacute;n por preceptor&iacute;a.
+        </p>
+ 
+        <div class="resumen" id="resumen-final"></div>
+ 
+        <div class="msg msg-info">
+          Si necesit&aacute;s consultar el estado de tu inscripci&oacute;n, acercate a preceptor&iacute;a con tu DNI.
+        </div>
+ 
+        <div class="form-footer">
+          Ya pod&eacute;s cerrar esta p&aacute;gina. No hace falta que vuelvas a
+          completar el formulario.
+        </div>
       </div>
  
     </div>
@@ -317,7 +505,7 @@ button{font-family:inherit; cursor:pointer;}
   function $(id){ return document.getElementById(id); }
  
   function mostrarVista(nombre){
-    ['cargando','cerrada','token','dni','formulario'].forEach(function(v){
+    ['cargando','cerrada','token','dni','formulario','fin'].forEach(function(v){
       $('vista-' + v).classList.add('oculto');
     });
     $('vista-' + nombre).classList.remove('oculto');
@@ -409,32 +597,221 @@ button{font-family:inherit; cursor:pointer;}
     });
   }
  
+  // ---- Autocompletado de localidad (mismo comportamiento que el dashboard) ----
+  function activarAutocompletadoLocalidad(idInput, idProvincia){
+    var inp  = $(idInput);
+    var prov = $(idProvincia);
+    if (!inp || !prov || inp.dataset.locListo) return;
+    inp.dataset.locListo = '1';
+ 
+    var cont = inp.parentElement;
+    cont.classList.add('loc-wrap');
+ 
+    var panel = document.createElement('div');
+    panel.className = 'loc-sugerencias';
+    cont.appendChild(panel);
+ 
+    var timer = null, datos = [], idx = -1;
+ 
+    function cerrar(){ panel.style.display = 'none'; idx = -1; }
+ 
+    function marcar(){
+      [].slice.call(panel.children).forEach(function(el, i){
+        el.classList.toggle('activo', i === idx);
+      });
+      var act = panel.children[idx];
+      if (act) act.scrollIntoView({ block: 'nearest' });
+    }
+ 
+    function elegir(i){
+      var d = datos[i];
+      if (!d) return;
+      inp.value = d.nombre;
+      inp.dataset.locId = d.id;
+      inp.dataset.locDepto = d.departamento || '';
+      if (d.provincia) prov.value = d.provincia;
+      cerrar();
+    }
+ 
+    function pintar(){
+      panel.innerHTML = '';
+      if (!datos.length) { cerrar(); return; }
+      datos.forEach(function(d, i){
+        var div = document.createElement('div');
+        div.className = 'loc-item';
+        div.innerHTML = d.nombre +
+          '<span class="loc-prov">' + d.provincia +
+          (d.departamento ? ' - ' + d.departamento : '') + '</span>';
+        div.onclick = function(){ elegir(i); };
+        panel.appendChild(div);
+      });
+      panel.style.display = 'block';
+    }
+ 
+    inp.addEventListener('input', function(){
+      inp.dataset.locId = '';
+      inp.dataset.locDepto = '';
+      clearTimeout(timer);
+      var q = inp.value.trim();
+      if (q.length < 2) { cerrar(); return; }
+      timer = setTimeout(function(){
+        var url = '/api/localidades?q=' + encodeURIComponent(q);
+        if (prov.value) url += '&provincia=' + encodeURIComponent(prov.value);
+        fetch(url)
+          .then(function(r){ return r.json(); })
+          .then(function(j){ datos = j; idx = -1; pintar(); })
+          .catch(function(){ cerrar(); });
+      }, 250);
+    });
+ 
+    inp.addEventListener('keydown', function(e){
+      if (panel.style.display !== 'block') return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, datos.length - 1); marcar(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); marcar(); }
+      else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); elegir(idx); }
+      else if (e.key === 'Escape') { cerrar(); }
+    });
+ 
+    document.addEventListener('click', function(e){
+      if (!cont.contains(e.target)) cerrar();
+    });
+  }
+ 
   function prepararFormulario(d){
-    var ficha = $('ficha-alumno');
+    document.querySelector('.form-wrap').classList.add('ancho');
+    activarAutocompletadoLocalidad('f-localidad', 'f-provincia');
  
     if (d.tipo === 'reinscripcion' && d.alumno) {
+      var a = d.alumno;
       $('form-titulo').textContent = 'Confirm\u00e1 tus datos';
       $('form-sub').textContent =
-        'Revis\u00e1 que la informaci\u00f3n siga siendo correcta y actualiz\u00e1 lo que haga falta.';
-      ficha.innerHTML =
-        '<div class="ficha-nombre">' + d.alumno.apellido + ', ' + d.alumno.nombre + '</div>' +
-        '<div class="ficha-dato">' +
-          '<strong>' + d.alumno.tipo_documento + ':</strong> ' + d.alumno.dni + '<br>' +
-          '<strong>Carrera:</strong> ' + d.carrera + '<br>' +
-          '<strong>Ciclo lectivo:</strong> ' + d.ciclo_lectivo +
-        '</div>';
-      ficha.classList.remove('oculto');
+        'Revis\u00e1 que la informaci\u00f3n siga siendo correcta. Actualiz\u00e1 lo que haya cambiado.';
+ 
+      // El documento no se edita en una reinscripción: sale del legajo.
+      $('f-tipo-doc').value = a.tipo_documento || 'DNI';
+      $('f-dni').value      = a.dni || '';
+      $('f-tipo-doc').disabled = true;
+      $('f-dni').disabled      = true;
+ 
+      $('f-apellido').value    = a.apellido || '';
+      $('f-nombre').value      = a.nombre || '';
+      $('f-fecha-nac').value   = a.fecha_nacimiento || '';
+      $('f-cuil').value        = a.cuil || '';
+      $('f-email').value       = a.email || '';
+      $('f-celular').value     = a.celular || '';
+      $('f-telefono').value    = a.telefono || '';
+      $('f-direccion').value   = a.direccion || '';
+      $('f-localidad').value   = a.localidad || '';
+      $('f-provincia').value   = a.provincia || '';
+      $('f-ce-nombre').value   = a.contacto_emergencia_nombre || '';
+      $('f-ce-telefono').value = a.contacto_emergencia_telefono || '';
+      $('f-ce-vinculo').value  = a.contacto_emergencia_vinculo || '';
+ 
+      if (a.localidad_id) {
+        $('f-localidad').dataset.locId = a.localidad_id;
+        $('f-localidad').dataset.locDepto = a.departamento || '';
+      }
     } else {
       $('form-titulo').textContent = 'Complet\u00e1 tus datos';
       $('form-sub').textContent =
-        'Carg\u00e1 tus datos personales para la carrera ' + d.carrera + '.';
-      ficha.innerHTML =
-        '<div class="ficha-dato">' +
-          '<strong>Carrera:</strong> ' + d.carrera + '<br>' +
-          '<strong>Ciclo lectivo:</strong> ' + d.ciclo_lectivo +
-        '</div>';
-      ficha.classList.remove('oculto');
+        'Carg\u00e1 tus datos para inscribirte en ' + d.carrera + '.';
+      $('f-tipo-doc').disabled = false;
+      $('f-dni').disabled      = false;
     }
+  }
+ 
+  function recolectarFormulario(){
+    var loc = $('f-localidad');
+    return {
+      token:  estadoToken,
+      dni:    $('f-dni').value.trim(),
+      website: $('website').value,
+ 
+      tipo_documento:   $('f-tipo-doc').value,
+      apellido:         $('f-apellido').value.trim(),
+      nombre:           $('f-nombre').value.trim(),
+      fecha_nacimiento: $('f-fecha-nac').value,
+      cuil:             $('f-cuil').value.trim(),
+ 
+      email:    $('f-email').value.trim(),
+      celular:  $('f-celular').value.trim(),
+      telefono: $('f-telefono').value.trim(),
+ 
+      direccion:    $('f-direccion').value.trim(),
+      localidad:    loc.value.trim(),
+      localidad_id: loc.dataset.locId || null,
+      departamento: loc.dataset.locDepto || null,
+      provincia:    $('f-provincia').value.trim(),
+ 
+      contacto_emergencia_nombre:   $('f-ce-nombre').value.trim(),
+      contacto_emergencia_telefono: $('f-ce-telefono').value.trim(),
+      contacto_emergencia_vinculo:  $('f-ce-vinculo').value.trim()
+    };
+  }
+ 
+  function enviarFormulario(){
+    var btn = $('btn-enviar');
+    limpiarError('error-form');
+ 
+    var payload = recolectarFormulario();
+ 
+    // Chequeo rápido en el cliente. La validación real está en el servidor.
+    var faltantes = [];
+    if (!payload.dni)        faltantes.push('n\u00famero de documento');
+    if (!payload.apellido)   faltantes.push('apellido');
+    if (!payload.nombre)     faltantes.push('nombre');
+    if (!payload.fecha_nacimiento) faltantes.push('fecha de nacimiento');
+    if (!payload.email)      faltantes.push('correo electr\u00f3nico');
+    if (!payload.celular)    faltantes.push('celular');
+    if (!payload.direccion)  faltantes.push('direcci\u00f3n');
+    if (!payload.localidad)  faltantes.push('localidad');
+    if (!payload.provincia)  faltantes.push('provincia');
+    if (!payload.contacto_emergencia_nombre)   faltantes.push('contacto de emergencia');
+    if (!payload.contacto_emergencia_telefono) faltantes.push('tel\u00e9fono de emergencia');
+ 
+    if (faltantes.length) {
+      mostrarError('error-form', 'Falta completar: ' + faltantes.join(', ') + '.');
+      window.scrollTo(0, 0);
+      return;
+    }
+ 
+    btn.disabled = true;
+    btn.textContent = 'Enviando\u2026';
+ 
+    fetch('/api/inscripcion/guardar', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      btn.disabled = false;
+      btn.textContent = 'Enviar inscripci\u00f3n';
+ 
+      if (d.error) {
+        mostrarError('error-form', d.error);
+        window.scrollTo(0, 0);
+        return;
+      }
+ 
+      $('resumen-final').innerHTML =
+        '<div class="resumen-linea">' +
+          '<strong>N\u00famero de inscripci\u00f3n:</strong> ' + d.preinscripcion_id + '<br>' +
+          '<strong>Alumno:</strong> ' + payload.apellido + ', ' + payload.nombre + '<br>' +
+          '<strong>Documento:</strong> ' + payload.dni + '<br>' +
+          '<strong>Carrera:</strong> ' + (datosToken ? datosToken.carrera : '') + '<br>' +
+          '<strong>Estado:</strong> Pendiente de revisi\u00f3n' +
+        '</div>';
+ 
+      marcarPaso(3);
+      mostrarVista('fin');
+    })
+    .catch(function(){
+      btn.disabled = false;
+      btn.textContent = 'Enviar inscripci\u00f3n';
+      mostrarError('error-form', 'No se pudo conectar con el servidor. Reintent\u00e1 en unos segundos.');
+      window.scrollTo(0, 0);
+    });
   }
  
   // ---- Botones ----
@@ -469,7 +846,9 @@ button{font-family:inherit; cursor:pointer;}
     inpToken.focus();
   });
  
-  $('btn-reiniciar').addEventListener('click', function(){
+  $('btn-enviar').addEventListener('click', enviarFormulario);
+ 
+  $('btn-cancelar').addEventListener('click', function(){
     estadoToken = null;
     datosToken  = null;
     inpToken.value = '';
