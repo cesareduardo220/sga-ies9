@@ -839,7 +839,7 @@
         .panel-nav-wrap, #panel-nav,
         #btn-hamburguesa, #btn-home, #btn-lupa,
         .search-inline, .badge-rol,
-        #sec-excel, #sec-importar-alumnos { display: none !important; }
+        #sec-excel { display: none !important; }
 
         /* ── Header mobile ── */
         .topbar { padding: 0 14px; height: 52px; position: fixed; top:0; left:0; right:0; z-index:8000; }
@@ -1789,139 +1789,6 @@
     </div>
 </div>
 
-
-        <!-- NOTAS -->
-        <!-- IMPORTAR ALUMNOS DESDE GOOGLE SHEETS -->
-        <div class="seccion" id="sec-importar-alumnos">
-            <div class="seccion-header">
-                <div>
-                    <h2>Importar alumnos</h2>
-                    <div class="sub">Cargá alumnos desde un formulario de Google Forms</div>
-                </div>
-            </div>
-
-            <!-- PASO 1: URL de la Sheet o CSV manual -->
-            <div id="importar-paso-url">
-                <div class="tarjeta-form" style="max-width:620px;">
-                    <div class="tarjeta-form-titulo">📋 Opción 1 — Pegá la URL de tu Google Sheet</div>
-                    <p style="font-size:0.85rem; color:var(--sga-texto-gris); margin:0 0 14px;">
-                        Requiere que el servidor tenga acceso a internet.
-                    </p>
-                    <div class="campo-edit">
-                        <label>URL de la Google Sheet</label>
-                        <input type="text" id="importar-url-input" class="input-edit-ficha"
-                               placeholder="https://docs.google.com/spreadsheets/d/...">
-                    </div>
-                    <div id="importar-url-error" class="form-error" style="display:none; margin-top:8px;"></div>
-                    <div style="margin-top:14px; display:flex; gap:10px; align-items:center;">
-                        <button class="btn-nuevo" onclick="importarPrevisualizarSheet()">
-                            Previsualizar →
-                        </button>
-                        <div id="importar-cargando" style="display:none; font-size:0.85rem; color:var(--sga-texto-gris);">
-                            ⏳ Descargando datos...
-                        </div>
-                    </div>
-                </div>
-
-                <div style="max-width:620px; text-align:center; padding:10px 0; font-size:0.85rem; color:var(--sga-texto-gris);">
-                    — o —
-                </div>
-
-                <div class="tarjeta-form" style="max-width:620px;">
-                    <div class="tarjeta-form-titulo">📁 Opción 2 — Subir el archivo CSV manualmente</div>
-                    <p style="font-size:0.85rem; color:var(--sga-texto-gris); margin:0 0 16px;">
-                        Descargá el CSV desde tu Google Sheet en tu computadora
-                        (<b>Archivo → Descargar → Valores separados por comas</b>)
-                        y subilo acá. No requiere internet en el servidor.
-                    </p>
-                    <div class="campo-edit">
-                        <label>Archivo CSV</label>
-                        <label for="importar-csv-input" style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-                            <span class="btn-secundario" style="white-space:nowrap;">
-                                📁 Seleccionar archivo
-                            </span>
-                            <span id="importar-csv-nombre" style="font-size:0.85rem; color:var(--sga-texto-gris);">
-                                Ningún archivo seleccionado
-                            </span>
-                        </label>
-                        <input type="file" id="importar-csv-input" accept=".csv"
-                               style="display:none;"
-                               onchange="document.getElementById('importar-csv-nombre').textContent = this.files[0]?.name || 'Ningún archivo seleccionado'">
-                    </div>
-                    <div id="importar-csv-error" class="form-error" style="display:none; margin-top:8px;"></div>
-                    <div style="margin-top:14px;">
-                        <button class="btn-nuevo" onclick="importarPrevisualizarCSV()">
-                            Previsualizar →
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Instrucciones -->
-                <div class="tarjeta-form" style="max-width:620px; margin-top:18px;">
-                    <div class="tarjeta-form-titulo">📱 ¿Cómo conseguir la URL o el CSV?</div>
-                    <ol style="font-size:0.85rem; color:var(--sga-texto-gris); padding-left:18px; margin:0; line-height:2;">
-                        <li>Abrí tu formulario de Google Forms y diseñá las preguntas en la pestaña <b>Preguntas</b></li>
-                        <li>Una vez que tengas respuestas, andá a <b>Respuestas → Vínculo a Hojas de cálculo</b></li>
-                        <li>Para la <b>URL</b>: en la Sheet andá a <b>Archivo → Compartir → Publicar en la web</b>, publicá como CSV y copiá la URL</li>
-                        <li>Para el <b>CSV manual</b>: en la Sheet andá a <b>Archivo → Descargar → Valores separados por comas</b></li>
-                    </ol>
-                </div>
-            </div>
-
-            <!-- PASO 2: Previsualización y diff -->
-            <div id="importar-paso-preview" style="display:none;">
-                <div id="importar-resumen" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:22px;"></div>
-
-                <!-- Nuevos -->
-                <div id="importar-bloque-nuevos" style="display:none; margin-bottom:22px;">
-                    <div style="font-size:0.78rem; color:var(--sga-texto-gris); margin-bottom:10px;
-                                font-weight:700; font-family:'Raleway',sans-serif; letter-spacing:0.04em;">
-                        ✅ ALUMNOS NUEVOS
-                    </div>
-                    <div class="tabla-card" style="overflow-x:auto;">
-                        <table class="tabla-alumnos">
-                            <thead><tr>
-                                <th>Apellido y Nombre</th><th>DNI</th>
-                                <th>Email</th><th>Celular</th>
-                            </tr></thead>
-                            <tbody id="importar-tbody-nuevos"></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Duplicados -->
-                <div id="importar-bloque-duplicados" style="display:none; margin-bottom:22px;">
-                    <div style="font-size:0.78rem; color:var(--sga-texto-gris); margin-bottom:10px;
-                                font-weight:700; font-family:'Raleway',sans-serif; letter-spacing:0.04em;">
-                        ⚠️ YA EXISTEN EN EL SISTEMA — REVISÁ CADA UNO
-                    </div>
-                    <div id="importar-lista-duplicados"></div>
-                </div>
-
-                <!-- Errores -->
-                <div id="importar-bloque-errores" style="display:none; margin-bottom:22px;">
-                    <div style="font-size:0.78rem; color:var(--sga-error); margin-bottom:10px;
-                                font-weight:700; font-family:'Raleway',sans-serif; letter-spacing:0.04em;">
-                        ❌ FILAS CON ERRORES (no se van a importar)
-                    </div>
-                    <div class="tabla-card" style="overflow-x:auto;">
-                        <table class="tabla-alumnos">
-                            <thead><tr><th>Fila</th><th>Motivo</th><th>Datos</th></tr></thead>
-                            <tbody id="importar-tbody-errores"></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div id="importar-preview-msg" style="display:none; margin-bottom:14px;"></div>
-
-                <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                    <button class="btn-secundario" onclick="importarVolver()">← Cambiar URL</button>
-                    <button class="btn-nuevo" id="importar-btn-confirmar" onclick="importarConfirmar()">
-                        💾 Confirmar importación
-                    </button>
-                </div>
-            </div>
-        </div>
 
         <!-- NOTAS -->
         <div class="seccion" id="sec-notas">
@@ -3487,7 +3354,6 @@
             ]},
             { seccion: 'herramientas', items: [
                 { id: 'excel',             icon: '📥', label: 'Subir Plan de Estudios' },
-                { id: 'importar-alumnos',  icon: '📋', label: 'Importar alumnos' },
                 { id: 'reportes',          icon: '📄', label: 'Reportes' },
             ]},
             { seccion: 'sistema', items: [
@@ -3505,7 +3371,6 @@
             ]},
             { seccion: 'herramientas', items: [
                 { id: 'excel',            icon: '📥', label: 'Subir Plan de Estudios' },
-                { id: 'importar-alumnos', icon: '📋', label: 'Importar alumnos' },
                 { id: 'reportes',         icon: '📄', label: 'Reportes' },
             ]},
         ],
@@ -3525,7 +3390,6 @@
         'mesas':       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5-10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
         'profesores':  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
         'excel':       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
-        'importar-alumnos': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
         'reportes':    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
         'usuarios':    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg>',
     };
@@ -3800,15 +3664,6 @@
             if (panelRes) panelRes.style.display = 'none';
         }
 
-        // ── Guardia: importación de alumnos pendiente de confirmar ──
-        if (typeof importarDatosPendientes !== 'undefined' && importarDatosPendientes) {
-            if (!confirm('⚠️ Tenés una importación pendiente de confirmar.\n\n¿Salir igual? Se van a perder los datos cargados.')) {
-                return;
-            }
-            importarDatosPendientes = null;
-            importarVolver();
-        }
-
         callback();
     }
 
@@ -3872,9 +3727,6 @@
         if (id === 'usuarios') cargarPreceptoras();
         if (id === 'reportes') cargarReportes();
         if (id === 'mesas') cargarMesas();
-        if (id === 'importar-alumnos') {
-            if (typeof importarVolver === 'function') importarVolver();
-        }
         if (id === 'excel') {
             if (typeof cancelarCambioPlan === 'function') cancelarCambioPlan();
         }
@@ -4249,13 +4101,6 @@
             mostrarAvisoFlotante('⏱️ Se descartaron los resultados de mesa sin guardar por 10 minutos sin actividad.');
         }
 
-        // Importación de alumnos pendiente de confirmar
-        if (typeof importarDatosPendientes !== 'undefined' && importarDatosPendientes) {
-            importarDatosPendientes = null;
-            importarVolver();
-            mostrarAvisoFlotante('⏱️ Se descartó la previsualización de importación por 10 minutos sin actividad.');
-        }
-
         // Mobile: cerrar modales abiertos y panel de edición inline por inactividad
         if (ES_MOBILE && ES_MOBILE()) {
             // Panel de edición inline de alumno
@@ -4470,245 +4315,6 @@
         } else {
             mostrarError('admins-msg', data.error || 'Error al eliminar.');
         }
-    }
-
-    // ══ IMPORTAR ALUMNOS DESDE GOOGLE SHEETS ══
-
-    var importarDatosPendientes = null; // datos de previsualización sin confirmar
-
-    function importarVolver() {
-        importarDatosPendientes = null;
-        document.getElementById('importar-paso-url').style.display = '';
-        document.getElementById('importar-paso-preview').style.display = 'none';
-        document.getElementById('importar-url-error').style.display = 'none';
-        document.getElementById('importar-url-input').value = '';
-        // Limpiar el input de archivo de forma segura (sin romper el onchange)
-        const input = document.getElementById('importar-csv-input');
-        if (input) {
-            try { input.value = ''; } catch(e) {}
-        }
-        const nombre = document.getElementById('importar-csv-nombre');
-        if (nombre) nombre.textContent = 'Ningún archivo seleccionado';
-    }
-
-    async function importarPrevisualizarCSV() {
-        const input = document.getElementById('importar-csv-input');
-
-        if (!input.files || !input.files[0]) {
-            mostrarMensaje('importar-csv-error', 'Seleccioná un archivo CSV primero', 'error');
-            return;
-        }
-
-        const file = input.files[0];
-        if (!file.name.toLowerCase().endsWith('.csv')) {
-            mostrarMensaje('importar-csv-error', 'El archivo debe ser .csv', 'error');
-            return;
-        }
-
-        // Leer el archivo y enviarlo como texto al backend
-        const texto = await file.text();
-        const res  = await fetch('/api/alumnos/importar-sheets/previsualizar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ csv_texto: texto })
-        });
-        const data = await res.json();
-
-        if (data.error) {
-            mostrarMensaje('importar-csv-error', data.error, 'error');
-            return;
-        }
-
-        importarDatosPendientes = data;
-        importarRenderPreview(data);
-        document.getElementById('importar-paso-url').style.display = 'none';
-        document.getElementById('importar-paso-preview').style.display = '';
-        document.getElementById('importar-preview-msg').style.display = 'none';
-    }
-
-    async function importarPrevisualizarSheet() {
-        const url = document.getElementById('importar-url-input').value.trim();
-
-        if (!url) {
-            mostrarMensaje('importar-url-error', 'Ingresá la URL de la Google Sheet', 'error');
-            return;
-        }
-
-        document.getElementById('importar-cargando').style.display = '';
-        document.querySelector('#importar-paso-url .btn-nuevo').disabled = true;
-
-        const res  = await fetch('/api/alumnos/importar-sheets/previsualizar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url })
-        });
-        const data = await res.json();
-
-        document.getElementById('importar-cargando').style.display = 'none';
-        document.querySelector('#importar-paso-url .btn-nuevo').disabled = false;
-
-        if (data.error) {
-            mostrarMensaje('importar-url-error', data.error, 'error');
-            return;
-        }
-
-        importarDatosPendientes = data;
-        importarRenderPreview(data);
-        document.getElementById('importar-paso-url').style.display = 'none';
-        document.getElementById('importar-paso-preview').style.display = '';
-        document.getElementById('importar-preview-msg').style.display = 'none';
-    }
-
-    function importarRenderPreview(data) {
-        const r = data.resumen;
-
-        // Resumen de tarjetas
-        document.getElementById('importar-resumen').innerHTML = `
-            <div class="stat-card" style="flex:1; min-width:140px; padding:14px 18px;">
-                <div class="stat-label">Total en la Sheet</div>
-                <div class="stat-valor" style="font-size:1.6rem">${r.total_filas}</div>
-            </div>
-            <div class="stat-card" style="flex:1; min-width:140px; padding:14px 18px; background:#DCF5E5;">
-                <div class="stat-label">Nuevos a importar</div>
-                <div class="stat-valor" style="font-size:1.6rem; color:var(--sga-exito)">${r.nuevos}</div>
-            </div>
-            <div class="stat-card" style="flex:1; min-width:140px; padding:14px 18px; background:#FFF3CD;">
-                <div class="stat-label">Ya existen (revisar)</div>
-                <div class="stat-valor" style="font-size:1.6rem; color:#856404">${r.duplicados}</div>
-            </div>
-            <div class="stat-card" style="flex:1; min-width:140px; padding:14px 18px; background:#FBEAEA;">
-                <div class="stat-label">Con errores</div>
-                <div class="stat-valor" style="font-size:1.6rem; color:var(--sga-error)">${r.errores}</div>
-            </div>
-        `;
-
-        // Nuevos
-        const bloqNuevos = document.getElementById('importar-bloque-nuevos');
-        if (data.nuevos.length) {
-            document.getElementById('importar-tbody-nuevos').innerHTML = data.nuevos.map(a => `
-                <tr>
-                    <td><strong>${a.apellido}</strong>, ${a.nombre}</td>
-                    <td style="font-size:0.85rem">${a.dni}</td>
-                    <td style="font-size:0.85rem">${a.email || '—'}</td>
-                    <td style="font-size:0.85rem">${a.celular || '—'}</td>
-                </tr>
-            `).join('');
-            bloqNuevos.style.display = '';
-        } else {
-            bloqNuevos.style.display = 'none';
-        }
-
-        // Duplicados
-        const bloqDup = document.getElementById('importar-bloque-duplicados');
-        if (data.duplicados.length) {
-            document.getElementById('importar-lista-duplicados').innerHTML = data.duplicados.map((d, idx) => `
-                <div class="tabla-card" style="margin-bottom:12px; padding:14px 16px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <div>
-                            <strong>${d.apellido}, ${d.nombre}</strong>
-                            <span style="font-size:0.82rem; color:var(--sga-texto-gris); margin-left:8px;">DNI ${d.dni}</span>
-                        </div>
-                        <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer;">
-                            <input type="checkbox" id="dup-check-${idx}"
-                                   ${d.diff.length > 0 ? 'checked' : ''}
-                                   ${d.diff.length === 0 ? 'disabled' : ''}
-                                   style="accent-color:var(--sga-verde-medio); width:15px; height:15px;">
-                            ${d.diff.length > 0 ? 'Actualizar datos' : 'Sin cambios'}
-                        </label>
-                    </div>
-                    ${d.diff.length > 0 ? `
-                    <table style="width:100%; font-size:0.82rem; border-collapse:collapse;">
-                        <thead><tr>
-                            <th style="text-align:left; padding:4px 8px; color:var(--sga-texto-gris); font-weight:600;">Campo</th>
-                            <th style="text-align:left; padding:4px 8px; color:var(--sga-texto-gris); font-weight:600;">Actual en el sistema</th>
-                            <th style="text-align:left; padding:4px 8px; color:var(--sga-texto-gris); font-weight:600;">Nuevo (desde Sheet)</th>
-                        </tr></thead>
-                        <tbody>
-                        ${d.diff.map(df => `
-                            <tr>
-                                <td style="padding:4px 8px; color:var(--sga-texto-gris);">${df.campo}</td>
-                                <td style="padding:4px 8px; color:var(--sga-error);">${df.antes || '—'}</td>
-                                <td style="padding:4px 8px; color:var(--sga-exito); font-weight:600;">${df.despues}</td>
-                            </tr>
-                        `).join('')}
-                        </tbody>
-                    </table>` : '<div style="font-size:0.82rem; color:var(--sga-texto-gris);">Los datos coinciden exactamente con los del sistema.</div>'}
-                </div>
-            `).join('');
-            bloqDup.style.display = '';
-        } else {
-            bloqDup.style.display = 'none';
-        }
-
-        // Errores
-        const bloqErr = document.getElementById('importar-bloque-errores');
-        if (data.errores.length) {
-            document.getElementById('importar-tbody-errores').innerHTML = data.errores.map(e => `
-                <tr>
-                    <td style="text-align:center; font-size:0.85rem;">${e.fila}</td>
-                    <td style="color:var(--sga-error); font-size:0.85rem;">${e.motivo}</td>
-                    <td style="font-size:0.82rem; color:var(--sga-texto-gris);">
-                        ${e.datos ? Object.entries(e.datos).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join(' · ') : ''}
-                    </td>
-                </tr>
-            `).join('');
-            bloqErr.style.display = '';
-        } else {
-            bloqErr.style.display = 'none';
-        }
-
-        // Deshabilitar botón si no hay nada que importar
-        const btnConfirmar = document.getElementById('importar-btn-confirmar');
-        btnConfirmar.style.display = '';  // restaurar por si quedó oculto de una importación previa
-        btnConfirmar.disabled =
-            data.nuevos.length === 0 && data.duplicados.every(d => d.diff.length === 0);
-    }
-
-    async function importarConfirmar() {
-        if (!importarDatosPendientes) return;
-
-        // Leer checkboxes de duplicados
-        const duplicadosConDecision = importarDatosPendientes.duplicados.map((d, idx) => {
-            const cb = document.getElementById(`dup-check-${idx}`);
-            return { ...d, actualizar: cb ? cb.checked : false };
-        });
-
-        document.getElementById('importar-btn-confirmar').disabled = true;
-        mostrarMensaje('importar-preview-msg', '⏳ Importando...', 'info', 0);
-
-        const res  = await fetch('/api/alumnos/importar-sheets/confirmar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                nuevos:     importarDatosPendientes.nuevos,
-                duplicados: duplicadosConDecision,
-            })
-        });
-        const data = await res.json();
-
-        document.getElementById('importar-btn-confirmar').disabled = false;
-
-        if (!data.ok) {
-            mostrarMensaje('importar-preview-msg', '❌ Error al importar: ' + (data.error || 'Error desconocido'), 'error', 0);
-            return;
-        }
-
-        importarDatosPendientes = null;
-        const partes = [];
-        if (data.insertados)  partes.push(`${data.insertados} alumno${data.insertados !== 1 ? 's' : ''} nuevo${data.insertados !== 1 ? 's' : ''}`);
-        if (data.actualizados) partes.push(`${data.actualizados} actualizado${data.actualizados !== 1 ? 's' : ''}`);
-        if (data.errores?.length) partes.push(`${data.errores.length} con ${data.errores.length === 1 ? 'error' : 'errores'}`);
-
-        mostrarMensaje('importar-preview-msg',
-            `✅ Importación completada: ${partes.join(', ')}.`,
-            'exito', 0);
-
-        // Recargar la lista de alumnos en segundo plano
-        if (alumnosData.length) {
-            fetch('/api/alumnos').then(r => r.json()).then(d => { alumnosData = d; });
-        }
-
-        document.getElementById('importar-btn-confirmar').style.display = 'none';
     }
 
     // ── CARRERAS ──
