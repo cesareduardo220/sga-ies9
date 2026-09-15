@@ -6781,6 +6781,66 @@ def api_tokens_alta():
     return _generar_tokens_sin_alumno('alta')
 
 
+def _estado_reinscripcion_alumnos(cur, carrera_id, ciclo, alumno_ids=None):
+    """
+    Alumnos activos de la carrera y si pueden recibir un token de
+    reinscripción en el ciclo. No pueden si ya tienen un token disponible
+    y sin vencer, o una preinscripción pendiente o aprobada (las altas
+    aprobadas no cuentan: después del alta, el alumno se reinscribe).
+    """
+    filtro = ""
+    params = [ciclo, ciclo, carrera_id]
+    if alumno_ids:
+        filtro = " AND a.id = ANY(%s)"
+        params.append([int(x) for x in alumno_ids])
+    cur.execute(f"""
+        SELECT a.id, a.apellido, a.nombre, a.dni, a.tipo_documento, a.email, a.celular,
+               EXISTS (SELECT 1 FROM tokens_inscripcion t
+                        WHERE t.alumno_id = a.id AND t.ciclo_lectivo = %s
+                          AND t.estado = 'disponible' AND t.vence_el >= CURRENT_DATE),
+               EXISTS (SELECT 1 FROM preinscripciones p
+                        WHERE p.dni = a.dni AND p.ciclo_lectivo = %s
+                          AND (p.estado = 'pendiente'
+                               OR (p.estado = 'aprobada' AND p.anio_ingreso IS NULL)))
+        FROM alumnos a
+        WHERE a.carrera_id = %s AND a.activo = TRUE {filtro}
+        ORDER BY a.apellido, a.nombre
+    """, params)
+    resultado = []
+    for f in cur.fetchall():
+        if f[7]:
+            motivo = 'Ya tiene un token disponible'
+        elif f[8]:
+            motivo = 'Ya tiene una inscripción en curso o aprobada en este ciclo'
+        else:
+            motivo = None
+        resultado.append({
+            'id':       f[0],
+            'apellido': f[1],
+            'nombre':   f[2],
+            'dni_raw':  f[3],
+            'dni':      formatear_documento(f[4], f[3]),
+            'email':    f[5],
+            'celular':  f[6],
+            'motivo':   motivo,
+        })
+    return resultado
+
+
+@auth.route('/api/tokens/reinscripcion/alumnos', methods=['GET'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_tokens_reinscripcion_alumnos():
+    """Alumnos para el buscador de la pantalla de tokens, con su situación."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        return jsonify(_estado_reinscripcion_alumnos(
+            cur, _carrera_tokens(), get_ciclo_lectivo()['anio_inicio']))
+    finally:
+        cur.close()
+        conn.close()
+
+
 @auth.route('/api/tokens/reinscripcion', methods=['POST'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_tokens_reinscripcion():
@@ -6801,36 +6861,31 @@ def api_tokens_reinscripcion():
     conn = get_db()
     cur = conn.cursor()
     try:
-        filtro_ids = ""
-        params = [carrera_id, ciclo]
-        if alumno_ids:
-            filtro_ids = " AND a.id = ANY(%s)"
-            params.append(list(alumno_ids))
- 
-        cur.execute(f"""
-            SELECT a.id, a.apellido, a.nombre, a.dni, a.email, a.celular
-            FROM alumnos a
-            WHERE a.carrera_id = %s
-              AND a.activo = TRUE
-              AND NOT EXISTS (
-                    SELECT 1 FROM tokens_inscripcion t
-                    WHERE t.alumno_id = a.id
-                      AND t.ciclo_lectivo = %s
-                      AND t.estado = 'disponible'
-              )
-              {filtro_ids}
-            ORDER BY a.apellido, a.nombre
-        """, params)
-        alumnos = cur.fetchall()
- 
+        try:
+            estados = _estado_reinscripcion_alumnos(cur, carrera_id, ciclo, alumno_ids)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'La lista de alumnos no es válida'}), 400
+        alumnos = [e for e in estados if not e['motivo']]
+
         if not alumnos:
-            return jsonify({
-                'ok': True,
-                'generados': 0,
-                'tokens': [],
-                'mensaje': 'Todos los alumnos ya tienen un token vigente'
-            })
- 
+            if alumno_ids and len(estados) == 1:
+                mensaje = f"{estados[0]['apellido']}, {estados[0]['nombre']}: {estados[0]['motivo'].lower()}."
+            elif alumno_ids and not estados:
+                mensaje = 'El alumno no está activo en la carrera.'
+            else:
+                mensaje = ('Todos los alumnos activos ya tienen un token disponible '
+                           'o una inscripción en curso en este ciclo.')
+            return jsonify({'ok': True, 'generados': 0, 'tokens': [], 'mensaje': mensaje})
+
+        # Un token vencido sigue marcado como disponible y no dejaría crear
+        # uno nuevo para el mismo alumno: se anula antes del reemplazo.
+        cur.execute("""
+            UPDATE tokens_inscripcion
+            SET estado = 'anulado', anulado_en = now(), anulado_por = %s
+            WHERE alumno_id = ANY(%s) AND ciclo_lectivo = %s
+              AND estado = 'disponible' AND vence_el < CURRENT_DATE
+        """, (session['user_id'], [a['id'] for a in alumnos], ciclo))
+
         vence = _vencimiento_token(cur)
         tokens = _generar_tokens(cur, len(alumnos))
         generados = []
@@ -6842,15 +6897,15 @@ def api_tokens_reinscripcion():
                      vence_el, generado_por)
                 VALUES (%s, 'reinscripcion', %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (t, a[0], carrera_id, ciclo, vence, session['user_id']))
+            """, (t, a['id'], carrera_id, ciclo, vence, session['user_id']))
             generados.append({
                 'id':        cur.fetchone()[0],
                 'token':     t,
-                'alumno_id': a[0],
-                'alumno':    f"{a[1]}, {a[2]}",
-                'dni':       a[3],
-                'email':     a[4],
-                'celular':   a[5],
+                'alumno_id': a['id'],
+                'alumno':    f"{a['apellido']}, {a['nombre']}",
+                'dni':       a['dni_raw'],
+                'email':     a['email'],
+                'celular':   a['celular'],
             })
  
         conn.commit()

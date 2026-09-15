@@ -384,6 +384,8 @@
                             max-height:260px; overflow-y:auto; margin-top:4px; }
         .tok-lista-alumnos div{ padding:9px 12px; cursor:pointer; font-size:0.86rem; border-bottom:1px solid var(--sga-crema-2); }
         .tok-lista-alumnos div:hover{ background:var(--sga-crema-2); }
+        .tok-lista-alumnos div.tok-no-disp{ cursor:default; color:var(--sga-texto-gris); background:#FAFAF7; }
+        .tok-lista-alumnos div.tok-no-disp:hover{ background:#FAFAF7; }
         .tok-elegido{ display:inline-flex; align-items:center; gap:8px; background:#DCF5E5; color:var(--sga-exito);
                       border-radius:20px; padding:6px 12px; font-size:0.85rem; font-weight:600; }
         .tok-elegido button{ border:none; background:none; color:inherit; cursor:pointer; font-size:1rem; line-height:1; }
@@ -1913,7 +1915,7 @@
                     <input type="radio" name="tok-alcance" value="uno" checked onchange="tokCambiarAlcance()"> Un alumno
                 </label>
                 <label style="font-size:0.86rem; cursor:pointer;">
-                    <input type="radio" name="tok-alcance" value="todos" onchange="tokCambiarAlcance()"> Todos los que no tengan un token disponible
+                    <input type="radio" name="tok-alcance" value="todos" onchange="tokCambiarAlcance()"> Todos los que todavía no tengan token ni inscripción
                 </label>
             </div>
             <button class="btn-nuevo" id="tok-btn-generar" onclick="tokGenerar()">🔑 Generar</button>
@@ -1921,8 +1923,8 @@
         <div id="tok-alumno-wrap" style="display:none; margin-top:14px; max-width:520px;">
             <div id="tok-alumno-buscador" style="position:relative;">
                 <input type="text" id="tok-alumno-buscar" class="input-edit-ficha" autocomplete="off"
-                       placeholder="Buscar alumno por apellido, nombre o DNI..." oninput="tokBuscarAlumno()">
-                <div id="tok-alumno-lista" class="tok-lista-alumnos" style="display:none;"></div>
+                       placeholder="Buscar alumno por apellido, nombre o DNI..." oninput="tokBuscarAlumno()" onkeydown="tokTecladoAlumno(event)">
+                <div id="tok-alumno-lista" class="tok-lista-alumnos" style="display:none;" onmousedown="event.preventDefault()"></div>
             </div>
             <div id="tok-alumno-elegido" style="display:none;"></div>
         </div>
@@ -7622,6 +7624,7 @@
         document.getElementById('tok-filtro-tipo').value = '';
         document.getElementById('tok-resultado').style.display = 'none';
         document.getElementById('tok-gen-mensaje').style.display = 'none';
+        tokAlumnos = null;
         tokLimpiarAlumno();
         tokCambiarTipo();
         tokCargarVentana();
@@ -7710,24 +7713,64 @@
         const lista = document.getElementById('tok-alumno-lista');
         if (q.length < 2) { lista.style.display = 'none'; return; }
         if (!tokAlumnos) {
-            try { tokAlumnos = await (await fetch('/api/alumnos')).json(); }
+            try { tokAlumnos = await (await fetch('/api/tokens/reinscripcion/alumnos')).json(); }
             catch (e) { tokAlumnos = []; }
             if (!Array.isArray(tokAlumnos)) tokAlumnos = [];
         }
         const qn = q.replace(/\./g, '');
-        const res = tokAlumnos.filter(a => a.activo && (
+        const res = tokAlumnos.filter(a =>
             `${a.apellido} ${a.nombre}`.toLowerCase().includes(q) ||
             `${a.nombre} ${a.apellido}`.toLowerCase().includes(q) ||
-            String(a.dni_raw || '').includes(qn))).slice(0, 8);
+            String(a.dni_raw || '').includes(qn)).slice(0, 12);
+        tokIdxAlumno = -1;
         lista.innerHTML = res.length
-            ? res.map(a => `<div onclick="tokElegirAlumno(${a.id})"><strong>${preiEsc(a.apellido)}, ${preiEsc(a.nombre)}</strong>
-                   <span style="color:var(--sga-texto-gris);"> · ${preiEsc(a.dni)}</span></div>`).join('')
-            : '<div style="cursor:default; color:var(--sga-texto-gris);">No hay alumnos activos con ese criterio.</div>';
+            ? res.map(a => a.motivo
+                ? `<div class="tok-no-disp"><strong>${preiEsc(a.apellido)}, ${preiEsc(a.nombre)}</strong>
+                     · ${preiEsc(a.dni)}<br><span style="font-size:0.76rem;">${preiEsc(a.motivo)}</span></div>`
+                : `<div class="tok-opcion" data-id="${a.id}" onclick="tokElegirAlumno(${a.id})">
+                     <strong>${preiEsc(a.apellido)}, ${preiEsc(a.nombre)}</strong>
+                     <span style="color:var(--sga-texto-gris);"> · ${preiEsc(a.dni)}</span></div>`).join('')
+            : '<div class="tok-no-disp">No hay alumnos activos con ese criterio.</div>';
         lista.style.display = 'block';
+        // Con una sola opción disponible, queda marcada para elegirla con Enter
+        if (lista.querySelectorAll('.tok-opcion').length === 1) tokMoverAlumno(1);
+    }
+
+    // ── Teclado en el buscador: flechas para moverse, Enter para elegir ──
+    let tokIdxAlumno = -1;
+
+    function tokMoverAlumno(paso) {
+        const opciones = document.querySelectorAll('#tok-alumno-lista .tok-opcion');
+        if (!opciones.length) return;
+        tokIdxAlumno = Math.max(0, Math.min(opciones.length - 1, tokIdxAlumno + paso));
+        opciones.forEach((o, k) => o.classList.toggle('item-resaltado-teclado', k === tokIdxAlumno));
+        opciones[tokIdxAlumno].scrollIntoView({ block: 'nearest' });
+    }
+
+    function tokTecladoAlumno(e) {
+        const lista = document.getElementById('tok-alumno-lista');
+        const abierta = lista.style.display === 'block';
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!abierta) { tokBuscarAlumno(); return; }
+            tokMoverAlumno(1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (abierta) tokMoverAlumno(-1);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const opciones = lista.querySelectorAll('.tok-opcion');
+            if (abierta && tokIdxAlumno >= 0 && opciones[tokIdxAlumno]) {
+                tokElegirAlumno(parseInt(opciones[tokIdxAlumno].dataset.id, 10));
+            }
+        } else if (e.key === 'Escape') {
+            lista.style.display = 'none';
+            tokIdxAlumno = -1;
+        }
     }
 
     function tokElegirAlumno(id) {
-        tokAlumnoElegido = (tokAlumnos || []).find(a => a.id === id) || null;
+        tokAlumnoElegido = (tokAlumnos || []).find(a => a.id === id && !a.motivo) || null;
         if (!tokAlumnoElegido) return;
         document.getElementById('tok-alumno-lista').style.display = 'none';
         document.getElementById('tok-alumno-buscador').style.display = 'none';
@@ -7759,7 +7802,7 @@
                     'Ese alumno ya tiene un token disponible. Buscalo en la lista de abajo para copiarlo o compartirlo.');
             } else {
                 tokPedirConfirmacion('Generar tokens de reinscripción',
-                    'Se va a generar un token para cada alumno activo de la carrera que no tenga uno disponible. ¿Continuar?',
+                    'Se va a generar un token para cada alumno activo que no tenga uno disponible ni una inscripción en curso en este ciclo. ¿Continuar?',
                     'Generar', () => tokEjecutarGeneracion('/api/tokens/reinscripcion', {}));
             }
             return;
@@ -7785,7 +7828,7 @@
         btn.disabled = false;
         if (d.error) { mostrarMensaje('tok-gen-mensaje', d.error, 'error', 6000); return; }
         if (!d.tokens || !d.tokens.length) {
-            mostrarMensaje('tok-gen-mensaje', mensajeSinNuevos || d.mensaje || 'No se generó ningún token.', 'info', 8000);
+            mostrarMensaje('tok-gen-mensaje', d.mensaje || mensajeSinNuevos || 'No se generó ningún token.', 'info', 8000);
             return;
         }
         tokGenerados = d.tokens.map(t => Object.assign({ tipo, vence_el: d.vence_el, estado: 'disponible' }, t));
@@ -7793,6 +7836,7 @@
             `${tokGenerados.length} ${tokGenerados.length === 1 ? 'token generado' : 'tokens generados'} · vencen el ${tokFecha(d.vence_el)}`;
         document.getElementById('tok-resultado-tabla').innerHTML = tokTabla(tokGenerados, 'gen', false);
         document.getElementById('tok-resultado').style.display = 'block';
+        tokAlumnos = null;
         tokLimpiarAlumno();
         tokCargarLista();
     }
@@ -7946,6 +7990,7 @@
             'Anular', async () => {
                 const d = await (await fetch(`/api/tokens/${t.id}/anular`, { method: 'POST' })).json();
                 if (d.error) throw new Error(d.error);
+                tokAlumnos = null;
                 tokCargarLista();
             });
     }
