@@ -430,6 +430,7 @@ button{font-family:inherit; cursor:pointer;}
             <label for="f-email">Correo electr&oacute;nico</label>
             <div class="input-wrap"><input type="email" id="f-email" maxlength="150" autocomplete="email"></div>
             <div class="ayuda-campo">Ac&aacute; vas a recibir el token para reinscribirte el a&ntilde;o que viene.</div>
+            <div class="msg msg-error oculto" id="f-email-aviso" style="margin:8px 0 0;"></div>
           </div>
  
           <div class="fila">
@@ -775,6 +776,71 @@ button{font-family:inherit; cursor:pointer;}
     else $('lista-materias').innerHTML = '';
   }
  
+  // ---- Correo: proveedores aceptados y sugerencia de tipeo ----
+  var dominiosEmail = [];
+
+  function distanciaEdicion(a, b){
+    var previa = [], i, j;
+    for (j = 0; j <= b.length; j++) previa.push(j);
+    for (i = 1; i <= a.length; i++) {
+      var actual = [i];
+      for (j = 1; j <= b.length; j++) {
+        actual.push(Math.min(previa[j] + 1, actual[j - 1] + 1,
+                             previa[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)));
+      }
+      previa = actual;
+    }
+    return previa[b.length];
+  }
+
+  // Devuelve null si está bien; si no, {texto, sugerido}
+  function revisarEmail(valor){
+    var v = (valor || '').trim().toLowerCase();
+    var at = v.lastIndexOf('@');
+    if (at < 1 || !dominiosEmail.length) return null;
+    var usuario = v.slice(0, at), dominio = v.slice(at + 1);
+    if (!dominio) return null;
+    var ok = dominiosEmail.some(function(d){
+      return d.indexOf('*.') === 0 ? dominio.slice(-(d.length - 1)) === d.slice(1) : dominio === d;
+    });
+    if (ok) return null;
+    var mejor = null, dist = 99;
+    dominiosEmail.forEach(function(d){
+      if (d.indexOf('*.') === 0) return;
+      var x = distanciaEdicion(dominio, d);
+      if (x < dist) { dist = x; mejor = d; }
+    });
+    if (mejor && dist <= 2) {
+      return { texto: '\u00bfQuisiste escribir ' + usuario + '@' + mejor + '?',
+               sugerido: usuario + '@' + mejor };
+    }
+    return { texto: 'Us\u00e1 un correo de un proveedor conocido (por ejemplo Gmail, Hotmail u Outlook).',
+             sugerido: null };
+  }
+
+  function mostrarAvisoEmail(){
+    var caja = $('f-email-aviso');
+    var r = revisarEmail($('f-email').value);
+    if (!r) { caja.classList.add('oculto'); caja.innerHTML = ''; return null; }
+    caja.innerHTML = '';
+    caja.appendChild(document.createTextNode(r.texto + ' '));
+    if (r.sugerido) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = 'Usar ' + r.sugerido;
+      b.style.cssText = 'border:none;background:none;color:var(--verde-medio);font-weight:700;' +
+                        'text-decoration:underline;padding:0;cursor:pointer;font-size:inherit;';
+      b.onclick = function(){
+        $('f-email').value = r.sugerido;
+        caja.classList.add('oculto');
+        limpiarError('error-form');
+      };
+      caja.appendChild(b);
+    }
+    caja.classList.remove('oculto');
+    return r;
+  }
+
   function escaparHtml(t){
     return String(t == null ? '' : t).replace(/[&<>"']/g, function(c){
       return {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c];
@@ -883,6 +949,12 @@ button{font-family:inherit; cursor:pointer;}
         document.querySelector('#lista-materias input.mat-cb:not(:disabled)'))
       faltantes.push('al menos una materia para cursar');
  
+    if (!faltantes.length && payload.email && mostrarAvisoEmail()) {
+      mostrarError('error-form', 'Revis\u00e1 el correo electr\u00f3nico antes de enviar.');
+      window.scrollTo(0, 0);
+      return;
+    }
+
     if (faltantes.length) {
       mostrarError('error-form', 'Falta completar: ' + faltantes.join(', ') + '.');
       window.scrollTo(0, 0);
@@ -981,6 +1053,15 @@ button{font-family:inherit; cursor:pointer;}
     limpiarError('error-form');
   });
 
+  // El aviso aparece un momento después de dejar de escribir, no al salir del
+  // campo: si apareciera al hacer clic en Enviar, correría el botón y el clic se perdería.
+  var timerEmail = null;
+  $('f-email').addEventListener('input', function(){
+    $('f-email-aviso').classList.add('oculto');
+    clearTimeout(timerEmail);
+    timerEmail = setTimeout(mostrarAvisoEmail, 700);
+  });
+
   $('btn-enviar').addEventListener('click', enviarFormulario);
  
   $('btn-cancelar').addEventListener('click', function(){
@@ -997,6 +1078,7 @@ button{font-family:inherit; cursor:pointer;}
   fetch('/api/inscripcion/estado')
     .then(function(r){ return r.json(); })
     .then(function(d){
+      dominiosEmail = d.email_dominios || [];
       if (d.instituto) {
         $('pie-instituto').textContent = d.instituto;
       }

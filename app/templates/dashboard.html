@@ -347,6 +347,19 @@
         .prei-dato .et{ color:var(--sga-texto-gris); flex-shrink:0; }
         .prei-dato .va{ font-weight:600; text-align:right; word-break:break-word; }
         .prei-aviso{ padding:14px 18px; border-radius:10px; margin-bottom:16px; font-size:0.88rem; line-height:1.55; }
+        .prei-ayuda{ font-size:0.8rem; color:var(--sga-texto-gris); margin:-4px 0 10px; line-height:1.5; }
+        .prei-cambios-wrap{ overflow-x:auto; }
+        .prei-cambios{ width:100%; border-collapse:collapse; font-size:0.86rem; }
+        .prei-cambios th{ text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em;
+                          color:var(--sga-texto-gris); padding:6px 10px; border-bottom:1px solid var(--sga-borde); }
+        .prei-cambios td{ padding:8px 10px; border-bottom:1px solid var(--sga-crema-2); vertical-align:top; word-break:break-word; }
+        .prei-cambios tr:last-child td{ border-bottom:none; }
+        .prei-sin-dato{ color:var(--sga-texto-gris); font-style:italic; }
+        .prei-chip{ padding:2px 9px; border-radius:20px; font-size:0.7rem; font-weight:700; white-space:nowrap; }
+        .prei-chip.completo{ background:#DCF5E5; color:var(--sga-exito); }
+        .prei-chip.modifico{ background:#FFF4D6; color:#7A5500; }
+        .prei-chip.borro{ background:#FBEAEA; color:var(--sga-error); }
+        .prei-aviso-mini{ font-size:0.78rem; color:#9e2a2a; background:#FBEAEA; border-radius:8px; padding:6px 10px; margin:6px 0; line-height:1.45; }
         .prei-antes{ color:var(--sga-texto-gris); text-decoration:line-through; }
         .prei-materia{ padding:7px 0; font-size:0.86rem; border-bottom:1px solid var(--sga-crema-2); }
         .prei-materia:last-child{ border-bottom:none; }
@@ -7250,12 +7263,29 @@
 
         // Cambios respecto del legajo (reinscripción pendiente)
         if (d.cambios && d.cambios.length) {
+            const sinDato = '<span class="prei-sin-dato">Sin cargar</span>';
+            const filas = d.cambios.map(c => {
+                const chip = !c.antes ? '<span class="prei-chip completo">Completó</span>'
+                           : !c.despues ? '<span class="prei-chip borro">Borró</span>'
+                           : '<span class="prei-chip modifico">Modificó</span>';
+                return `<tr>
+                    <td>${preiEsc(c.campo)}</td>
+                    <td>${c.antes ? preiEsc(c.antes) : sinDato}</td>
+                    <td><strong>${c.despues ? preiEsc(c.despues) : sinDato}</strong></td>
+                    <td>${chip}</td>
+                </tr>`;
+            }).join('');
             html += `<div class="prei-bloque" style="margin-bottom:16px; border-color:#F2D27A;">
-                <h4 style="color:#7A5500;">Datos que cambió respecto del legajo</h4>
-                ${d.cambios.map(c => `
-                    <div class="prei-dato"><span class="et">${preiEsc(c.campo)}</span>
-                        <span class="va"><span class="prei-antes">${preiEsc(c.antes || '(vacío)')}</span>
-                        &nbsp;→&nbsp; ${preiEsc(c.despues || '(vacío)')}</span></div>`).join('')}
+                <h4 style="color:#7A5500;">Datos que el alumno actualizó (${d.cambios.length})</h4>
+                <p class="prei-ayuda">
+                    <strong>En el legajo</strong> es lo que figura hoy en el sistema;
+                    <strong>Cargó ahora</strong> es lo que escribió el alumno en el formulario.
+                    Al aprobar, el legajo queda con los datos de <strong>Cargó ahora</strong>.
+                </p>
+                <div class="prei-cambios-wrap"><table class="prei-cambios">
+                    <thead><tr><th>Dato</th><th>En el legajo</th><th>Cargó ahora</th><th></th></tr></thead>
+                    <tbody>${filas}</tbody>
+                </table></div>
             </div>`;
         } else if (d.tipo === 'reinscripcion' && d.estado === 'pendiente') {
             html += `<div style="font-size:0.84rem; color:var(--sga-texto-gris); margin:-4px 4px 14px;">
@@ -7273,6 +7303,7 @@
             </div>
             <div class="prei-bloque"><h4>Contacto y domicilio</h4>
                 ${_preiDato('Correo', x.email)}
+                ${d.email_aviso ? `<div class="prei-aviso-mini">⚠️ ${preiEsc(d.email_aviso)}</div>` : ''}
                 ${_preiDato('Celular', x.celular)}
                 ${_preiDato('Teléfono', x.telefono)}
                 ${_preiDato('Dirección', x.direccion)}
@@ -7323,7 +7354,9 @@
             reinscripcion: `Se van a actualizar los datos de ${nombre} y se lo va a inscribir a <strong>${(d.materias || []).length} ${(d.materias || []).length === 1 ? 'materia' : 'materias'}</strong>, si siguen habilitadas.`,
         };
         document.getElementById('modal-prei-aprobar-texto').innerHTML =
-            `<p>${textos[d.tipo] || ''}</p><p>Esta acción no se puede deshacer desde esta pantalla.</p>`;
+            `<p>${textos[d.tipo] || ''}</p>` +
+            (d.email_aviso ? `<div class="prei-aviso-mini">⚠️ ${preiEsc(d.email_aviso)} Si el correo está mal, conviene rechazarla indicando el motivo.</div>` : '') +
+            `<p>Esta acción no se puede deshacer desde esta pantalla.</p>`;
         document.getElementById('modal-prei-aprobar-error').style.display = 'none';
         const btn = document.getElementById('modal-prei-aprobar-btn');
         btn.disabled = false;

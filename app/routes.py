@@ -1922,6 +1922,15 @@ def api_alumnos_crear():
     row = cur.fetchone()
     anio_lectivo = int(row[0]) if row else 2026
 
+    email_alumno = (data.get('email') or '').strip()
+    if email_alumno:
+        err_mail = (validar_email(email_alumno)
+                    or revisar_dominio_email(email_alumno, _dominios_email(cur)))
+        if err_mail:
+            cur.close()
+            conn.close()
+            return jsonify({'error': err_mail}), 400
+
     anio_ingreso = data.get('anio_ingreso')
     try:
         anio_ingreso = int(anio_ingreso) if anio_ingreso else anio_lectivo
@@ -2008,7 +2017,7 @@ def api_alumnos_editar(aid):
     cur = conn.cursor()
 
     # Obtener documento actual del alumno
-    cur.execute("SELECT dni, tipo_documento FROM alumnos WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
+    cur.execute("SELECT dni, tipo_documento, email FROM alumnos WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
     row = cur.fetchone()
     if not row:
         cur.close()
@@ -2017,6 +2026,15 @@ def api_alumnos_editar(aid):
 
     dni_actual           = row[0]
     tipo_documento_actual = row[1] or 'DNI'
+
+    email_alumno = (data.get('email') or '').strip()
+    if email_alumno and email_alumno.lower() != (row[2] or '').strip().lower():
+        err_mail = (validar_email(email_alumno)
+                    or revisar_dominio_email(email_alumno, _dominios_email(cur)))
+        if err_mail:
+            cur.close()
+            conn.close()
+            return jsonify({'error': err_mail}), 400
     documento_cambia      = (dni != dni_actual) or (tipo_documento != tipo_documento_actual)
 
     # Solo el coordinador puede cambiar el documento (número o tipo)
@@ -6917,7 +6935,8 @@ def api_inscripcion_estado():
         return jsonify({
             'abierta': abierta,
             'motivo': motivo,
-            'instituto': instituto
+            'instituto': instituto,
+            'email_dominios': _dominios_email(cur),
         })
     finally:
         cur.close()
@@ -7092,6 +7111,57 @@ def validar_email(email):
     return None
  
  
+_DOMINIOS_EMAIL_DEFECTO = (
+    'gmail.com, hotmail.com, hotmail.com.ar, outlook.com, outlook.com.ar, '
+    'live.com, live.com.ar, msn.com, yahoo.com, yahoo.com.ar, icloud.com, '
+    'me.com, proton.me, protonmail.com, *.edu.ar'
+)
+
+
+def _dominios_email(cur):
+    """Dominios aceptados, desde configuración (clave email_dominios_permitidos)."""
+    valor = _get_config(cur, 'email_dominios_permitidos', _DOMINIOS_EMAIL_DEFECTO)
+    return [d.strip().lower() for d in valor.split(',') if d.strip()]
+
+
+def _dominio_aceptado(dominio, permitidos):
+    for d in permitidos:
+        if d.startswith('*.'):
+            if dominio.endswith(d[1:]):      # "*.edu.ar" acepta "ies9.edu.ar"
+                return True
+        elif dominio == d:
+            return True
+    return False
+
+
+def _distancia_edicion(a, b):
+    """Cantidad mínima de letras a cambiar, agregar o quitar para pasar de a a b."""
+    previa = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        actual = [i]
+        for j, cb in enumerate(b, 1):
+            actual.append(min(previa[j] + 1, actual[j - 1] + 1, previa[j - 1] + (ca != cb)))
+        previa = actual
+    return previa[-1]
+
+
+def revisar_dominio_email(email, permitidos):
+    """
+    None si el dominio del correo está aceptado. Si no, un mensaje para el
+    usuario, con una sugerencia cuando parece un error de tipeo (gmsil.com).
+    """
+    usuario, _, dominio = (email or '').strip().lower().rpartition('@')
+    if not dominio or _dominio_aceptado(dominio, permitidos):
+        return None
+    candidatos = [d for d in permitidos if not d.startswith('*.')]
+    if candidatos:
+        sugerido = min(candidatos, key=lambda d: _distancia_edicion(dominio, d))
+        if _distancia_edicion(dominio, sugerido) <= 2:
+            return f'Revisá el correo: ¿quisiste escribir {usuario}@{sugerido}?'
+    return ('El correo tiene que ser de un proveedor conocido '
+            '(por ejemplo Gmail, Hotmail u Outlook).')
+
+
 def _limpiar_telefono(valor):
     """Deja solo dígitos, espacios y guiones. Corta el largo de más."""
     if not valor:
@@ -7281,7 +7351,7 @@ def api_inscripcion_guardar():
  
         # ---------- Contacto ----------
         email = (data.get('email') or '').strip().lower()
-        err = validar_email(email)
+        err = validar_email(email) or revisar_dominio_email(email, _dominios_email(cur))
         if err:
             conn.rollback()
             return jsonify({'error': err}), 400
@@ -7607,6 +7677,8 @@ def api_preinscripciones_detalle(pid):
             'datos':         datos,
             'materias':      materias,
             'cambios':       cambios,
+            'email_aviso':   (revisar_dominio_email(datos.get('email'), _dominios_email(cur))
+                              if datos.get('email') else None),
         })
     finally:
         cur.close()
