@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 from .database import get_db
+from . import correo
 from functools import wraps
 from io import BytesIO
 import json
@@ -6655,7 +6656,8 @@ def api_tokens_listar():
     carrera = _carrera_tokens(request.args.get('carrera_id', type=int))
     estado  = (request.args.get('estado') or '').strip()
     tipo    = (request.args.get('tipo') or '').strip()
- 
+    ids     = [int(x) for x in (request.args.get('ids') or '').split(',') if x.strip().isdigit()]
+
     filtros = ["t.ciclo_lectivo = %s"]
     params  = [ciclo]
     if carrera:
@@ -6667,7 +6669,10 @@ def api_tokens_listar():
     if tipo in ('ingresante', 'reinscripcion', 'alta'):
         filtros.append("t.tipo = %s")
         params.append(tipo)
- 
+    if ids:
+        filtros.append("t.id = ANY(%s)")
+        params.append(ids)
+
     conn = get_db()
     cur = conn.cursor()
     cur.execute(f"""
@@ -6676,7 +6681,9 @@ def api_tokens_listar():
                c.nombre_corto, c.nombre,
                t.generado_en, t.usado_en,
                u.apellido, u.nombre,
-               p.id, p.estado
+               p.id, p.estado,
+               t.email_destino, t.email_estado, t.email_error,
+               t.email_enviado_en, t.email_solicitado_en
         FROM tokens_inscripcion t
         LEFT JOIN alumnos  a ON a.id = t.alumno_id
         LEFT JOIN carreras c ON c.id = t.carrera_id
@@ -6688,7 +6695,7 @@ def api_tokens_listar():
     rows = cur.fetchall()
     cur.close()
     conn.close()
- 
+
     hoy = date.today()
     return jsonify([{
         'id':             r[0],
@@ -6708,61 +6715,103 @@ def api_tokens_listar():
         'generado_por':   f"{r[15]}, {r[16]}" if r[15] else None,
         'preinscripcion_id':     r[17],
         'preinscripcion_estado': r[18],
+        'email_destino':  r[19],
+        'correo':         _estado_correo(r[20], r[21], r[22], r[23]),
     } for r in rows])
- 
- 
+
+
+def _estado_correo(estado, error, enviado_en, solicitado_en):
+    """Resumen del envío de un token para la pantalla."""
+    if estado == 'pendiente' and solicitado_en and \
+            (datetime.now() - solicitado_en).total_seconds() > 600:
+        estado, error = 'error', 'El envío no se completó. Probá reenviarlo.'
+    return {
+        'estado':     estado,
+        'error':      error,
+        'enviado_en': enviado_en.strftime('%d/%m/%Y %H:%M') if (enviado_en and estado == 'enviado') else None,
+    }
+
+
+def _url_publica():
+    """Dirección del sistema para el enlace del correo."""
+    return (os.environ.get('SGA_URL_PUBLICA') or request.url_root).rstrip('/')
+
+
+def _enviar_tokens_por_correo(cur, token_ids):
+    """Lanza el envío en segundo plano (llamar después del commit)."""
+    if token_ids:
+        correo.despachar(token_ids, _url_publica(),
+                         _get_config(cur, 'nombre_instituto', 'el instituto'))
+
+
 def _generar_tokens_sin_alumno(tipo):
     """
-    Genera tokens sueltos, sin alumno asociado, para quien todavía no
-    está en el sistema:
+    Genera un token suelto, sin alumno asociado, para quien todavía no
+    está en el sistema, y se lo envía por correo:
       - ingresante: empieza la carrera este ciclo.
       - alta: ya cursa la carrera pero no está cargado (carga inicial).
     """
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     carrera_id = _carrera_tokens(data.get('carrera_id'))
-    cantidad   = data.get('cantidad') or 1
- 
+    email = (data.get('email') or '').strip().lower()
+
     if not carrera_id:
         return jsonify({'error': 'La carrera es obligatoria'}), 400
-    try:
-        cantidad = int(cantidad)
-    except (TypeError, ValueError):
-        return jsonify({'error': 'Cantidad inválida'}), 400
-    if cantidad < 1 or cantidad > 50:
-        return jsonify({'error': 'La cantidad debe estar entre 1 y 50'}), 400
- 
+    if not email:
+        return jsonify({'error': 'Indicá el correo del alumno para enviarle el token.'}), 400
+
     ciclo = get_ciclo_lectivo()['anio_inicio']
- 
+
     conn = get_db()
     cur = conn.cursor()
     try:
+        err = validar_email(email) or revisar_dominio_email(email, _dominios_email(cur))
+        if err:
+            return jsonify({'error': err}), 400
+
+        # Evita entregar dos tokens vivos al mismo correo por error
+        cur.execute("""
+            SELECT token FROM tokens_inscripcion
+            WHERE lower(email_destino) = %s AND carrera_id = %s AND ciclo_lectivo = %s
+              AND estado = 'disponible' AND vence_el >= CURRENT_DATE
+            LIMIT 1
+        """, (email, carrera_id, ciclo))
+        previo = cur.fetchone()
+        if previo:
+            return jsonify({
+                'error': f'Ya hay un token disponible enviado a ese correo ({previo[0]}). '
+                         'Si no le llegó, reenvialo desde "Ver tokens entregados".'
+            }), 409
+
         vence = _vencimiento_token(cur)
-        tokens = _generar_tokens(cur, cantidad)
-        generados = []
-        for t in tokens:
-            cur.execute("""
-                INSERT INTO tokens_inscripcion
-                    (token, tipo, alumno_id, carrera_id, ciclo_lectivo,
-                     vence_el, generado_por)
-                VALUES (%s, %s, NULL, %s, %s, %s, %s)
-                RETURNING id
-            """, (t, tipo, carrera_id, ciclo, vence, session['user_id']))
-            generados.append({'id': cur.fetchone()[0], 'token': t})
+        token = _generar_tokens(cur, 1)[0]
+        cur.execute("""
+            INSERT INTO tokens_inscripcion
+                (token, tipo, alumno_id, carrera_id, ciclo_lectivo, vence_el, generado_por,
+                 email_destino, email_estado, email_solicitado_en)
+            VALUES (%s, %s, NULL, %s, %s, %s, %s, %s, 'pendiente', now())
+            RETURNING id
+        """, (token, tipo, carrera_id, ciclo, vence, session['user_id'], email))
+        tid = cur.fetchone()[0]
         conn.commit()
+        _enviar_tokens_por_correo(cur, [tid])
         return jsonify({
             'ok': True,
             'ciclo_lectivo': ciclo,
             'vence_el': vence.isoformat(),
-            'tokens': generados
+            'tokens': [{
+                'id': tid, 'token': token, 'email_destino': email,
+                'correo': {'estado': 'pendiente', 'error': None, 'enviado_en': None},
+            }],
         })
     except Exception:
         conn.rollback()
-        return jsonify({'error': 'No se pudieron generar los tokens'}), 500
+        return jsonify({'error': 'No se pudo generar el token'}), 500
     finally:
         cur.close()
         conn.close()
- 
- 
+
+
 @auth.route('/api/tokens/ingresante', methods=['POST'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_tokens_ingresante():
@@ -6795,10 +6844,14 @@ def _estado_reinscripcion_alumnos(cur, carrera_id, ciclo, alumno_ids=None):
         params.append([int(x) for x in alumno_ids])
     cur.execute(f"""
         SELECT a.id, a.apellido, a.nombre, a.dni, a.tipo_documento, a.email, a.celular,
-               tk.id, tk.token, tk.vence_el, pr.id, pr.estado
+               tk.id, tk.token, tk.vence_el, pr.id, pr.estado,
+               tk.email_destino, tk.email_estado, tk.email_error,
+               tk.email_enviado_en, tk.email_solicitado_en
         FROM alumnos a
         LEFT JOIN LATERAL (
-            SELECT t.id, t.token, t.vence_el FROM tokens_inscripcion t
+            SELECT t.id, t.token, t.vence_el, t.email_destino, t.email_estado,
+                   t.email_error, t.email_enviado_en, t.email_solicitado_en
+            FROM tokens_inscripcion t
             WHERE t.alumno_id = a.id AND t.ciclo_lectivo = %s
               AND t.estado = 'disponible' AND t.vence_el >= CURRENT_DATE
             ORDER BY t.generado_en DESC LIMIT 1
@@ -6834,6 +6887,8 @@ def _estado_reinscripcion_alumnos(cur, carrera_id, ciclo, alumno_ids=None):
             'vence_el':              f[9].isoformat() if f[9] else None,
             'preinscripcion_id':     f[10],
             'preinscripcion_estado': f[11],
+            'token_email_destino':   f[12],
+            'token_correo':          _estado_correo(f[13], f[14], f[15], f[16]) if f[7] else None,
             'motivo':                motivo,
         })
     return resultado
@@ -6861,9 +6916,10 @@ def api_tokens_reinscripcion():
     todavía no tengan uno vivo en el ciclo. Si vienen `alumno_ids`, se
     limita a esos.
     """
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     carrera_id = _carrera_tokens(data.get('carrera_id'))
     alumno_ids = data.get('alumno_ids') or None
+    email_nuevo = (data.get('email') or '').strip().lower()
  
     if not carrera_id:
         return jsonify({'error': 'La carrera es obligatoria'}), 400
@@ -6877,6 +6933,18 @@ def api_tokens_reinscripcion():
             estados = _estado_reinscripcion_alumnos(cur, carrera_id, ciclo, alumno_ids)
         except (TypeError, ValueError):
             return jsonify({'error': 'La lista de alumnos no es válida'}), 400
+
+        # Un solo alumno: se puede cargar o corregir su correo en el momento
+        if alumno_ids and len(estados) == 1 and not estados[0]['motivo']:
+            if email_nuevo and email_nuevo != (estados[0]['email'] or '').lower():
+                err = validar_email(email_nuevo) or revisar_dominio_email(email_nuevo, _dominios_email(cur))
+                if err:
+                    return jsonify({'error': err}), 400
+                cur.execute("UPDATE alumnos SET email = %s WHERE id = %s", (email_nuevo, estados[0]['id']))
+                estados[0]['email'] = email_nuevo
+            if not estados[0]['email']:
+                return jsonify({'error': 'El alumno no tiene correo cargado. '
+                                         'Indicá uno para enviarle el token.'}), 400
         alumnos = [e for e in estados if not e['motivo']]
 
         if not alumnos:
@@ -6903,13 +6971,17 @@ def api_tokens_reinscripcion():
         generados = []
  
         for a, t in zip(alumnos, tokens):
+            destino = (a['email'] or '').strip().lower() or None
             cur.execute("""
                 INSERT INTO tokens_inscripcion
                     (token, tipo, alumno_id, carrera_id, ciclo_lectivo,
-                     vence_el, generado_por)
-                VALUES (%s, 'reinscripcion', %s, %s, %s, %s, %s)
+                     vence_el, generado_por, email_destino, email_estado,
+                     email_error, email_solicitado_en)
+                VALUES (%s, 'reinscripcion', %s, %s, %s, %s, %s, %s, %s, %s, now())
                 RETURNING id
-            """, (t, a['id'], carrera_id, ciclo, vence, session['user_id']))
+            """, (t, a['id'], carrera_id, ciclo, vence, session['user_id'],
+                  destino, 'pendiente' if destino else 'error',
+                  None if destino else 'El alumno no tiene correo cargado.'))
             generados.append({
                 'id':        cur.fetchone()[0],
                 'token':     t,
@@ -6918,13 +6990,19 @@ def api_tokens_reinscripcion():
                 'dni':       a['dni_raw'],
                 'email':     a['email'],
                 'celular':   a['celular'],
+                'email_destino': destino,
+                'correo': {'estado': 'pendiente' if destino else 'error',
+                           'error': None if destino else 'El alumno no tiene correo cargado.',
+                           'enviado_en': None},
             })
  
         conn.commit()
+        _enviar_tokens_por_correo(cur, [g['id'] for g in generados if g['email_destino']])
         return jsonify({
             'ok': True,
             'ciclo_lectivo': ciclo,
             'vence_el': vence.isoformat(),
+            'sin_correo': sum(1 for g in generados if not g['email_destino']),
             'generados': len(generados),
             'tokens': generados
         })
@@ -6936,6 +7014,67 @@ def api_tokens_reinscripcion():
         conn.close()
  
  
+@auth.route('/api/tokens/<int:tid>/reenviar', methods=['POST'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_tokens_reenviar(tid):
+    """
+    Vuelve a enviar un token disponible. Se puede indicar otro correo: si el
+    token es de un alumno cargado, también se corrige en su legajo.
+    """
+    data = request.get_json(silent=True) or {}
+    email_nuevo = (data.get('email') or '').strip().lower()
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT t.estado, t.vence_el, t.alumno_id, t.email_destino,
+                   (t.email_solicitado_en > now() - interval '60 seconds') AS reciente
+            FROM tokens_inscripcion t
+            WHERE t.id = %s AND t.carrera_id = %s
+            FOR UPDATE
+        """, (tid, _carrera_tokens()))
+        f = cur.fetchone()
+        if not f:
+            return jsonify({'error': 'Token no encontrado'}), 404
+        estado, vence, alumno_id, destino_actual, reciente = f
+        if estado != 'disponible':
+            return jsonify({'error': 'Solo se pueden enviar tokens disponibles.'}), 409
+        if vence < date.today():
+            return jsonify({'error': 'El token está vencido. Generá uno nuevo.'}), 409
+        if reciente:
+            return jsonify({'error': 'Se envió hace menos de un minuto. Esperá un momento antes de reenviarlo.'}), 429
+
+        destino = email_nuevo or (destino_actual or '').lower()
+        if not destino and alumno_id:
+            cur.execute("SELECT email FROM alumnos WHERE id = %s", (alumno_id,))
+            fila = cur.fetchone()
+            destino = ((fila[0] if fila else '') or '').strip().lower()
+        if not destino:
+            return jsonify({'error': 'Indicá el correo del alumno.'}), 400
+        err = validar_email(destino) or revisar_dominio_email(destino, _dominios_email(cur))
+        if err:
+            return jsonify({'error': err}), 400
+
+        if alumno_id and email_nuevo:
+            cur.execute("UPDATE alumnos SET email = %s WHERE id = %s", (email_nuevo, alumno_id))
+        cur.execute("""
+            UPDATE tokens_inscripcion
+            SET email_destino = %s, email_estado = 'pendiente',
+                email_error = NULL, email_solicitado_en = now()
+            WHERE id = %s
+        """, (destino, tid))
+        conn.commit()
+        _enviar_tokens_por_correo(cur, [tid])
+        return jsonify({'ok': True, 'email_destino': destino})
+    except Exception:
+        conn.rollback()
+        return jsonify({'error': 'No se pudo reenviar el token.'}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 @auth.route('/api/autoinscripcion/ventana', methods=['GET'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_autoinscripcion_ventana_get():

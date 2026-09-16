@@ -416,6 +416,15 @@
         .tok-fin{ display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; }
         .tok-lista-alumnos .tok-estado-mini{ display:block; font-size:0.76rem; margin-top:2px; }
 
+        /* ── TOKENS: correo ── */
+        .tok-correo{ display:inline-block; padding:3px 10px; border-radius:20px; font-size:0.72rem; font-weight:700; white-space:nowrap; }
+        .tok-correo.ok{ background:#DCF5E5; color:var(--sga-exito); }
+        .tok-correo.pend{ background:#FFF4D6; color:#7A5500; }
+        .tok-correo.err{ background:#FBEAEA; color:var(--sga-error); }
+        .tok-correo.sin{ background:#F1EFE8; color:#6B7280; }
+        .tok-correo-dato{ display:block; font-size:0.76rem; color:var(--sga-texto-gris); margin-top:3px; word-break:break-word; }
+        .tok-grande-correo{ margin-top:16px; padding-top:14px; border-top:1px solid var(--sga-crema-2); }
+
         /* ── MESAS DE EXAMEN ── */
         .mesas-stats-fila{ display:flex; gap:14px; margin-bottom:22px; flex-wrap:wrap; }
         .mesas-stat-card{
@@ -1908,12 +1917,12 @@
     </div>
 </div>
 
-<!-- TOKENS DE INSCRIPCIÓN (pantalla por pasos) -->
+<!-- TOKENS DE INSCRIPCIÓN (pantalla por pasos, entrega por correo) -->
 <div class="seccion" id="sec-tokens">
     <div class="seccion-header">
         <div>
             <h2>Tokens de inscripción</h2>
-            <div class="sub">Códigos que se entregan en preceptoría para que el alumno complete la inscripción en línea</div>
+            <div class="sub">Códigos que se envían por correo para que el alumno complete la inscripción en línea</div>
         </div>
     </div>
 
@@ -1925,12 +1934,12 @@
             <button class="tok-opcion-card tok-solo-pc" onclick="tokIr('tipo')">
                 <span class="ico">🔑</span>
                 <strong>Entregar un token</strong>
-                <span class="txt">Generá o reenviá el código de un alumno después de revisar sus papeles.</span>
+                <span class="txt">Generá el código de un alumno después de revisar sus papeles. Se le envía por correo.</span>
             </button>
             <button class="tok-opcion-card" onclick="tokIr('lista')">
                 <span class="ico">📋</span>
                 <strong>Ver tokens entregados</strong>
-                <span class="txt" id="tok-resumen">Consultá, copiá o reenviá los tokens de este ciclo.</span>
+                <span class="txt" id="tok-resumen">Consultá los tokens de este ciclo y reenvialos si no llegaron.</span>
             </button>
         </div>
     </div>
@@ -1939,7 +1948,7 @@
     <div class="tok-vista" id="tok-paso-tipo">
         <button class="tok-volver" onclick="history.back()">← Volver</button>
         <h3 class="tok-pregunta">¿A quién le vas a entregar el token?</h3>
-        <p class="tok-bajada">Elegí la situación del alumno. Cada token sirve para una sola inscripción.</p>
+        <p class="tok-bajada">Elegí la situación del alumno. Cada token sirve para una sola inscripción y se envía por correo.</p>
         <div class="tok-opciones">
             <button class="tok-opcion-card" onclick="tokIr('buscar')">
                 <span class="ico">👤</span>
@@ -1959,17 +1968,23 @@
         </div>
         <div class="tok-secundario">
             ¿Empieza el período de reinscripción?
-            <a href="#" onclick="tokIr('masivo'); return false;">Generar tokens para todos los alumnos del sistema</a>
+            <a href="#" onclick="tokIr('masivo'); return false;">Generar y enviar tokens a todos los alumnos del sistema</a>
         </div>
     </div>
 
-    <!-- Paso 2a: confirmar un token suelto -->
+    <!-- Paso 2a: token suelto con el correo del alumno -->
     <div class="tok-vista" id="tok-paso-confirmar">
         <button class="tok-volver" onclick="history.back()">← Volver</button>
         <h3 class="tok-pregunta" id="tok-conf-tipo-titulo"></h3>
         <p class="tok-bajada" id="tok-conf-tipo-texto"></p>
-        <button class="btn-nuevo" id="tok-btn-suelto" onclick="tokGenerarSuelto()">🔑 Generar token</button>
-        <div id="tok-suelto-mensaje" style="display:none; margin-top:14px;"></div>
+        <div class="campo-edit" style="max-width:420px;">
+            <label>Correo del alumno <span style="color:#c00;">*</span></label>
+            <input type="email" id="tok-suelto-email" class="input-edit-ficha" autocomplete="off"
+                   placeholder="nombre@gmail.com" onkeydown="if (event.key === 'Enter') tokGenerarSuelto()">
+        </div>
+        <p class="tok-bajada" style="margin-top:-6px;">Le vamos a enviar el token y el enlace para inscribirse.</p>
+        <button class="btn-nuevo" id="tok-btn-suelto" onclick="tokGenerarSuelto()">✉ Generar y enviar</button>
+        <div id="tok-suelto-mensaje" style="display:none; margin-top:14px; max-width:620px;"></div>
     </div>
 
     <!-- Paso 2b: buscar alumno -->
@@ -1990,12 +2005,12 @@
         <div id="tok-alumno-cuerpo"></div>
     </div>
 
-    <!-- Paso 2c: generación para todos -->
+    <!-- Paso 2c: todos los alumnos -->
     <div class="tok-vista" id="tok-paso-masivo">
         <button class="tok-volver" onclick="history.back()">← Volver</button>
         <h3 class="tok-pregunta">Tokens de reinscripción para todos</h3>
-        <p class="tok-bajada">Se genera un token para cada alumno activo que todavía no tenga token ni inscripción en este ciclo.
-            Los que ya tienen uno no se tocan.</p>
+        <p class="tok-bajada">Se genera un token para cada alumno activo que todavía no tenga token ni inscripción en este ciclo,
+            y se le envía al correo de su legajo. Los que ya tienen uno no se tocan.</p>
         <div id="tok-masivo-resumen" class="tok-bajada">Calculando…</div>
         <button class="btn-nuevo" id="tok-btn-masivo" onclick="tokGenerarMasivo()" style="display:none;"></button>
         <div id="tok-masivo-mensaje" style="display:none; margin-top:14px;"></div>
@@ -2028,13 +2043,35 @@
         <div class="barra-filtros" style="margin-bottom:12px;">
             <div style="position:relative; flex:1;">
                 <input type="text" id="tok-buscar" autocomplete="off"
-                       placeholder="Buscar por token, apellido, nombre o DNI..." oninput="tokRenderLista()">
+                       placeholder="Buscar por token, apellido, nombre, DNI o correo..." oninput="tokRenderLista()">
             </div>
         </div>
         <div class="tabla-card">
             <div id="tok-cargando" class="cargando" style="display:none">Cargando tokens...</div>
             <div id="tok-vacio" class="empty-state" style="display:none; padding:40px;"></div>
             <div id="tok-tabla-wrap" style="display:none; overflow-x:auto;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: reenviar un token por correo -->
+<div id="modal-tok-reenviar" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:480px;">
+        <div class="modal-card-header"><h3>Reenviar token por correo</h3></div>
+        <div class="modal-card-body">
+            <p id="tok-reenv-texto"></p>
+            <div class="campo-edit">
+                <label>Correo del alumno</label>
+                <input type="email" id="tok-reenv-email" class="input-edit-ficha" autocomplete="off"
+                       onkeydown="if (event.key === 'Enter') tokConfirmarReenvio()">
+            </div>
+            <p id="tok-reenv-nota" style="font-size:0.8rem;"></p>
+            <div id="tok-reenv-error" style="display:none; color:var(--sga-error); font-size:0.84rem;"></div>
+        </div>
+        <div class="modal-card-footer">
+            <button class="modal-btn-cancelar" onclick="cerrarModal('modal-tok-reenviar')">Cancelar</button>
+            <button class="modal-btn-confirmar" id="tok-reenv-btn" style="background:var(--sga-verde-medio);"
+                    onclick="tokConfirmarReenvio()">Enviar</button>
         </div>
     </div>
 </div>
@@ -7675,7 +7712,7 @@
     }
 
     // ══════════════════════════════════════════════════════
-    // TOKENS DE INSCRIPCIÓN — pantalla por pasos
+    // TOKENS DE INSCRIPCIÓN — pantalla por pasos, entrega por correo
     // ══════════════════════════════════════════════════════
     let tokVentana = null;
     let tokLista = [];
@@ -7686,6 +7723,10 @@
     let tokTipoSuelto = null;
     let tokAccionPendiente = null;
     let tokIdxAlumno = -1;
+    let tokVistaActual = 'inicio';
+    let tokReenvio = null;
+    let tokTimerEnvios = null;
+    let tokVueltasEnvios = 0;
 
     const TOK_VISTAS = ['inicio', 'tipo', 'confirmar', 'buscar', 'alumno', 'masivo', 'resultado', 'lista'];
     const TOK_TIPOS = { ingresante: 'Alumno nuevo', alta: 'Alta (ya cursa)', reinscripcion: 'Reinscripción' };
@@ -7717,6 +7758,8 @@
     function _tokMostrar(vista, estado) {
         estado = estado || {};
         if (vista === 'resultado' && !tokGenerados.length) vista = 'inicio';
+        tokVistaActual = vista;
+        clearTimeout(tokTimerEnvios);
         TOK_VISTAS.forEach(v => {
             document.getElementById('tok-paso-' + v).style.display = (v === vista) ? 'block' : 'none';
         });
@@ -7743,7 +7786,7 @@
         _tokMostrar('resultado');
     }
 
-    // ── Estado de la inscripción en línea ──
+    // ── Estado del formulario de los alumnos ──
     async function tokCargarVentana() {
         const caja = document.getElementById('tok-ventana');
         let v;
@@ -7752,16 +7795,19 @@
         if (v.error) return;
         tokVentana = v;
         const rango = (v.fecha_inicio || v.fecha_fin)
-            ? ` · ${v.fecha_inicio ? 'desde el ' + tokFecha(v.fecha_inicio) : ''}${v.fecha_inicio && v.fecha_fin ? ' ' : ''}${v.fecha_fin ? 'hasta el ' + tokFecha(v.fecha_fin) : ''}`
+            ? ` ${v.fecha_inicio ? 'desde el ' + tokFecha(v.fecha_inicio) : ''}${v.fecha_inicio && v.fecha_fin ? ' ' : ''}${v.fecha_fin ? 'hasta el ' + tokFecha(v.fecha_fin) : ''}`
             : '';
+        const vigencia = `Los tokens nuevos valen ${v.vigencia_dias} días.`;
+        const texto = v.abierta
+            ? `🟢 <strong>Formulario de los alumnos: abierto</strong>${rango}. ${vigencia}`
+            : `⚪ <strong>Formulario de los alumnos: cerrado.</strong> Pueden recibir su token, pero no van a poder usarlo
+               hasta que ${v.puede_editar ? 'abras el formulario desde Configurar' : 'el coordinador abra el formulario'}.
+               ${rango ? '(Programado' + rango + '.) ' : ''}${vigencia}`;
         caja.style.cssText = (v.abierta
             ? 'background:#E6F9EE; border:1.5px solid #B7E4C7; color:#1a6e3c;'
             : 'background:#F7F5F0; border:1.5px solid var(--sga-borde); color:var(--sga-texto-gris);') +
             'display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 16px;';
-        caja.innerHTML = `<div style="font-size:0.86rem;">
-                <strong>${v.abierta ? '🟢 Inscripción en línea abierta' : '⚪ Inscripción en línea cerrada'}</strong>${rango}
-                · los tokens nuevos valen ${v.vigencia_dias} días
-            </div>
+        caja.innerHTML = `<div style="font-size:0.86rem; line-height:1.5;">${texto}</div>
             ${v.puede_editar ? '<button class="btn-secundario tok-accion tok-solo-pc" onclick="tokAbrirVentana()">⚙ Configurar</button>' : ''}`;
     }
 
@@ -7801,12 +7847,65 @@
         try {
             const d = await (await fetch('/api/tokens?estado=disponible')).json();
             if (Array.isArray(d)) {
-                const vivos = d.filter(t => !t.vencido).length;
-                el.textContent = vivos
-                    ? `${vivos} ${vivos === 1 ? 'token disponible' : 'tokens disponibles'} en este ciclo. Consultalos, copialos o reenvialos.`
+                const vivos = d.filter(t => !t.vencido);
+                const fallidos = vivos.filter(t => t.correo && t.correo.estado === 'error').length;
+                el.textContent = vivos.length
+                    ? `${vivos.length} ${vivos.length === 1 ? 'token disponible' : 'tokens disponibles'} en este ciclo` +
+                      (fallidos ? ` · ${fallidos} con el correo sin enviar.` : '.')
                     : 'No hay tokens disponibles en este ciclo. Consultá los usados o anulados.';
             }
         } catch (e) { /* se deja el texto por defecto */ }
+    }
+
+    // ── Estado del correo ──
+    function tokCorreoHtml(t) {
+        const c = t.correo || {};
+        const dest = t.email_destino ? preiEsc(t.email_destino) : '';
+        if (c.estado === 'enviado') {
+            return `<span class="tok-correo ok">✉ Enviado</span><span class="tok-correo-dato">${dest}${c.enviado_en ? ' · ' + c.enviado_en : ''}</span>`;
+        }
+        if (c.estado === 'pendiente') {
+            return `<span class="tok-correo pend">⏳ Enviando…</span><span class="tok-correo-dato">${dest}</span>`;
+        }
+        if (c.estado === 'error') {
+            return `<span class="tok-correo err">⚠ No se envió</span><span class="tok-correo-dato">${preiEsc(c.error || '')}${dest ? ' · ' + dest : ''}</span>`;
+        }
+        return '<span class="tok-correo sin">Sin enviar</span>';
+    }
+
+    function tokHayEnviosPendientes(lista) {
+        return lista.some(t => t && t.correo && t.correo.estado === 'pendiente');
+    }
+
+    // Mientras haya correos saliendo, se consulta cada 3 segundos (hasta 3 minutos)
+    function tokSeguirEnvios(lista, reiniciar) {
+        clearTimeout(tokTimerEnvios);
+        if (reiniciar) tokVueltasEnvios = 0;
+        if (!tokHayEnviosPendientes(lista) || tokVueltasEnvios >= 60) return;
+        const vista = tokVistaActual;
+        tokTimerEnvios = setTimeout(async () => {
+            if (tokVistaActual !== vista) return;
+            tokVueltasEnvios++;
+            if (vista === 'resultado') {
+                const ids = tokGenerados.map(t => t.id).join(',');
+                try {
+                    const d = await (await fetch('/api/tokens?ids=' + ids)).json();
+                    if (Array.isArray(d)) {
+                        const porId = {};
+                        d.forEach(t => { porId[t.id] = t; });
+                        tokGenerados = tokGenerados.map(t => porId[t.id]
+                            ? Object.assign({}, t, { correo: porId[t.id].correo, email_destino: porId[t.id].email_destino })
+                            : t);
+                    }
+                } catch (e) { /* se reintenta en la próxima vuelta */ }
+                if (tokVistaActual === vista) tokRenderResultado(true);
+            } else if (vista === 'alumno' && history.state) {
+                tokAlumnos = null;
+                tokMostrarAlumno(history.state.tokAlumnoId, true);
+            } else if (vista === 'lista') {
+                tokCargarLista(true);
+            }
+        }, 3000);
     }
 
     // ── Token suelto (alumno nuevo o alta) ──
@@ -7815,20 +7914,27 @@
         document.getElementById('tok-conf-tipo-titulo').textContent = TOK_TITULOS[tokTipoSuelto];
         document.getElementById('tok-conf-tipo-texto').textContent = (tokTipoSuelto === 'alta')
             ? 'Para alguien que ya cursa la carrera pero todavía no figura en el sistema. Va a cargar sus datos y su año de ingreso. ' +
-              'Entregalo después de revisar su documentación.'
+              'Generalo después de revisar su documentación.'
             : 'Para alguien que empieza la carrera. Va a cargar sus datos desde cero y, cuando apruebes su preinscripción, ' +
-              'queda inscripto a todas las materias de 1° año. Entregalo después de revisar su documentación.';
+              'queda inscripto a todas las materias de 1° año. Generalo después de revisar su documentación.';
+        document.getElementById('tok-suelto-email').value = '';
         document.getElementById('tok-suelto-mensaje').style.display = 'none';
         document.getElementById('tok-btn-suelto').disabled = false;
+        setTimeout(() => document.getElementById('tok-suelto-email').focus(), 50);
     }
 
     async function tokGenerarSuelto() {
         const btn = document.getElementById('tok-btn-suelto');
+        const email = document.getElementById('tok-suelto-email').value.trim();
+        if (!email) {
+            mostrarMensaje('tok-suelto-mensaje', 'Escribí el correo del alumno para enviarle el token.', 'alerta', 0);
+            return;
+        }
         btn.disabled = true;
         let d;
         try {
             d = await (await fetch('/api/tokens/' + tokTipoSuelto, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cantidad: 1 })
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email })
             })).json();
         } catch (e) { d = { error: 'No se pudo conectar con el servidor.' }; }
         btn.disabled = false;
@@ -7856,6 +7962,7 @@
                 ? '<span class="tok-estado-mini" style="color:#2D6CA8;">Ya se inscribió en este ciclo</span>'
                 : '<span class="tok-estado-mini" style="color:#7A5500;">Tiene una inscripción pendiente de revisión</span>';
         }
+        if (!a.email) return '<span class="tok-estado-mini" style="color:var(--sga-texto-gris);">Sin correo cargado</span>';
         return '';
     }
 
@@ -7915,10 +8022,11 @@
     }
 
     // ── Situación del alumno elegido ──
-    async function tokMostrarAlumno(id) {
+    async function tokMostrarAlumno(id, silencioso) {
         const cuerpo = document.getElementById('tok-alumno-cuerpo');
-        cuerpo.innerHTML = '<div class="cargando">Cargando…</div>';
+        if (!silencioso) cuerpo.innerHTML = '<div class="cargando">Cargando…</div>';
         const alumnos = await tokAsegurarAlumnos();
+        if (tokVistaActual !== 'alumno') return;
         const a = alumnos.find(x => x.id === id);
         if (!a) {
             cuerpo.innerHTML = '<p class="tok-bajada">No se encontró el alumno o ya no está activo.</p>';
@@ -7926,17 +8034,23 @@
         }
         const nombre = `${a.apellido}, ${a.nombre}`;
         let html = `<h3 class="tok-pregunta">${preiEsc(nombre)}</h3>
-                    <p class="tok-bajada">DNI ${preiEsc(a.dni)}${a.celular ? ' · Celular ' + preiEsc(a.celular) : ''}</p>`;
+                    <p class="tok-bajada">DNI ${preiEsc(a.dni)}</p>`;
 
         if (a.token) {
             tokTokenAlumno = { id: a.token_id, token: a.token, tipo: 'reinscripcion', alumno: nombre,
-                               vence_el: a.vence_el, celular: a.celular, estado: 'disponible' };
-            html += `<p class="tok-bajada">Ya tiene un token disponible. Podés volver a mandárselo o imprimirlo.</p>
-                     ${tokTarjeta(tokTokenAlumno, "tokWhatsApp('alumno', 0)", "tokImprimir([tokTokenAlumno])")}
+                               vence_el: a.vence_el, estado: 'disponible',
+                               email_destino: a.token_email_destino, correo: a.token_correo };
+            html += `<p class="tok-bajada">Ya tiene un token disponible.</p>
+                     ${tokTarjeta(tokTokenAlumno, "tokAbrirReenvio('alumno', 0)")}
                      <div class="tok-secundario tok-solo-pc">¿Se lo pasaron a otra persona o lo perdió?
                         <a href="#" onclick="tokPedirAnular('alumno', 0); return false;">Anular este token</a>
                         y generale uno nuevo.</div>`;
-        } else if (a.preinscripcion_id) {
+            cuerpo.innerHTML = html;
+            tokSeguirEnvios([tokTokenAlumno], !silencioso);
+            return;
+        }
+        tokTokenAlumno = null;
+        if (a.preinscripcion_id) {
             const aprobada = a.preinscripcion_estado === 'aprobada';
             html += `<div class="prei-aviso" style="background:#E5F0F8; border:1.5px solid #BBD4EA; color:#1a3a6e; max-width:620px;">
                         ${aprobada
@@ -7947,19 +8061,34 @@
         } else {
             html += `<p class="tok-bajada">Todavía no tiene un token para este ciclo. Con el token va a confirmar sus datos
                         con el DNI y elegir las materias que puede cursar.</p>
-                     <button class="btn-nuevo tok-solo-pc" id="tok-btn-alumno" onclick="tokGenerarParaAlumno(${a.id})">🔑 Generar token</button>
-                     <div id="tok-alumno-mensaje" style="display:none; margin-top:14px;"></div>`;
+                     <div class="campo-edit tok-solo-pc" style="max-width:420px;">
+                        <label>Correo del alumno <span style="color:#c00;">*</span></label>
+                        <input type="email" id="tok-alumno-email" class="input-edit-ficha" autocomplete="off"
+                               value="${preiEsc(a.email || '')}" placeholder="nombre@gmail.com"
+                               onkeydown="if (event.key === 'Enter') tokGenerarParaAlumno(${a.id})">
+                     </div>
+                     <p class="tok-bajada tok-solo-pc" style="margin-top:-6px;">
+                        ${a.email ? 'Es el correo de su legajo. Si lo cambiás, también se actualiza ahí.'
+                                  : 'No tiene correo en su legajo: el que escribas se guarda también ahí.'}</p>
+                     <button class="btn-nuevo tok-solo-pc" id="tok-btn-alumno" onclick="tokGenerarParaAlumno(${a.id})">✉ Generar y enviar</button>
+                     <div id="tok-alumno-mensaje" style="display:none; margin-top:14px; max-width:620px;"></div>`;
         }
         cuerpo.innerHTML = html;
     }
 
     async function tokGenerarParaAlumno(id) {
         const btn = document.getElementById('tok-btn-alumno');
+        const email = (document.getElementById('tok-alumno-email') || {}).value || '';
+        if (!email.trim()) {
+            mostrarMensaje('tok-alumno-mensaje', 'Escribí el correo del alumno para enviarle el token.', 'alerta', 0);
+            return;
+        }
         if (btn) btn.disabled = true;
         let d;
         try {
             d = await (await fetch('/api/tokens/reinscripcion', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alumno_ids: [id] })
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ alumno_ids: [id], email: email.trim() })
             })).json();
         } catch (e) { d = { error: 'No se pudo conectar con el servidor.' }; }
         if (d.error || !d.tokens || !d.tokens.length) {
@@ -7968,7 +8097,7 @@
             return;
         }
         tokAlumnos = null;          // su situación cambió: se vuelve a pedir
-        tokMostrarAlumno(id);       // ahora muestra el token generado
+        tokMostrarAlumno(id);       // ahora muestra el token y el estado del correo
     }
 
     // ── Todos los alumnos ──
@@ -7980,16 +8109,19 @@
         resumen.textContent = 'Calculando…';
         tokAlumnos = null;
         const alumnos = await tokAsegurarAlumnos();
-        const reciben = alumnos.filter(a => !a.motivo).length;
+        const reciben = alumnos.filter(a => !a.motivo);
+        const sinCorreo = reciben.filter(a => !a.email).length;
         const conToken = alumnos.filter(a => a.token).length;
         const inscriptos = alumnos.filter(a => !a.token && a.preinscripcion_id).length;
-        resumen.innerHTML = reciben
-            ? `<strong>${reciben} ${reciben === 1 ? 'alumno va' : 'alumnos van'} a recibir un token.</strong>
+        resumen.innerHTML = reciben.length
+            ? `<strong>${reciben.length} ${reciben.length === 1 ? 'alumno va' : 'alumnos van'} a recibir un token.</strong>
+               ${sinCorreo ? `<br>⚠ ${sinCorreo} no ${sinCorreo === 1 ? 'tiene' : 'tienen'} correo cargado: su token se genera,
+                   pero vas a tener que enviarlo después desde "Ver tokens entregados".` : ''}
                ${conToken ? `<br>${conToken} ya ${conToken === 1 ? 'tiene' : 'tienen'} uno disponible.` : ''}
                ${inscriptos ? `<br>${inscriptos} ya ${inscriptos === 1 ? 'cargó' : 'cargaron'} su inscripción.` : ''}`
             : '<strong>Todos los alumnos activos ya tienen un token disponible o una inscripción en este ciclo.</strong>';
-        if (reciben) {
-            btn.textContent = `🔑 Generar ${reciben} ${reciben === 1 ? 'token' : 'tokens'}`;
+        if (reciben.length) {
+            btn.textContent = `✉ Generar y enviar ${reciben.length} ${reciben.length === 1 ? 'token' : 'tokens'}`;
             btn.style.display = '';
             btn.disabled = false;
         }
@@ -8016,110 +8148,92 @@
     }
 
     // ── Resultado ──
-    function tokTarjeta(t, accionWhatsApp, accionImprimir) {
+    function tokTarjeta(t, accionReenviar) {
         return `<div class="tok-grande">
             <div class="tok-grande-tipo">${TOK_TITULOS[t.tipo] || 'Token'}</div>
             <div class="tok-grande-codigo">${t.token}</div>
             ${t.alumno ? `<div class="tok-grande-dato">${preiEsc(t.alumno)}</div>` : ''}
             <div class="tok-grande-dato">Vence el ${tokFecha(t.vence_el)}</div>
-            <div class="tok-grande-botones">
-                <button class="btn-secundario" onclick="tokCopiar('${t.token}', this)">📋 Copiar</button>
-                <button class="btn-secundario" onclick="${accionWhatsApp}">💬 WhatsApp</button>
-                <button class="btn-secundario" onclick="${accionImprimir}">🖨 Imprimir</button>
+            <div class="tok-grande-correo">
+                ${tokCorreoHtml(t)}
+                ${(t.correo && t.correo.estado !== 'pendiente')
+                    ? `<div style="margin-top:12px;"><button class="btn-secundario tok-accion tok-solo-pc" onclick="${accionReenviar}">✉ Reenviar por correo</button></div>`
+                    : ''}
             </div>
         </div>`;
     }
 
-    function tokRenderResultado() {
+    function tokRenderResultado(silencioso) {
         const cuerpo = document.getElementById('tok-resultado-cuerpo');
         const aviso = (tokVentana && !tokVentana.abierta)
-            ? '<p class="tok-bajada" style="margin-top:14px;">⚠️ La inscripción en línea está cerrada: el alumno va a poder usar el token cuando se abra.</p>'
+            ? '<p class="tok-bajada" style="margin-top:14px;">⚠️ El formulario de los alumnos está cerrado: va a poder usar el token cuando se abra.</p>'
             : '';
         if (tokGenerados.length === 1) {
             cuerpo.innerHTML = `<h3 class="tok-pregunta">✓ Token generado</h3>
-                <p class="tok-bajada">Entregáselo al alumno. Sirve para una sola inscripción.</p>
-                ${tokTarjeta(tokGenerados[0], "tokWhatsApp('gen', 0)", "tokImprimir(tokGenerados)")}${aviso}`;
-            return;
+                <p class="tok-bajada">Se lo enviamos por correo. Si hace falta, también podés dictárselo desde acá.</p>
+                ${tokTarjeta(tokGenerados[0], "tokAbrirReenvio('gen', 0)")}${aviso}`;
+        } else {
+            const n = k => tokGenerados.filter(t => t.correo && t.correo.estado === k).length;
+            cuerpo.innerHTML = `<h3 class="tok-pregunta">✓ ${tokGenerados.length} tokens generados</h3>
+                <p class="tok-bajada">Vencen el ${tokFecha(tokGenerados[0].vence_el)}.
+                    ✉ ${n('enviado')} enviados${n('pendiente') ? ` · ⏳ ${n('pendiente')} enviándose` : ''}${n('error') ? ` · ⚠ ${n('error')} sin enviar` : ''}.
+                    ${n('error') ? 'Los que no se enviaron se pueden reenviar desde la tabla.' : ''}</p>
+                <div class="tabla-card" style="overflow-x:auto;">${tokTabla(tokGenerados, 'gen', false)}</div>${aviso}`;
         }
-        cuerpo.innerHTML = `<h3 class="tok-pregunta">✓ ${tokGenerados.length} tokens generados</h3>
-            <p class="tok-bajada">Vencen el ${tokFecha(tokGenerados[0].vence_el)}. Podés mandarlos uno por uno o imprimirlos todos.</p>
-            <div style="display:flex; gap:8px; margin-bottom:12px;">
-                <button class="btn-secundario" onclick="tokCopiarGenerados(this)">📋 Copiar todos</button>
-                <button class="btn-secundario" onclick="tokImprimir(tokGenerados)">🖨 Imprimir todos</button>
-            </div>
-            <div class="tabla-card" style="overflow-x:auto;">${tokTabla(tokGenerados, 'gen', false)}</div>${aviso}`;
+        tokSeguirEnvios(tokGenerados, !silencioso);
     }
 
-    // ── Compartir ──
-    function tokNumeroWhatsApp(cel) {
-        let d = String(cel || '').replace(/\D/g, '');
-        if (d.startsWith('00')) d = d.slice(2);
-        if (d.startsWith('549')) return d.length >= 12 ? d : '';
-        if (d.startsWith('54'))  return d.length >= 11 ? '549' + d.slice(2) : '';
-        if (d.startsWith('0'))   d = d.slice(1);
-        return d.length === 10 ? '549' + d : '';
-    }
-
-    function tokMensaje(t) {
-        const nombre = t.alumno ? (t.alumno.split(',')[1] || '').trim().split(' ')[0] : '';
-        const que = { ingresante: 'tu inscripción', alta: 'tu registro como alumno', reinscripcion: 'tu reinscripción' }[t.tipo] || 'tu inscripción';
-        const inst = (tokVentana && tokVentana.instituto) ? ` en ${tokVentana.instituto}` : '';
-        return `¡Hola${nombre ? ' ' + nombre : ''}! Este es tu código para completar ${que} en línea${inst}:\n\n` +
-               `*${t.token}*\n\nIngresá en ${location.origin}/inscripcion\n` +
-               `El código vence el ${tokFecha(t.vence_el)} y es personal: no lo compartas.`;
-    }
-
+    // ── Reenviar por correo ──
     function tokDesdeOrigen(origen, i) {
         if (origen === 'alumno') return tokTokenAlumno;
         return (origen === 'gen' ? tokGenerados : tokLista)[i];
     }
 
-    function tokWhatsApp(origen, i) {
+    function tokAbrirReenvio(origen, i) {
         const t = tokDesdeOrigen(origen, i);
         if (!t) return;
-        window.open(`https://wa.me/${tokNumeroWhatsApp(t.celular)}?text=${encodeURIComponent(tokMensaje(t))}`, '_blank', 'noopener');
+        tokReenvio = t;
+        document.getElementById('tok-reenv-texto').innerHTML =
+            `Se va a enviar el token <strong>${t.token}</strong>${t.alumno ? ' de ' + preiEsc(t.alumno) : ''} a este correo:`;
+        document.getElementById('tok-reenv-email').value = t.email_destino || t.email || '';
+        document.getElementById('tok-reenv-nota').textContent = t.alumno_id || t.alumno
+            ? 'Si lo corregís, también se actualiza en el legajo del alumno.' : '';
+        document.getElementById('tok-reenv-error').style.display = 'none';
+        document.getElementById('tok-reenv-btn').disabled = false;
+        abrirModal('modal-tok-reenviar');
+        setTimeout(() => document.getElementById('tok-reenv-email').focus(), 50);
     }
 
-    async function tokCopiar(texto, btn) {
-        try { await navigator.clipboard.writeText(texto); }
-        catch (e) {
-            const ta = document.createElement('textarea');
-            ta.value = texto; document.body.appendChild(ta); ta.select();
-            document.execCommand('copy'); ta.remove();
+    async function tokConfirmarReenvio() {
+        const t = tokReenvio;
+        if (!t) return;
+        const err = document.getElementById('tok-reenv-error');
+        const btn = document.getElementById('tok-reenv-btn');
+        const email = document.getElementById('tok-reenv-email').value.trim();
+        const cambio = email.toLowerCase() !== (t.email_destino || t.email || '').toLowerCase();
+        btn.disabled = true;
+        err.style.display = 'none';
+        let d;
+        try {
+            d = await (await fetch(`/api/tokens/${t.id}/reenviar`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(cambio ? { email } : {})
+            })).json();
+        } catch (e) { d = { error: 'No se pudo conectar con el servidor.' }; }
+        btn.disabled = false;
+        if (d.error) { err.textContent = d.error; err.style.display = 'block'; return; }
+        cerrarModal('modal-tok-reenviar');
+        const pendiente = { estado: 'pendiente', error: null, enviado_en: null };
+        if (tokVistaActual === 'resultado') {
+            tokGenerados = tokGenerados.map(g => g.id === t.id
+                ? Object.assign({}, g, { email_destino: d.email_destino, correo: pendiente }) : g);
+            tokRenderResultado();
+        } else if (tokVistaActual === 'alumno') {
+            tokAlumnos = null;
+            tokMostrarAlumno(history.state && history.state.tokAlumnoId);
+        } else {
+            tokCargarLista(true);
         }
-        if (btn) {
-            const antes = btn.textContent;
-            btn.textContent = '✓ Copiado';
-            setTimeout(() => { btn.textContent = antes; }, 1500);
-        }
-    }
-
-    function tokCopiarGenerados(btn) {
-        tokCopiar(tokGenerados.map(t => t.alumno ? `${t.token} — ${t.alumno}` : t.token).join('\n'), btn);
-    }
-
-    function tokImprimir(lista) {
-        if (!lista || !lista.length) return;
-        const w = window.open('', '_blank');
-        if (!w) { alert('El navegador bloqueó la ventana de impresión. Permití las ventanas emergentes para este sitio.'); return; }
-        const inst = (tokVentana && tokVentana.instituto) ? tokVentana.instituto + ' · ' : '';
-        const url = location.origin + '/inscripcion';
-        w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Tokens de inscripción</title><style>
-            body{ font-family:Arial, sans-serif; margin:24px; color:#222; }
-            .t{ border:1.5px dashed #888; border-radius:12px; padding:16px 20px; margin:0 0 16px;
-                width:440px; page-break-inside:avoid; }
-            .s{ font-size:12px; color:#555; line-height:1.5; }
-            .c{ font-family:'Courier New', monospace; font-size:30px; font-weight:bold; letter-spacing:4px; margin:8px 0; }
-        </style></head><body>` + lista.map(t => `<div class="t">
-            <div class="s">${preiEsc(inst)}Inscripción en línea · ${TOK_TITULOS[t.tipo] || 'Token'}</div>
-            ${t.alumno ? `<div><strong>${preiEsc(t.alumno)}</strong></div>` : ''}
-            <div class="c">${t.token}</div>
-            <div class="s">Ingresá en <strong>${preiEsc(url)}</strong><br>
-            Vence el ${tokFecha(t.vence_el)}. Es personal: no lo compartas.</div></div>`).join('') +
-            '</body></html>');
-        w.document.close();
-        w.focus();
-        setTimeout(() => w.print(), 300);
     }
 
     // ── Lista de tokens entregados ──
@@ -8128,7 +8242,7 @@
         tokCargarLista();
     }
 
-    async function tokCargarLista() {
+    async function tokCargarLista(silencioso) {
         const cargando = document.getElementById('tok-cargando');
         document.querySelectorAll('.tok-filtro').forEach(b => {
             const activo = b.dataset.estado === tokEstado;
@@ -8136,13 +8250,16 @@
             b.style.color       = activo ? '#fff' : '';
             b.style.borderColor = activo ? 'var(--sga-verde-medio)' : '';
         });
-        cargando.style.display = 'block';
-        document.getElementById('tok-vacio').style.display = 'none';
-        document.getElementById('tok-tabla-wrap').style.display = 'none';
+        if (!silencioso) {
+            cargando.style.display = 'block';
+            document.getElementById('tok-vacio').style.display = 'none';
+            document.getElementById('tok-tabla-wrap').style.display = 'none';
+        }
         let d;
         try { d = await (await fetch('/api/tokens' + (tokEstado ? '?estado=' + tokEstado : ''))).json(); }
         catch (e) { d = { error: 'No se pudo conectar con el servidor.' }; }
         cargando.style.display = 'none';
+        if (tokVistaActual !== 'lista') return;
         tokLista = Array.isArray(d) ? d : [];
         if (d.error) {
             const v = document.getElementById('tok-vacio');
@@ -8151,6 +8268,7 @@
             return;
         }
         tokRenderLista();
+        tokSeguirEnvios(tokLista, !silencioso);
     }
 
     function tokRenderLista() {
@@ -8161,7 +8279,7 @@
         tokLista.forEach((t, i) => {
             if (tipo && t.tipo !== tipo) return;
             if (q) {
-                const texto = `${t.token} ${t.alumno || ''}`.toLowerCase();
+                const texto = `${t.token} ${t.alumno || ''} ${t.email_destino || ''}`.toLowerCase();
                 const tokenPlano = t.token.replace(/-/g, '').toLowerCase();
                 if (!texto.includes(q) && !(qn && (tokenPlano.includes(qn) || String(t.dni || '').includes(qn)))) return;
             }
@@ -8184,7 +8302,7 @@
 
     function tokTabla(filas, origen, conAnular) {
         return `<table class="tabla-alumnos">
-            <thead><tr><th>Token</th><th>Tipo</th><th>Alumno</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
+            <thead><tr><th>Token</th><th>Tipo</th><th>Alumno</th><th>Estado</th><th>Correo</th><th>Vence</th><th></th></tr></thead>
             <tbody>${filas.map((t, pos) => {
                 const i = origen === 'gen' ? pos : t._i;
                 let estado;
@@ -8197,17 +8315,18 @@
                     estado = t.vencido ? '<span class="tok-estado vencido">Vencido</span>' : '<span class="tok-estado disponible">Disponible</span>';
                 }
                 const vivo = t.estado === 'disponible' && !t.vencido;
+                const enviando = t.correo && t.correo.estado === 'pendiente';
                 const acciones = [
-                    `<button class="btn-secundario tok-accion" onclick="tokCopiar('${t.token}', this)">📋 Copiar</button>`,
-                    vivo ? `<button class="btn-secundario tok-accion" onclick="tokWhatsApp('${origen}', ${i})">💬 WhatsApp</button>` : '',
+                    (vivo && !enviando) ? `<button class="btn-secundario tok-accion tok-solo-pc" onclick="tokAbrirReenvio('${origen}', ${i})">✉ ${t.correo && t.correo.estado ? 'Reenviar' : 'Enviar'}</button>` : '',
                     (conAnular && t.estado === 'disponible')
                         ? `<button class="btn-secundario tok-accion tok-solo-pc" style="color:var(--sga-error);" onclick="tokPedirAnular('lista', ${i})">Anular</button>` : '',
                 ].join('');
                 return `<tr>
                     <td data-label="Token"><span class="tok-codigo">${t.token}</span></td>
                     <td data-label="Tipo"><span class="prei-tipo ${t.tipo}">${TOK_TIPOS[t.tipo] || t.tipo}</span></td>
-                    <td data-label="Alumno">${t.alumno ? preiEsc(t.alumno) : '<span style="color:var(--sga-texto-gris);">—</span>'}</td>
+                    <td data-label="Alumno">${t.alumno ? preiEsc(t.alumno) : '<span style="color:var(--sga-texto-gris);">Todavía sin cargar</span>'}</td>
                     <td data-label="Estado">${estado}</td>
+                    <td data-label="Correo">${t.estado === 'disponible' || (t.correo && t.correo.estado) ? tokCorreoHtml(t) : '—'}</td>
                     <td data-label="Vence">${tokFecha(t.vence_el)}</td>
                     <td><div class="tok-acciones">${acciones}</div></td>
                 </tr>`;
@@ -8229,8 +8348,7 @@
                 const d = await (await fetch(`/api/tokens/${t.id}/anular`, { method: 'POST' })).json();
                 if (d.error) throw new Error(d.error);
                 tokAlumnos = null;
-                const vista = (history.state && history.state.tokVista) || '';
-                if (vista === 'alumno') tokMostrarAlumno(history.state.tokAlumnoId);
+                if (tokVistaActual === 'alumno') tokMostrarAlumno(history.state && history.state.tokAlumnoId);
                 else tokCargarLista();
             });
     }
