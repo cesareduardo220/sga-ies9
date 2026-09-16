@@ -390,6 +390,32 @@
                       border-radius:20px; padding:6px 12px; font-size:0.85rem; font-weight:600; }
         .tok-elegido button{ border:none; background:none; color:inherit; cursor:pointer; font-size:1rem; line-height:1; }
 
+        /* ── TOKENS: pantalla por pasos ── */
+        .tok-vista{ display:none; }
+        .tok-volver{ background:none; border:none; color:var(--sga-verde-medio); font-weight:700;
+                     font-size:0.88rem; cursor:pointer; padding:0; margin-bottom:14px; }
+        .tok-pregunta{ font-size:1.15rem; margin:0 0 6px; }
+        .tok-bajada{ font-size:0.88rem; color:var(--sga-texto-gris); margin:0 0 20px; line-height:1.55; max-width:680px; }
+        .tok-opciones{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; }
+        .tok-opcion-card{ text-align:left; background:#fff; border:1.5px solid var(--sga-borde); border-radius:16px;
+                          padding:22px; cursor:pointer; box-shadow:var(--sga-sombra); display:flex; flex-direction:column;
+                          gap:8px; font-family:inherit; transition:border-color .15s, transform .15s; }
+        .tok-opcion-card:hover{ border-color:var(--sga-verde-medio); transform:translateY(-2px); }
+        .tok-opcion-card .ico{ font-size:1.7rem; }
+        .tok-opcion-card strong{ font-size:1rem; color:var(--sga-texto-oscuro); }
+        .tok-opcion-card span.txt{ font-size:0.84rem; color:var(--sga-texto-gris); line-height:1.5; }
+        .tok-secundario{ margin-top:22px; font-size:0.85rem; color:var(--sga-texto-gris); }
+        .tok-secundario a{ color:var(--sga-verde-medio); font-weight:700; }
+        .tok-grande{ background:#fff; border:1.5px solid #B7E4C7; border-radius:18px; padding:26px 28px;
+                     box-shadow:var(--sga-sombra); max-width:520px; }
+        .tok-grande-tipo{ font-size:0.74rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sga-verde-medio); font-weight:700; }
+        .tok-grande-codigo{ font-family:ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+                            font-size:2.3rem; font-weight:800; letter-spacing:0.12em; margin:10px 0 6px; }
+        .tok-grande-dato{ font-size:0.9rem; color:var(--sga-texto-gris); margin-bottom:2px; }
+        .tok-grande-botones{ display:flex; gap:8px; flex-wrap:wrap; margin-top:18px; }
+        .tok-fin{ display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; }
+        .tok-lista-alumnos .tok-estado-mini{ display:block; font-size:0.76rem; margin-top:2px; }
+
         /* ── MESAS DE EXAMEN ── */
         .mesas-stats-fila{ display:flex; gap:14px; margin-bottom:22px; flex-wrap:wrap; }
         .mesas-stat-card{
@@ -1882,7 +1908,7 @@
     </div>
 </div>
 
-<!-- TOKENS DE INSCRIPCIÓN -->
+<!-- TOKENS DE INSCRIPCIÓN (pantalla por pasos) -->
 <div class="seccion" id="sec-tokens">
     <div class="seccion-header">
         <div>
@@ -1891,82 +1917,125 @@
         </div>
     </div>
 
-    <!-- Estado de la inscripción en línea -->
     <div id="tok-ventana" class="prei-aviso" style="display:none;"></div>
 
-    <!-- Generar -->
-    <div class="tok-card tok-solo-pc">
-        <h4>Generar tokens</h4>
-        <div class="tok-fila">
-            <div class="campo-edit" style="min-width:240px;">
-                <label>Tipo</label>
-                <select id="tok-tipo" class="input-edit-ficha" onchange="tokCambiarTipo()">
-                    <option value="ingresante">Ingresante (empieza la carrera)</option>
-                    <option value="alta">Alta de alumno que ya cursa</option>
-                    <option value="reinscripcion">Reinscripción (alumno ya cargado)</option>
-                </select>
-            </div>
-            <div class="campo-edit" id="tok-cantidad-wrap" style="width:120px;">
-                <label>Cantidad</label>
-                <input type="number" id="tok-cantidad" class="input-edit-ficha" min="1" max="50" value="1">
-            </div>
-            <div id="tok-alcance-wrap" style="display:none; padding-bottom:8px;">
-                <label style="margin-right:14px; font-size:0.86rem; cursor:pointer;">
-                    <input type="radio" name="tok-alcance" value="uno" checked onchange="tokCambiarAlcance()"> Un alumno
-                </label>
-                <label style="font-size:0.86rem; cursor:pointer;">
-                    <input type="radio" name="tok-alcance" value="todos" onchange="tokCambiarAlcance()"> Todos los que todavía no tengan token ni inscripción
-                </label>
-            </div>
-            <button class="btn-nuevo" id="tok-btn-generar" onclick="tokGenerar()">🔑 Generar</button>
+    <!-- Paso 0: inicio -->
+    <div class="tok-vista" id="tok-paso-inicio">
+        <div class="tok-opciones">
+            <button class="tok-opcion-card tok-solo-pc" onclick="tokIr('tipo')">
+                <span class="ico">🔑</span>
+                <strong>Entregar un token</strong>
+                <span class="txt">Generá o reenviá el código de un alumno después de revisar sus papeles.</span>
+            </button>
+            <button class="tok-opcion-card" onclick="tokIr('lista')">
+                <span class="ico">📋</span>
+                <strong>Ver tokens entregados</strong>
+                <span class="txt" id="tok-resumen">Consultá, copiá o reenviá los tokens de este ciclo.</span>
+            </button>
         </div>
-        <div id="tok-alumno-wrap" style="display:none; margin-top:14px; max-width:520px;">
-            <div id="tok-alumno-buscador" style="position:relative;">
-                <input type="text" id="tok-alumno-buscar" class="input-edit-ficha" autocomplete="off"
-                       placeholder="Buscar alumno por apellido, nombre o DNI..." oninput="tokBuscarAlumno()" onkeydown="tokTecladoAlumno(event)">
-                <div id="tok-alumno-lista" class="tok-lista-alumnos" style="display:none;" onmousedown="event.preventDefault()"></div>
-            </div>
-            <div id="tok-alumno-elegido" style="display:none;"></div>
-        </div>
-        <div id="tok-gen-ayuda" style="font-size:0.8rem; color:var(--sga-texto-gris); margin-top:12px; line-height:1.5;"></div>
-        <div id="tok-gen-mensaje" style="display:none"></div>
     </div>
 
-    <!-- Resultado de la última generación -->
-    <div class="tok-card" id="tok-resultado" style="display:none; border-color:#B7E4C7;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
-            <h4 style="margin:0;" id="tok-resultado-titulo">Tokens generados</h4>
-            <div style="display:flex; gap:8px;">
-                <button class="btn-secundario tok-accion" onclick="tokCopiarGenerados(this)">📋 Copiar todos</button>
-                <button class="btn-secundario tok-accion" onclick="document.getElementById('tok-resultado').style.display='none'">Cerrar</button>
-            </div>
+    <!-- Paso 1: ¿a quién? -->
+    <div class="tok-vista" id="tok-paso-tipo">
+        <button class="tok-volver" onclick="history.back()">← Volver</button>
+        <h3 class="tok-pregunta">¿A quién le vas a entregar el token?</h3>
+        <p class="tok-bajada">Elegí la situación del alumno. Cada token sirve para una sola inscripción.</p>
+        <div class="tok-opciones">
+            <button class="tok-opcion-card" onclick="tokIr('buscar')">
+                <span class="ico">👤</span>
+                <strong>Alumno que ya está en el sistema</strong>
+                <span class="txt">Lo buscás por apellido, nombre o DNI. Confirma sus datos y elige las materias que puede cursar.</span>
+            </button>
+            <button class="tok-opcion-card" onclick="tokIr('confirmar', { tokTipo: 'ingresante' })">
+                <span class="ico">🆕</span>
+                <strong>Alumno nuevo</strong>
+                <span class="txt">Empieza la carrera. Carga sus datos desde cero y, al aprobarse, queda inscripto a 1° año.</span>
+            </button>
+            <button class="tok-opcion-card" onclick="tokIr('confirmar', { tokTipo: 'alta' })">
+                <span class="ico">📂</span>
+                <strong>Alumno que ya cursa pero no está cargado</strong>
+                <span class="txt">Carga sus datos y su año de ingreso. Al aprobarse, primero se carga su historial académico.</span>
+            </button>
         </div>
-        <div id="tok-resultado-tabla"></div>
+        <div class="tok-secundario">
+            ¿Empieza el período de reinscripción?
+            <a href="#" onclick="tokIr('masivo'); return false;">Generar tokens para todos los alumnos del sistema</a>
+        </div>
     </div>
 
-    <!-- Lista -->
-    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
-        <button class="btn-secundario tok-filtro" data-estado="disponible" onclick="tokCambiarEstado('disponible')" style="padding:7px 14px; font-size:0.85rem;">Disponibles</button>
-        <button class="btn-secundario tok-filtro" data-estado="usado" onclick="tokCambiarEstado('usado')" style="padding:7px 14px; font-size:0.85rem;">Usados</button>
-        <button class="btn-secundario tok-filtro" data-estado="anulado" onclick="tokCambiarEstado('anulado')" style="padding:7px 14px; font-size:0.85rem;">Anulados</button>
-        <button class="btn-secundario tok-filtro" data-estado="" onclick="tokCambiarEstado('')" style="padding:7px 14px; font-size:0.85rem;">Todos</button>
-        <select id="tok-filtro-tipo" class="input-edit-ficha" style="width:auto; margin-left:auto;" onchange="tokRenderLista()">
-            <option value="">Todos los tipos</option>
-            <option value="ingresante">Ingresantes</option>
-            <option value="alta">Altas</option>
-            <option value="reinscripcion">Reinscripciones</option>
-        </select>
+    <!-- Paso 2a: confirmar un token suelto -->
+    <div class="tok-vista" id="tok-paso-confirmar">
+        <button class="tok-volver" onclick="history.back()">← Volver</button>
+        <h3 class="tok-pregunta" id="tok-conf-tipo-titulo"></h3>
+        <p class="tok-bajada" id="tok-conf-tipo-texto"></p>
+        <button class="btn-nuevo" id="tok-btn-suelto" onclick="tokGenerarSuelto()">🔑 Generar token</button>
+        <div id="tok-suelto-mensaje" style="display:none; margin-top:14px;"></div>
     </div>
-    <div class="barra-filtros" style="margin-bottom:12px;">
-        <div style="position:relative; flex:1;">
-            <input type="text" id="tok-buscar" autocomplete="off"
-                   placeholder="Buscar por token, apellido, nombre o DNI..." oninput="tokRenderLista()">
+
+    <!-- Paso 2b: buscar alumno -->
+    <div class="tok-vista" id="tok-paso-buscar">
+        <button class="tok-volver" onclick="history.back()">← Volver</button>
+        <h3 class="tok-pregunta">¿Qué alumno es?</h3>
+        <p class="tok-bajada">Escribí al menos 2 letras del apellido o el nombre, o parte del DNI. Podés elegir con las flechas ↑ ↓ y Enter.</p>
+        <div id="tok-alumno-buscador" style="position:relative; max-width:560px;">
+            <input type="text" id="tok-alumno-buscar" class="input-edit-ficha" autocomplete="off"
+                   placeholder="Apellido, nombre o DNI" oninput="tokBuscarAlumno()" onkeydown="tokTecladoAlumno(event)">
+            <div id="tok-alumno-lista" class="tok-lista-alumnos" style="display:none;" onmousedown="event.preventDefault()"></div>
         </div>
     </div>
-    <div class="tabla-card">
-        <div id="tok-cargando" class="cargando" style="display:none">Cargando tokens...</div>
-        <div id="tok-vacio" class="empty-state" style="display:none; padding:40px;"></div>
-        <div id="tok-tabla-wrap" style="display:none; overflow-x:auto;"></div>
+
+    <!-- Paso 3b: situación del alumno elegido -->
+    <div class="tok-vista" id="tok-paso-alumno">
+        <button class="tok-volver" onclick="history.back()">← Volver</button>
+        <div id="tok-alumno-cuerpo"></div>
+    </div>
+
+    <!-- Paso 2c: generación para todos -->
+    <div class="tok-vista" id="tok-paso-masivo">
+        <button class="tok-volver" onclick="history.back()">← Volver</button>
+        <h3 class="tok-pregunta">Tokens de reinscripción para todos</h3>
+        <p class="tok-bajada">Se genera un token para cada alumno activo que todavía no tenga token ni inscripción en este ciclo.
+            Los que ya tienen uno no se tocan.</p>
+        <div id="tok-masivo-resumen" class="tok-bajada">Calculando…</div>
+        <button class="btn-nuevo" id="tok-btn-masivo" onclick="tokGenerarMasivo()" style="display:none;"></button>
+        <div id="tok-masivo-mensaje" style="display:none; margin-top:14px;"></div>
+    </div>
+
+    <!-- Resultado -->
+    <div class="tok-vista" id="tok-paso-resultado">
+        <div id="tok-resultado-cuerpo"></div>
+        <div class="tok-fin">
+            <button class="btn-secundario" onclick="tokIr('tipo')">Entregar otro token</button>
+            <button class="btn-secundario" onclick="tokIr('inicio')">Volver al inicio</button>
+        </div>
+    </div>
+
+    <!-- Lista de tokens entregados -->
+    <div class="tok-vista" id="tok-paso-lista">
+        <button class="tok-volver" onclick="history.back()">← Volver</button>
+        <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+            <button class="btn-secundario tok-filtro" data-estado="disponible" onclick="tokCambiarEstado('disponible')" style="padding:7px 14px; font-size:0.85rem;">Disponibles</button>
+            <button class="btn-secundario tok-filtro" data-estado="usado" onclick="tokCambiarEstado('usado')" style="padding:7px 14px; font-size:0.85rem;">Usados</button>
+            <button class="btn-secundario tok-filtro" data-estado="anulado" onclick="tokCambiarEstado('anulado')" style="padding:7px 14px; font-size:0.85rem;">Anulados</button>
+            <button class="btn-secundario tok-filtro" data-estado="" onclick="tokCambiarEstado('')" style="padding:7px 14px; font-size:0.85rem;">Todos</button>
+            <select id="tok-filtro-tipo" class="input-edit-ficha" style="width:auto; margin-left:auto;" onchange="tokRenderLista()">
+                <option value="">Todos los tipos</option>
+                <option value="ingresante">Alumnos nuevos</option>
+                <option value="alta">Altas</option>
+                <option value="reinscripcion">Reinscripciones</option>
+            </select>
+        </div>
+        <div class="barra-filtros" style="margin-bottom:12px;">
+            <div style="position:relative; flex:1;">
+                <input type="text" id="tok-buscar" autocomplete="off"
+                       placeholder="Buscar por token, apellido, nombre o DNI..." oninput="tokRenderLista()">
+            </div>
+        </div>
+        <div class="tabla-card">
+            <div id="tok-cargando" class="cargando" style="display:none">Cargando tokens...</div>
+            <div id="tok-vacio" class="empty-state" style="display:none; padding:40px;"></div>
+            <div id="tok-tabla-wrap" style="display:none; overflow-x:auto;"></div>
+        </div>
     </div>
 </div>
 
@@ -4166,6 +4235,12 @@
             } else {
                 volverAMesas();
             }
+        } else if (state.seccionId === 'tokens') {
+            const secActiva = document.querySelector('.seccion.activa');
+            if (!secActiva || secActiva.id !== 'sec-tokens') {
+                _ejecutarNavegacion('tokens', state.label, true);
+            }
+            _tokMostrar(state.tokVista || 'inicio', state);
         } else if (state.seccionId === 'preinscripciones') {
             const secActiva = document.querySelector('.seccion.activa');
             const yaEnSeccion = secActiva && secActiva.id === 'sec-preinscripciones';
@@ -7600,17 +7675,25 @@
     }
 
     // ══════════════════════════════════════════════════════
-    // TOKENS DE INSCRIPCIÓN
+    // TOKENS DE INSCRIPCIÓN — pantalla por pasos
     // ══════════════════════════════════════════════════════
+    let tokVentana = null;
     let tokLista = [];
-    let tokGenerados = [];
     let tokEstado = 'disponible';
     let tokAlumnos = null;
-    let tokAlumnoElegido = null;
-    let tokVentana = null;
+    let tokGenerados = [];
+    let tokTokenAlumno = null;
+    let tokTipoSuelto = null;
     let tokAccionPendiente = null;
+    let tokIdxAlumno = -1;
 
-    const TOK_TIPOS = { ingresante: 'Ingresante', alta: 'Alta (ya cursa)', reinscripcion: 'Reinscripción' };
+    const TOK_VISTAS = ['inicio', 'tipo', 'confirmar', 'buscar', 'alumno', 'masivo', 'resultado', 'lista'];
+    const TOK_TIPOS = { ingresante: 'Alumno nuevo', alta: 'Alta (ya cursa)', reinscripcion: 'Reinscripción' };
+    const TOK_TITULOS = {
+        ingresante:    'Token para un alumno nuevo',
+        alta:          'Token para un alumno que ya cursa',
+        reinscripcion: 'Token de reinscripción',
+    };
 
     function tokFecha(iso) {
         if (!iso) return '';
@@ -7618,17 +7701,46 @@
         return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso;
     }
 
+    // ── Navegación entre pasos ──
     function cargarTokens() {
-        tokEstado = 'disponible';
-        document.getElementById('tok-buscar').value = '';
-        document.getElementById('tok-filtro-tipo').value = '';
-        document.getElementById('tok-resultado').style.display = 'none';
-        document.getElementById('tok-gen-mensaje').style.display = 'none';
         tokAlumnos = null;
-        tokLimpiarAlumno();
-        tokCambiarTipo();
         tokCargarVentana();
-        tokCargarLista();
+        _tokMostrar('inicio', {});
+    }
+
+    function tokIr(vista, extra) {
+        const estado = Object.assign({ seccionId: 'tokens', label: '', tokVista: vista }, extra || {});
+        history.pushState(estado, '', '#tokens-' + vista);
+        _tokMostrar(vista, estado);
+    }
+
+    function _tokMostrar(vista, estado) {
+        estado = estado || {};
+        if (vista === 'resultado' && !tokGenerados.length) vista = 'inicio';
+        TOK_VISTAS.forEach(v => {
+            document.getElementById('tok-paso-' + v).style.display = (v === vista) ? 'block' : 'none';
+        });
+        const lista = document.getElementById('tok-alumno-lista');
+        if (lista) lista.style.display = 'none';
+        window.scrollTo(0, 0);
+
+        if (vista === 'inicio')    tokCargarResumen();
+        if (vista === 'confirmar') tokPrepararSuelto(estado.tokTipo);
+        if (vista === 'buscar') {
+            const inp = document.getElementById('tok-alumno-buscar');
+            inp.value = '';
+            setTimeout(() => inp.focus(), 50);
+        }
+        if (vista === 'alumno')    tokMostrarAlumno(estado.tokAlumnoId);
+        if (vista === 'masivo')    tokPrepararMasivo();
+        if (vista === 'resultado') tokRenderResultado();
+        if (vista === 'lista')     tokCargarLista();
+    }
+
+    function tokMostrarResultado() {
+        // Reemplaza el paso actual: con "atrás" no se vuelve a la pantalla de generar
+        history.replaceState({ seccionId: 'tokens', label: '', tokVista: 'resultado' }, '', '#tokens-resultado');
+        _tokMostrar('resultado');
     }
 
     // ── Estado de la inscripción en línea ──
@@ -7642,17 +7754,13 @@
         const rango = (v.fecha_inicio || v.fecha_fin)
             ? ` · ${v.fecha_inicio ? 'desde el ' + tokFecha(v.fecha_inicio) : ''}${v.fecha_inicio && v.fecha_fin ? ' ' : ''}${v.fecha_fin ? 'hasta el ' + tokFecha(v.fecha_fin) : ''}`
             : '';
-        caja.style.cssText = v.abierta
-            ? 'display:flex; background:#E6F9EE; border:1.5px solid #B7E4C7; color:#1a6e3c;'
-            : 'display:flex; background:#F7F5F0; border:1.5px solid var(--sga-borde); color:var(--sga-texto-gris);';
-        caja.style.justifyContent = 'space-between';
-        caja.style.alignItems = 'center';
-        caja.style.gap = '12px';
-        caja.style.flexWrap = 'wrap';
-        caja.innerHTML = `<div>
-                <strong>${v.abierta ? '🟢 Inscripción en línea abierta' : '⚪ Inscripción en línea cerrada'}</strong>${rango}<br>
-                <span style="font-size:0.82rem;">${v.abierta ? 'Los alumnos pueden usar sus tokens ahora.' : preiEsc(v.motivo || '')}
-                · Los tokens nuevos valen ${v.vigencia_dias} días.</span>
+        caja.style.cssText = (v.abierta
+            ? 'background:#E6F9EE; border:1.5px solid #B7E4C7; color:#1a6e3c;'
+            : 'background:#F7F5F0; border:1.5px solid var(--sga-borde); color:var(--sga-texto-gris);') +
+            'display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 16px;';
+        caja.innerHTML = `<div style="font-size:0.86rem;">
+                <strong>${v.abierta ? '🟢 Inscripción en línea abierta' : '⚪ Inscripción en línea cerrada'}</strong>${rango}
+                · los tokens nuevos valen ${v.vigencia_dias} días
             </div>
             ${v.puede_editar ? '<button class="btn-secundario tok-accion tok-solo-pc" onclick="tokAbrirVentana()">⚙ Configurar</button>' : ''}`;
     }
@@ -7687,57 +7795,90 @@
         tokCargarVentana();
     }
 
-    // ── Generar ──
-    function tokCambiarTipo() {
-        const tipo = document.getElementById('tok-tipo').value;
-        const reinsc = tipo === 'reinscripcion';
-        document.getElementById('tok-cantidad-wrap').style.display = reinsc ? 'none' : '';
-        document.getElementById('tok-alcance-wrap').style.display = reinsc ? '' : 'none';
-        tokCambiarAlcance();
-        const ayudas = {
-            ingresante:    'Para quien empieza la carrera. Carga sus datos en un formulario en blanco y, al aprobarse, queda inscripto a todas las materias de 1° año.',
-            alta:          'Para quien ya cursa la carrera pero todavía no está en el sistema. Carga sus datos y su año de ingreso; al aprobarse no se lo inscribe a materias hasta cargar su historial.',
-            reinscripcion: 'Para alumnos ya cargados. Confirma sus datos con el DNI y elige las materias que puede cursar según sus correlativas.',
-        };
-        document.getElementById('tok-gen-ayuda').textContent = ayudas[tipo] || '';
+    // ── Inicio ──
+    async function tokCargarResumen() {
+        const el = document.getElementById('tok-resumen');
+        try {
+            const d = await (await fetch('/api/tokens?estado=disponible')).json();
+            if (Array.isArray(d)) {
+                const vivos = d.filter(t => !t.vencido).length;
+                el.textContent = vivos
+                    ? `${vivos} ${vivos === 1 ? 'token disponible' : 'tokens disponibles'} en este ciclo. Consultalos, copialos o reenvialos.`
+                    : 'No hay tokens disponibles en este ciclo. Consultá los usados o anulados.';
+            }
+        } catch (e) { /* se deja el texto por defecto */ }
     }
 
-    function tokCambiarAlcance() {
-        const reinsc = document.getElementById('tok-tipo').value === 'reinscripcion';
-        const uno = document.querySelector('input[name="tok-alcance"]:checked').value === 'uno';
-        document.getElementById('tok-alumno-wrap').style.display = (reinsc && uno) ? 'block' : 'none';
+    // ── Token suelto (alumno nuevo o alta) ──
+    function tokPrepararSuelto(tipo) {
+        tokTipoSuelto = (tipo === 'alta') ? 'alta' : 'ingresante';
+        document.getElementById('tok-conf-tipo-titulo').textContent = TOK_TITULOS[tokTipoSuelto];
+        document.getElementById('tok-conf-tipo-texto').textContent = (tokTipoSuelto === 'alta')
+            ? 'Para alguien que ya cursa la carrera pero todavía no figura en el sistema. Va a cargar sus datos y su año de ingreso. ' +
+              'Entregalo después de revisar su documentación.'
+            : 'Para alguien que empieza la carrera. Va a cargar sus datos desde cero y, cuando apruebes su preinscripción, ' +
+              'queda inscripto a todas las materias de 1° año. Entregalo después de revisar su documentación.';
+        document.getElementById('tok-suelto-mensaje').style.display = 'none';
+        document.getElementById('tok-btn-suelto').disabled = false;
+    }
+
+    async function tokGenerarSuelto() {
+        const btn = document.getElementById('tok-btn-suelto');
+        btn.disabled = true;
+        let d;
+        try {
+            d = await (await fetch('/api/tokens/' + tokTipoSuelto, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cantidad: 1 })
+            })).json();
+        } catch (e) { d = { error: 'No se pudo conectar con el servidor.' }; }
+        btn.disabled = false;
+        if (d.error || !d.tokens || !d.tokens.length) {
+            mostrarMensaje('tok-suelto-mensaje', d.error || 'No se pudo generar el token.', 'error', 0);
+            return;
+        }
+        tokGenerados = d.tokens.map(t => Object.assign({ tipo: tokTipoSuelto, vence_el: d.vence_el, estado: 'disponible' }, t));
+        tokMostrarResultado();
+    }
+
+    // ── Buscar alumno del sistema ──
+    async function tokAsegurarAlumnos() {
+        if (tokAlumnos) return tokAlumnos;
+        try { tokAlumnos = await (await fetch('/api/tokens/reinscripcion/alumnos')).json(); }
+        catch (e) { tokAlumnos = null; return []; }
+        if (!Array.isArray(tokAlumnos)) tokAlumnos = [];
+        return tokAlumnos;
+    }
+
+    function tokSituacionCorta(a) {
+        if (a.token) return '<span class="tok-estado-mini" style="color:var(--sga-exito);">Ya tiene un token disponible</span>';
+        if (a.preinscripcion_id) {
+            return a.preinscripcion_estado === 'aprobada'
+                ? '<span class="tok-estado-mini" style="color:#2D6CA8;">Ya se inscribió en este ciclo</span>'
+                : '<span class="tok-estado-mini" style="color:#7A5500;">Tiene una inscripción pendiente de revisión</span>';
+        }
+        return '';
     }
 
     async function tokBuscarAlumno() {
         const q = document.getElementById('tok-alumno-buscar').value.trim().toLowerCase();
         const lista = document.getElementById('tok-alumno-lista');
+        tokIdxAlumno = -1;
         if (q.length < 2) { lista.style.display = 'none'; return; }
-        if (!tokAlumnos) {
-            try { tokAlumnos = await (await fetch('/api/tokens/reinscripcion/alumnos')).json(); }
-            catch (e) { tokAlumnos = []; }
-            if (!Array.isArray(tokAlumnos)) tokAlumnos = [];
-        }
+        const alumnos = await tokAsegurarAlumnos();
         const qn = q.replace(/\./g, '');
-        const res = tokAlumnos.filter(a =>
+        const res = alumnos.filter(a =>
             `${a.apellido} ${a.nombre}`.toLowerCase().includes(q) ||
             `${a.nombre} ${a.apellido}`.toLowerCase().includes(q) ||
             String(a.dni_raw || '').includes(qn)).slice(0, 12);
-        tokIdxAlumno = -1;
         lista.innerHTML = res.length
-            ? res.map(a => a.motivo
-                ? `<div class="tok-no-disp"><strong>${preiEsc(a.apellido)}, ${preiEsc(a.nombre)}</strong>
-                     · ${preiEsc(a.dni)}<br><span style="font-size:0.76rem;">${preiEsc(a.motivo)}</span></div>`
-                : `<div class="tok-opcion" data-id="${a.id}" onclick="tokElegirAlumno(${a.id})">
-                     <strong>${preiEsc(a.apellido)}, ${preiEsc(a.nombre)}</strong>
-                     <span style="color:var(--sga-texto-gris);"> · ${preiEsc(a.dni)}</span></div>`).join('')
-            : '<div class="tok-no-disp">No hay alumnos activos con ese criterio.</div>';
+            ? res.map(a => `<div class="tok-opcion" data-id="${a.id}" onclick="tokElegirAlumno(${a.id})">
+                   <strong>${preiEsc(a.apellido)}, ${preiEsc(a.nombre)}</strong>
+                   <span style="color:var(--sga-texto-gris);"> · ${preiEsc(a.dni)}</span>
+                   ${tokSituacionCorta(a)}</div>`).join('')
+            : '<div style="cursor:default; color:var(--sga-texto-gris);">No hay alumnos activos con ese criterio.</div>';
         lista.style.display = 'block';
-        // Con una sola opción disponible, queda marcada para elegirla con Enter
-        if (lista.querySelectorAll('.tok-opcion').length === 1) tokMoverAlumno(1);
+        if (res.length) tokMoverAlumno(1);   // el primero queda marcado para elegirlo con Enter
     }
-
-    // ── Teclado en el buscador: flechas para moverse, Enter para elegir ──
-    let tokIdxAlumno = -1;
 
     function tokMoverAlumno(paso) {
         const opciones = document.querySelectorAll('#tok-alumno-lista .tok-opcion');
@@ -7752,15 +7893,14 @@
         const abierta = lista.style.display === 'block';
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            if (!abierta) { tokBuscarAlumno(); return; }
-            tokMoverAlumno(1);
+            if (abierta) tokMoverAlumno(1); else tokBuscarAlumno();
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             if (abierta) tokMoverAlumno(-1);
         } else if (e.key === 'Enter') {
             e.preventDefault();
             const opciones = lista.querySelectorAll('.tok-opcion');
-            if (abierta && tokIdxAlumno >= 0 && opciones[tokIdxAlumno]) {
+            if (abierta && opciones[tokIdxAlumno]) {
                 tokElegirAlumno(parseInt(opciones[tokIdxAlumno].dataset.id, 10));
             }
         } else if (e.key === 'Escape') {
@@ -7770,75 +7910,144 @@
     }
 
     function tokElegirAlumno(id) {
-        tokAlumnoElegido = (tokAlumnos || []).find(a => a.id === id && !a.motivo) || null;
-        if (!tokAlumnoElegido) return;
         document.getElementById('tok-alumno-lista').style.display = 'none';
-        document.getElementById('tok-alumno-buscador').style.display = 'none';
-        const caja = document.getElementById('tok-alumno-elegido');
-        caja.innerHTML = `<span class="tok-elegido">${preiEsc(tokAlumnoElegido.apellido)}, ${preiEsc(tokAlumnoElegido.nombre)}
-            · ${preiEsc(tokAlumnoElegido.dni)} <button onclick="tokLimpiarAlumno()" title="Cambiar alumno">✕</button></span>`;
-        caja.style.display = 'block';
+        tokIr('alumno', { tokAlumnoId: id });
     }
 
-    function tokLimpiarAlumno() {
-        tokAlumnoElegido = null;
-        document.getElementById('tok-alumno-buscar').value = '';
-        document.getElementById('tok-alumno-lista').style.display = 'none';
-        document.getElementById('tok-alumno-buscador').style.display = 'block';
-        document.getElementById('tok-alumno-elegido').style.display = 'none';
-    }
-
-    function tokGenerar() {
-        const tipo = document.getElementById('tok-tipo').value;
-        document.getElementById('tok-gen-mensaje').style.display = 'none';
-        if (tipo === 'reinscripcion') {
-            const uno = document.querySelector('input[name="tok-alcance"]:checked').value === 'uno';
-            if (uno) {
-                if (!tokAlumnoElegido) {
-                    mostrarMensaje('tok-gen-mensaje', 'Elegí un alumno para generarle el token.', 'alerta');
-                    return;
-                }
-                tokEjecutarGeneracion('/api/tokens/reinscripcion', { alumno_ids: [tokAlumnoElegido.id] },
-                    'Ese alumno ya tiene un token disponible. Buscalo en la lista de abajo para copiarlo o compartirlo.');
-            } else {
-                tokPedirConfirmacion('Generar tokens de reinscripción',
-                    'Se va a generar un token para cada alumno activo que no tenga uno disponible ni una inscripción en curso en este ciclo. ¿Continuar?',
-                    'Generar', () => tokEjecutarGeneracion('/api/tokens/reinscripcion', {}));
-            }
+    // ── Situación del alumno elegido ──
+    async function tokMostrarAlumno(id) {
+        const cuerpo = document.getElementById('tok-alumno-cuerpo');
+        cuerpo.innerHTML = '<div class="cargando">Cargando…</div>';
+        const alumnos = await tokAsegurarAlumnos();
+        const a = alumnos.find(x => x.id === id);
+        if (!a) {
+            cuerpo.innerHTML = '<p class="tok-bajada">No se encontró el alumno o ya no está activo.</p>';
             return;
         }
-        const cantidad = parseInt(document.getElementById('tok-cantidad').value, 10);
-        if (!(cantidad >= 1 && cantidad <= 50)) {
-            mostrarMensaje('tok-gen-mensaje', 'La cantidad tiene que estar entre 1 y 50.', 'alerta');
-            return;
+        const nombre = `${a.apellido}, ${a.nombre}`;
+        let html = `<h3 class="tok-pregunta">${preiEsc(nombre)}</h3>
+                    <p class="tok-bajada">DNI ${preiEsc(a.dni)}${a.celular ? ' · Celular ' + preiEsc(a.celular) : ''}</p>`;
+
+        if (a.token) {
+            tokTokenAlumno = { id: a.token_id, token: a.token, tipo: 'reinscripcion', alumno: nombre,
+                               vence_el: a.vence_el, celular: a.celular, estado: 'disponible' };
+            html += `<p class="tok-bajada">Ya tiene un token disponible. Podés volver a mandárselo o imprimirlo.</p>
+                     ${tokTarjeta(tokTokenAlumno, "tokWhatsApp('alumno', 0)", "tokImprimir([tokTokenAlumno])")}
+                     <div class="tok-secundario tok-solo-pc">¿Se lo pasaron a otra persona o lo perdió?
+                        <a href="#" onclick="tokPedirAnular('alumno', 0); return false;">Anular este token</a>
+                        y generale uno nuevo.</div>`;
+        } else if (a.preinscripcion_id) {
+            const aprobada = a.preinscripcion_estado === 'aprobada';
+            html += `<div class="prei-aviso" style="background:#E5F0F8; border:1.5px solid #BBD4EA; color:#1a3a6e; max-width:620px;">
+                        ${aprobada
+                            ? `Ya se inscribió en este ciclo (inscripción n° ${a.preinscripcion_id}, aprobada). No necesita otro token.`
+                            : `Ya cargó su inscripción (n° ${a.preinscripcion_id}) y está pendiente de revisión. No necesita otro token.`}
+                     </div>
+                     <button class="btn-secundario" onclick="tokIrAPreinscripcion(${a.preinscripcion_id})">Ver la inscripción</button>`;
+        } else {
+            html += `<p class="tok-bajada">Todavía no tiene un token para este ciclo. Con el token va a confirmar sus datos
+                        con el DNI y elegir las materias que puede cursar.</p>
+                     <button class="btn-nuevo tok-solo-pc" id="tok-btn-alumno" onclick="tokGenerarParaAlumno(${a.id})">🔑 Generar token</button>
+                     <div id="tok-alumno-mensaje" style="display:none; margin-top:14px;"></div>`;
         }
-        tokEjecutarGeneracion('/api/tokens/' + tipo, { cantidad });
+        cuerpo.innerHTML = html;
     }
 
-    async function tokEjecutarGeneracion(url, cuerpo, mensajeSinNuevos) {
-        const btn = document.getElementById('tok-btn-generar');
-        btn.disabled = true;
-        const tipo = url.endsWith('reinscripcion') ? 'reinscripcion' : url.split('/').pop();
+    async function tokGenerarParaAlumno(id) {
+        const btn = document.getElementById('tok-btn-alumno');
+        if (btn) btn.disabled = true;
         let d;
         try {
-            d = await (await fetch(url, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo)
+            d = await (await fetch('/api/tokens/reinscripcion', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alumno_ids: [id] })
+            })).json();
+        } catch (e) { d = { error: 'No se pudo conectar con el servidor.' }; }
+        if (d.error || !d.tokens || !d.tokens.length) {
+            if (btn) btn.disabled = false;
+            mostrarMensaje('tok-alumno-mensaje', d.error || d.mensaje || 'No se pudo generar el token.', 'error', 0);
+            return;
+        }
+        tokAlumnos = null;          // su situación cambió: se vuelve a pedir
+        tokMostrarAlumno(id);       // ahora muestra el token generado
+    }
+
+    // ── Todos los alumnos ──
+    async function tokPrepararMasivo() {
+        const resumen = document.getElementById('tok-masivo-resumen');
+        const btn = document.getElementById('tok-btn-masivo');
+        btn.style.display = 'none';
+        document.getElementById('tok-masivo-mensaje').style.display = 'none';
+        resumen.textContent = 'Calculando…';
+        tokAlumnos = null;
+        const alumnos = await tokAsegurarAlumnos();
+        const reciben = alumnos.filter(a => !a.motivo).length;
+        const conToken = alumnos.filter(a => a.token).length;
+        const inscriptos = alumnos.filter(a => !a.token && a.preinscripcion_id).length;
+        resumen.innerHTML = reciben
+            ? `<strong>${reciben} ${reciben === 1 ? 'alumno va' : 'alumnos van'} a recibir un token.</strong>
+               ${conToken ? `<br>${conToken} ya ${conToken === 1 ? 'tiene' : 'tienen'} uno disponible.` : ''}
+               ${inscriptos ? `<br>${inscriptos} ya ${inscriptos === 1 ? 'cargó' : 'cargaron'} su inscripción.` : ''}`
+            : '<strong>Todos los alumnos activos ya tienen un token disponible o una inscripción en este ciclo.</strong>';
+        if (reciben) {
+            btn.textContent = `🔑 Generar ${reciben} ${reciben === 1 ? 'token' : 'tokens'}`;
+            btn.style.display = '';
+            btn.disabled = false;
+        }
+    }
+
+    async function tokGenerarMasivo() {
+        const btn = document.getElementById('tok-btn-masivo');
+        btn.disabled = true;
+        let d;
+        try {
+            d = await (await fetch('/api/tokens/reinscripcion', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
             })).json();
         } catch (e) { d = { error: 'No se pudo conectar con el servidor.' }; }
         btn.disabled = false;
-        if (d.error) { mostrarMensaje('tok-gen-mensaje', d.error, 'error', 6000); return; }
+        if (d.error) { mostrarMensaje('tok-masivo-mensaje', d.error, 'error', 0); return; }
         if (!d.tokens || !d.tokens.length) {
-            mostrarMensaje('tok-gen-mensaje', d.mensaje || mensajeSinNuevos || 'No se generó ningún token.', 'info', 8000);
+            mostrarMensaje('tok-masivo-mensaje', d.mensaje || 'No se generó ningún token.', 'info', 0);
             return;
         }
-        tokGenerados = d.tokens.map(t => Object.assign({ tipo, vence_el: d.vence_el, estado: 'disponible' }, t));
-        document.getElementById('tok-resultado-titulo').textContent =
-            `${tokGenerados.length} ${tokGenerados.length === 1 ? 'token generado' : 'tokens generados'} · vencen el ${tokFecha(d.vence_el)}`;
-        document.getElementById('tok-resultado-tabla').innerHTML = tokTabla(tokGenerados, 'gen', false);
-        document.getElementById('tok-resultado').style.display = 'block';
         tokAlumnos = null;
-        tokLimpiarAlumno();
-        tokCargarLista();
+        tokGenerados = d.tokens.map(t => Object.assign({ tipo: 'reinscripcion', vence_el: d.vence_el, estado: 'disponible' }, t));
+        tokMostrarResultado();
+    }
+
+    // ── Resultado ──
+    function tokTarjeta(t, accionWhatsApp, accionImprimir) {
+        return `<div class="tok-grande">
+            <div class="tok-grande-tipo">${TOK_TITULOS[t.tipo] || 'Token'}</div>
+            <div class="tok-grande-codigo">${t.token}</div>
+            ${t.alumno ? `<div class="tok-grande-dato">${preiEsc(t.alumno)}</div>` : ''}
+            <div class="tok-grande-dato">Vence el ${tokFecha(t.vence_el)}</div>
+            <div class="tok-grande-botones">
+                <button class="btn-secundario" onclick="tokCopiar('${t.token}', this)">📋 Copiar</button>
+                <button class="btn-secundario" onclick="${accionWhatsApp}">💬 WhatsApp</button>
+                <button class="btn-secundario" onclick="${accionImprimir}">🖨 Imprimir</button>
+            </div>
+        </div>`;
+    }
+
+    function tokRenderResultado() {
+        const cuerpo = document.getElementById('tok-resultado-cuerpo');
+        const aviso = (tokVentana && !tokVentana.abierta)
+            ? '<p class="tok-bajada" style="margin-top:14px;">⚠️ La inscripción en línea está cerrada: el alumno va a poder usar el token cuando se abra.</p>'
+            : '';
+        if (tokGenerados.length === 1) {
+            cuerpo.innerHTML = `<h3 class="tok-pregunta">✓ Token generado</h3>
+                <p class="tok-bajada">Entregáselo al alumno. Sirve para una sola inscripción.</p>
+                ${tokTarjeta(tokGenerados[0], "tokWhatsApp('gen', 0)", "tokImprimir(tokGenerados)")}${aviso}`;
+            return;
+        }
+        cuerpo.innerHTML = `<h3 class="tok-pregunta">✓ ${tokGenerados.length} tokens generados</h3>
+            <p class="tok-bajada">Vencen el ${tokFecha(tokGenerados[0].vence_el)}. Podés mandarlos uno por uno o imprimirlos todos.</p>
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <button class="btn-secundario" onclick="tokCopiarGenerados(this)">📋 Copiar todos</button>
+                <button class="btn-secundario" onclick="tokImprimir(tokGenerados)">🖨 Imprimir todos</button>
+            </div>
+            <div class="tabla-card" style="overflow-x:auto;">${tokTabla(tokGenerados, 'gen', false)}</div>${aviso}`;
     }
 
     // ── Compartir ──
@@ -7860,11 +8069,15 @@
                `El código vence el ${tokFecha(t.vence_el)} y es personal: no lo compartas.`;
     }
 
+    function tokDesdeOrigen(origen, i) {
+        if (origen === 'alumno') return tokTokenAlumno;
+        return (origen === 'gen' ? tokGenerados : tokLista)[i];
+    }
+
     function tokWhatsApp(origen, i) {
-        const t = (origen === 'gen' ? tokGenerados : tokLista)[i];
+        const t = tokDesdeOrigen(origen, i);
         if (!t) return;
-        const num = tokNumeroWhatsApp(t.celular);
-        window.open(`https://wa.me/${num}?text=${encodeURIComponent(tokMensaje(t))}`, '_blank', 'noopener');
+        window.open(`https://wa.me/${tokNumeroWhatsApp(t.celular)}?text=${encodeURIComponent(tokMensaje(t))}`, '_blank', 'noopener');
     }
 
     async function tokCopiar(texto, btn) {
@@ -7885,7 +8098,31 @@
         tokCopiar(tokGenerados.map(t => t.alumno ? `${t.token} — ${t.alumno}` : t.token).join('\n'), btn);
     }
 
-    // ── Lista ──
+    function tokImprimir(lista) {
+        if (!lista || !lista.length) return;
+        const w = window.open('', '_blank');
+        if (!w) { alert('El navegador bloqueó la ventana de impresión. Permití las ventanas emergentes para este sitio.'); return; }
+        const inst = (tokVentana && tokVentana.instituto) ? tokVentana.instituto + ' · ' : '';
+        const url = location.origin + '/inscripcion';
+        w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Tokens de inscripción</title><style>
+            body{ font-family:Arial, sans-serif; margin:24px; color:#222; }
+            .t{ border:1.5px dashed #888; border-radius:12px; padding:16px 20px; margin:0 0 16px;
+                width:440px; page-break-inside:avoid; }
+            .s{ font-size:12px; color:#555; line-height:1.5; }
+            .c{ font-family:'Courier New', monospace; font-size:30px; font-weight:bold; letter-spacing:4px; margin:8px 0; }
+        </style></head><body>` + lista.map(t => `<div class="t">
+            <div class="s">${preiEsc(inst)}Inscripción en línea · ${TOK_TITULOS[t.tipo] || 'Token'}</div>
+            ${t.alumno ? `<div><strong>${preiEsc(t.alumno)}</strong></div>` : ''}
+            <div class="c">${t.token}</div>
+            <div class="s">Ingresá en <strong>${preiEsc(url)}</strong><br>
+            Vence el ${tokFecha(t.vence_el)}. Es personal: no lo compartas.</div></div>`).join('') +
+            '</body></html>');
+        w.document.close();
+        w.focus();
+        setTimeout(() => w.print(), 300);
+    }
+
+    // ── Lista de tokens entregados ──
     function tokCambiarEstado(estado) {
         tokEstado = estado;
         tokCargarLista();
@@ -7933,7 +8170,8 @@
         const vacio = document.getElementById('tok-vacio');
         const wrap  = document.getElementById('tok-tabla-wrap');
         if (!indices.length) {
-            const textos = { disponible: 'No hay tokens disponibles.', usado: 'Todavía no se usó ningún token.', anulado: 'No hay tokens anulados.', '': 'Todavía no se generaron tokens en este ciclo.' };
+            const textos = { disponible: 'No hay tokens disponibles.', usado: 'Todavía no se usó ningún token.',
+                             anulado: 'No hay tokens anulados.', '': 'Todavía no se generaron tokens en este ciclo.' };
             vacio.innerHTML = `<div class="empty-icon">🔑</div>${(q || tipo) ? 'No hay tokens con ese criterio.' : textos[tokEstado]}`;
             vacio.style.display = 'block';
             wrap.style.display = 'none';
@@ -7949,21 +8187,21 @@
             <thead><tr><th>Token</th><th>Tipo</th><th>Alumno</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
             <tbody>${filas.map((t, pos) => {
                 const i = origen === 'gen' ? pos : t._i;
-                const vencido = t.vencido;
                 let estado;
                 if (t.estado === 'usado') {
-                    estado = `<span class="tok-estado usado">Usado</span>` + (t.preinscripcion_id
+                    estado = '<span class="tok-estado usado">Usado</span>' + (t.preinscripcion_id
                         ? ` <a href="#" onclick="tokIrAPreinscripcion(${t.preinscripcion_id}); return false;" style="font-size:0.78rem;">n° ${t.preinscripcion_id}</a>` : '');
                 } else if (t.estado === 'anulado') {
                     estado = '<span class="tok-estado anulado">Anulado</span>';
                 } else {
-                    estado = vencido ? '<span class="tok-estado vencido">Vencido</span>' : '<span class="tok-estado disponible">Disponible</span>';
+                    estado = t.vencido ? '<span class="tok-estado vencido">Vencido</span>' : '<span class="tok-estado disponible">Disponible</span>';
                 }
-                const vivo = t.estado === 'disponible' && !vencido;
+                const vivo = t.estado === 'disponible' && !t.vencido;
                 const acciones = [
                     `<button class="btn-secundario tok-accion" onclick="tokCopiar('${t.token}', this)">📋 Copiar</button>`,
                     vivo ? `<button class="btn-secundario tok-accion" onclick="tokWhatsApp('${origen}', ${i})">💬 WhatsApp</button>` : '',
-                    (conAnular && t.estado === 'disponible') ? `<button class="btn-secundario tok-accion tok-solo-pc" style="color:var(--sga-error);" onclick="tokPedirAnular(${i})">Anular</button>` : '',
+                    (conAnular && t.estado === 'disponible')
+                        ? `<button class="btn-secundario tok-accion tok-solo-pc" style="color:var(--sga-error);" onclick="tokPedirAnular('lista', ${i})">Anular</button>` : '',
                 ].join('');
                 return `<tr>
                     <td data-label="Token"><span class="tok-codigo">${t.token}</span></td>
@@ -7982,8 +8220,8 @@
     }
 
     // ── Anular y confirmaciones ──
-    function tokPedirAnular(i) {
-        const t = tokLista[i];
+    function tokPedirAnular(origen, i) {
+        const t = tokDesdeOrigen(origen, i);
         if (!t) return;
         tokPedirConfirmacion('Anular token',
             `El token ${t.token}${t.alumno ? ' de ' + t.alumno : ''} va a dejar de funcionar. Esta acción no se puede deshacer.`,
@@ -7991,7 +8229,9 @@
                 const d = await (await fetch(`/api/tokens/${t.id}/anular`, { method: 'POST' })).json();
                 if (d.error) throw new Error(d.error);
                 tokAlumnos = null;
-                tokCargarLista();
+                const vista = (history.state && history.state.tokVista) || '';
+                if (vista === 'alumno') tokMostrarAlumno(history.state.tokAlumnoId);
+                else tokCargarLista();
             });
     }
 

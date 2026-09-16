@@ -6783,10 +6783,10 @@ def api_tokens_alta():
 
 def _estado_reinscripcion_alumnos(cur, carrera_id, ciclo, alumno_ids=None):
     """
-    Alumnos activos de la carrera y si pueden recibir un token de
-    reinscripción en el ciclo. No pueden si ya tienen un token disponible
-    y sin vencer, o una preinscripción pendiente o aprobada (las altas
+    Alumnos activos de la carrera y su situación en el ciclo: el token
+    disponible que tengan y su preinscripción en curso o aprobada (las altas
     aprobadas no cuentan: después del alta, el alumno se reinscribe).
+    Si tiene alguna de las dos cosas, `motivo` explica por qué no recibe otro.
     """
     filtro = ""
     params = [ciclo, ciclo, carrera_id]
@@ -6795,14 +6795,21 @@ def _estado_reinscripcion_alumnos(cur, carrera_id, ciclo, alumno_ids=None):
         params.append([int(x) for x in alumno_ids])
     cur.execute(f"""
         SELECT a.id, a.apellido, a.nombre, a.dni, a.tipo_documento, a.email, a.celular,
-               EXISTS (SELECT 1 FROM tokens_inscripcion t
-                        WHERE t.alumno_id = a.id AND t.ciclo_lectivo = %s
-                          AND t.estado = 'disponible' AND t.vence_el >= CURRENT_DATE),
-               EXISTS (SELECT 1 FROM preinscripciones p
-                        WHERE p.dni = a.dni AND p.ciclo_lectivo = %s
-                          AND (p.estado = 'pendiente'
-                               OR (p.estado = 'aprobada' AND p.anio_ingreso IS NULL)))
+               tk.id, tk.token, tk.vence_el, pr.id, pr.estado
         FROM alumnos a
+        LEFT JOIN LATERAL (
+            SELECT t.id, t.token, t.vence_el FROM tokens_inscripcion t
+            WHERE t.alumno_id = a.id AND t.ciclo_lectivo = %s
+              AND t.estado = 'disponible' AND t.vence_el >= CURRENT_DATE
+            ORDER BY t.generado_en DESC LIMIT 1
+        ) tk ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT p.id, p.estado FROM preinscripciones p
+            WHERE p.dni = a.dni AND p.ciclo_lectivo = %s
+              AND (p.estado = 'pendiente'
+                   OR (p.estado = 'aprobada' AND p.anio_ingreso IS NULL))
+            ORDER BY p.creado_en DESC LIMIT 1
+        ) pr ON TRUE
         WHERE a.carrera_id = %s AND a.activo = TRUE {filtro}
         ORDER BY a.apellido, a.nombre
     """, params)
@@ -6810,19 +6817,24 @@ def _estado_reinscripcion_alumnos(cur, carrera_id, ciclo, alumno_ids=None):
     for f in cur.fetchall():
         if f[7]:
             motivo = 'Ya tiene un token disponible'
-        elif f[8]:
+        elif f[10]:
             motivo = 'Ya tiene una inscripción en curso o aprobada en este ciclo'
         else:
             motivo = None
         resultado.append({
-            'id':       f[0],
-            'apellido': f[1],
-            'nombre':   f[2],
-            'dni_raw':  f[3],
-            'dni':      formatear_documento(f[4], f[3]),
-            'email':    f[5],
-            'celular':  f[6],
-            'motivo':   motivo,
+            'id':                    f[0],
+            'apellido':              f[1],
+            'nombre':                f[2],
+            'dni_raw':               f[3],
+            'dni':                   formatear_documento(f[4], f[3]),
+            'email':                 f[5],
+            'celular':               f[6],
+            'token_id':              f[7],
+            'token':                 f[8],
+            'vence_el':              f[9].isoformat() if f[9] else None,
+            'preinscripcion_id':     f[10],
+            'preinscripcion_estado': f[11],
+            'motivo':                motivo,
         })
     return resultado
 
