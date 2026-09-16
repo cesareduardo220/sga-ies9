@@ -16,6 +16,7 @@ import threading
 import logging
 from html import escape
 from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
 from email.utils import formataddr
 
 from .database import get_db
@@ -64,6 +65,9 @@ def _armar_mensaje(destino, token, tipo, vence, nombre, url_publica, instituto):
     msg['Subject'] = f'Tu código para la inscripción en línea - {instituto}'
     msg['From'] = formataddr((nombre_remitente, remitente))
     msg['To'] = destino
+    msg['Date'] = formatdate(localtime=True)
+    msg['Message-ID'] = make_msgid(domain=remitente.split('@')[-1])
+    msg['Content-Language'] = 'es'
 
     msg.set_content(
         f"{saludo}\n\n"
@@ -75,15 +79,15 @@ def _armar_mensaje(destino, token, tipo, vence, nombre, url_publica, instituto):
         f"Si no pediste este código, podés ignorar este correo.\n"
     )
     msg.add_alternative(f"""<!DOCTYPE html>
-<html><body style="margin:0; padding:24px; background:#F4F2EC; font-family:Arial, sans-serif; color:#1f2a24;">
+<html lang="es"><body style="margin:0; padding:24px; background:#F4F2EC; font-family:Arial, sans-serif; color:#1f2a24;">
   <div style="max-width:520px; margin:0 auto; background:#ffffff; border-radius:14px; padding:28px;">
     <p style="margin:0 0 6px; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:#1B5E3F;">
       {escape(instituto)}</p>
     <h2 style="margin:0 0 16px; font-size:20px;">Inscripción en línea</h2>
     <p style="margin:0 0 14px;">{escape(saludo)}</p>
     <p style="margin:0 0 18px;">Este es tu código para completar {escape(que)} en línea:</p>
-    <p style="margin:0 0 22px; font-family:'Courier New', monospace; font-size:30px; font-weight:bold;
-              letter-spacing:4px; text-align:center; background:#EEF6F0; border-radius:10px; padding:14px;">
+    <p style="margin:0 0 22px; font-family:'Courier New', monospace; font-size:26px; font-weight:bold; white-space:nowrap;
+              letter-spacing:2px; text-align:center; background:#EEF6F0; border-radius:10px; padding:14px 8px;">
       {escape(token)}</p>
     <p style="text-align:center; margin:0 0 22px;">
       <a href="{escape(enlace)}" style="background:#1B5E3F; color:#ffffff; text-decoration:none;
