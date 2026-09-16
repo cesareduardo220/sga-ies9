@@ -103,10 +103,14 @@
 
   @media (max-width: 720px){
     #screen-login{ flex-direction:column; }
-    .login-panel-izq{ flex:0 0 auto; padding:36px 28px 40px; }
-    .login-panel-izq h1{ font-size:1.9rem; }
-    .roles{ margin-bottom:24px; }
-    .login-panel-der{ padding:32px 24px 60px; }
+    /* Panel verde compacto: el formulario tiene que verse enseguida */
+    .login-panel-izq{ flex:0 0 auto; padding:18px 20px 16px; }
+    .login-cerebro{ width:34px; height:34px; margin-bottom:10px; }
+    .login-panel-izq h1{ font-size:1.35rem; margin-bottom:4px; }
+    .login-panel-izq h1 br{ display:none; }
+    .login-panel-izq p.lead{ font-size:0.84rem; margin:0; }
+    .roles, .pie-institucional{ display:none; }
+    .login-panel-der{ padding:24px 20px 48px; }
   }
 </style>
 </head>
@@ -120,7 +124,7 @@
         <path d="M-65,-15 C-72,-40 -50,-55 -30,-50 C-22,-62 0,-62 8,-50 C30,-56 50,-40 42,-18 C58,-10 58,10 42,18 C50,40 30,56 8,50 C0,62 -22,62 -30,50 C-50,55 -72,40 -65,15 C-76,7 -76,-7 -65,-15 Z" transform="translate(70,68)" stroke="#fff" stroke-width="3.2" fill="none"/>
         <path d="M-11,-54 C-11,-20 -11,20 -11,54" transform="translate(70,68)" stroke="#fff" stroke-width="2.4" fill="none"/>
       </svg>
-      <h1>Sistema de Gestión<br>Académica</h1>
+      <h1>Sistema de Gestión <br>Académica</h1>
       <p class="lead">Plataforma interna del IES N°9 "Juana Azurduy" para la gestión de alumnos, cursadas, mesas de examen e historial académico.</p>
 
       <div class="roles">

@@ -218,10 +218,19 @@ button{font-family:inherit; cursor:pointer;}
  
 @media (max-width:720px){
   #screen{ flex-direction:column; }
-  .panel-izq{ flex:0 0 auto; padding:36px 28px 40px; }
-  .panel-izq h1{ font-size:1.9rem; }
-  .pasos{ margin-bottom:24px; }
-  .panel-der{ padding:32px 24px 60px; }
+  /* Panel verde compacto: el formulario tiene que verse enseguida */
+  .panel-izq{ flex:0 0 auto; padding:18px 20px 16px; }
+  .logo-cerebro{ width:34px; height:34px; margin-bottom:10px; }
+  .panel-izq h1{ font-size:1.4rem; margin-bottom:6px; }
+  .panel-izq h1 br{ display:none; }
+  .panel-izq p.lead{ font-size:0.86rem; margin-bottom:14px; }
+  .pasos{ flex-direction:row; gap:8px; margin-bottom:0; }
+  .paso-item{ flex:1; flex-direction:column; align-items:center; text-align:center; gap:5px; }
+  .paso-num{ width:28px; height:28px; font-size:0.8rem; }
+  .paso-info strong{ font-size:0.72rem; line-height:1.25; }
+  .paso-info span{ display:none; }
+  .pie-institucional{ display:none; }
+  .panel-der{ padding:24px 20px 48px; }
 }
 </style>
 </head>
@@ -239,10 +248,10 @@ button{font-family:inherit; cursor:pointer;}
         <path d="M-11,-54 C-11,-20 -11,20 -11,54"
               transform="translate(70,68)" stroke="#fff" stroke-width="2.4" fill="none"/>
       </svg>
-      <h1>Inscripci&oacute;n<br>en l&iacute;nea</h1>
+      <h1>Inscripci&oacute;n <br>en l&iacute;nea</h1>
       <p class="lead" id="lead-texto">
-        Complet&aacute; tu inscripci&oacute;n desde tu casa. Necesit&aacute;s el token
-        que te entreg&oacute; preceptor&iacute;a al presentar la documentaci&oacute;n.
+        Complet&aacute; tu inscripci&oacute;n desde tu casa con el c&oacute;digo que te
+        enviamos por correo despu&eacute;s de presentar tu documentaci&oacute;n.
       </p>
  
       <div class="pasos">
@@ -250,7 +259,7 @@ button{font-family:inherit; cursor:pointer;}
           <div class="paso-num">1</div>
           <div class="paso-info">
             <strong>Ingres&aacute; tu token</strong>
-            <span>El c&oacute;digo de 8 caracteres que te dieron en preceptor&iacute;a.</span>
+            <span>El c&oacute;digo de 8 caracteres que te lleg&oacute; por correo.</span>
           </div>
         </div>
         <div class="paso-item" data-paso="2">
@@ -307,8 +316,8 @@ button{font-family:inherit; cursor:pointer;}
         <div class="eyebrow">Paso 1 de 3</div>
         <h2>Ingres&aacute; tu token</h2>
         <p class="sub">
-          Es el c&oacute;digo que te entregaron en preceptor&iacute;a despu&eacute;s
-          de presentar la documentaci&oacute;n.
+          Es el c&oacute;digo que te enviamos por correo despu&eacute;s de que
+          presentaste tu documentaci&oacute;n en preceptor&iacute;a.
         </p>
  
         <div id="error-token" class="msg msg-error oculto"></div>
@@ -333,8 +342,8 @@ button{font-family:inherit; cursor:pointer;}
         <button class="btn-primario" id="btn-validar-token">Continuar</button>
  
         <div class="form-footer">
-          Si no ten&eacute;s token, acercate a preceptor&iacute;a con la
-          documentaci&oacute;n requerida.
+          &iquest;No te lleg&oacute; el correo? Revis&aacute; la carpeta de spam o
+          acercate a preceptor&iacute;a con la documentaci&oacute;n requerida.
         </div>
       </div>
  
