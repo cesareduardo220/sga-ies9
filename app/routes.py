@@ -7296,7 +7296,7 @@ def api_inscripcion_validar():
         cur.execute("""
             SELECT t.id, t.tipo, t.estado, t.vence_el, t.ciclo_lectivo,
                    t.carrera_id, c.nombre, c.nombre_corto,
-                   t.alumno_id
+                   t.alumno_id, t.email_destino
             FROM tokens_inscripcion t
             LEFT JOIN carreras c ON c.id = t.carrera_id
             WHERE t.token = %s
@@ -7324,6 +7324,7 @@ def api_inscripcion_validar():
             'carrera_id':    t[5],
             'carrera':       t[6],
             'carrera_corta': t[7],
+            'email_destino': t[9] or '',
         }
  
         if t[1] == 'alta':
@@ -7500,7 +7501,7 @@ def api_inscripcion_guardar():
         # dos envíos simultáneos con el mismo token, el segundo espera y
         # después lo encuentra ya usado.
         cur.execute("""
-            SELECT id, tipo, estado, vence_el, ciclo_lectivo, carrera_id, alumno_id
+            SELECT id, tipo, estado, vence_el, ciclo_lectivo, carrera_id, alumno_id, email_destino
             FROM tokens_inscripcion
             WHERE token = %s
             FOR UPDATE
@@ -7517,7 +7518,7 @@ def api_inscripcion_guardar():
             conn.rollback()
             return jsonify({'error': 'Este token venció. Acercate a preceptoría.'}), 410
  
-        token_id, tipo, _, _, ciclo, carrera_id, alumno_id = t
+        token_id, tipo, _, _, ciclo, carrera_id, alumno_id, email_destino = t
  
         materias_elegidas = []   # ids, solo en reinscripción
         nombres_materias  = []
@@ -7643,7 +7644,7 @@ def api_inscripcion_guardar():
             return jsonify({'error': err}), 400
  
         # ---------- Contacto ----------
-        email = (data.get('email') or '').strip().lower()
+        email = (email_destino or data.get('email') or '').strip().lower()
         err = validar_email(email) or revisar_dominio_email(email, _dominios_email(cur))
         if err:
             conn.rollback()

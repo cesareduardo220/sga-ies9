@@ -729,6 +729,20 @@ button{font-family:inherit; cursor:pointer;}
   function prepararFormulario(d){
     document.querySelector('.form-wrap').classList.add('ancho');
     activarAutocompletadoLocalidad('f-localidad', 'f-provincia');
+
+    // Fecha de nacimiento: mismos limites que el servidor (17 a 100)
+    var hoyF = new Date();
+    var isoLocal = function(f){
+      return f.getFullYear() + '-' + String(f.getMonth() + 1).padStart(2, '0') + '-' + String(f.getDate()).padStart(2, '0');
+    };
+    $('f-fecha-nac').max = isoLocal(new Date(hoyF.getFullYear() - 17, hoyF.getMonth(), hoyF.getDate()));
+    $('f-fecha-nac').min = isoLocal(new Date(hoyF.getFullYear() - 101, hoyF.getMonth(), hoyF.getDate() + 1));
+
+    // Correo: si el token se envio a una direccion, queda fija
+    if (d.email_destino) {
+      $('f-email').value = d.email_destino;
+      $('f-email').disabled = true;
+    }
  
     if (d.tipo === 'reinscripcion' && d.alumno) {
       var a = d.alumno;
@@ -746,7 +760,7 @@ button{font-family:inherit; cursor:pointer;}
       $('f-nombre').value      = a.nombre || '';
       $('f-fecha-nac').value   = a.fecha_nacimiento || '';
       $('f-cuil').value        = a.cuil || '';
-      $('f-email').value       = a.email || '';
+      $('f-email').value       = d.email_destino || a.email || '';
       $('f-celular').value     = a.celular || '';
       $('f-telefono').value    = a.telefono || '';
       $('f-direccion').value   = a.direccion || '';
