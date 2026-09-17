@@ -1188,21 +1188,6 @@ def api_sys_eliminar_admin(uid):
 
 
 # ================================================================
-
-def api_stats_admin():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM carreras WHERE activa = TRUE")
-    carreras = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM usuarios WHERE rol = 'coordinador' AND activo = TRUE")
-    coordinadores = cur.fetchone()[0]
-    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
-    anio = cur.fetchone()[0]
-    cur.close()
-    conn.close()
-    return jsonify({'carreras': carreras, 'coordinadores': coordinadores, 'anio': anio})
-
-# ================================================================
 # DESCARGAR PLANTILLA PLAN DE ESTUDIOS
 # ================================================================
 
