@@ -8572,7 +8572,7 @@
                 <td style="font-size:0.85rem; ${p.materias.length ? '' : 'color:var(--sga-texto-gris);font-style:italic;'}">
                     ${materiasTexto}
                 </td>
-                <td style="${esCoord ? '' : 'display:none'}">
+                ${esCoord ? `<td>
                     ${ROL === 'coordinador' ? `
                         <div style="display:flex; gap:6px;">
                             <button class="btn-secundario" style="padding:6px 10px;" title="Asignar materias" onclick="abrirModalAsignar(${p.id}, '${p.apellido}, ${p.nombre}')">📚</button>
@@ -8580,7 +8580,7 @@
                             <button class="btn-secundario" style="padding:6px 10px; color:var(--sga-error);" title="Eliminar" onclick="eliminarProfesor(${p.id}, '${p.apellido}')">🗑️</button>
                         </div>
                     ` : '—'}
-                </td>
+                </td>` : ''}
             </tr>`;
         }).join('');
     }
