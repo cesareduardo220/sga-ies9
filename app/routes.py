@@ -2977,6 +2977,38 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
     """, (aid, anio, aid))
     aprobadas_ok = {r[0] for r in cur.fetchall()}
 
+    # Regularidades caidas: por tiempo (2 anios) o por 3 aplazos
+    cur.execute("""
+        WITH ultima AS (
+            SELECT DISTINCT ON (i.materia_id)
+                   i.materia_id,
+                   cu.cargado_en,
+                   (cu.cargado_en + INTERVAL '2 years')::date AS vence_el
+            FROM inscripciones i
+            JOIN cursadas cu ON cu.inscripcion_id = i.id
+            WHERE i.alumno_id = %s
+              AND i.anio_lectivo < %s
+              AND cu.condicion IN ('regular', 'promocionado')
+            ORDER BY i.materia_id, cu.cargado_en DESC
+        )
+        SELECT u.materia_id, u.vence_el,
+               (SELECT COUNT(*) FROM examenes e
+                 WHERE e.alumno_id = %s
+                   AND e.materia_id = u.materia_id
+                   AND e.resultado = 'desaprobado'
+                   AND e.fecha_mesa >= u.cargado_en::date) AS intentos
+        FROM ultima u
+    """, (aid, anio, aid))
+    regularidad_caida = {}
+    for _mid, _vence, _intentos in cur.fetchall():
+        _motivos = []
+        if _vence and date.today() > _vence:
+            _motivos.append(f"regularidad vencida el {_vence.strftime('%d/%m/%Y')}")
+        if _intentos >= 3:
+            _motivos.append(f'agot\u00f3 los 3 intentos ({_intentos} rendidos)')
+        if _motivos:
+            regularidad_caida[_mid] = ' y '.join(_motivos)
+
     # Correlatividades de todas las materias
     cur.execute("""
         SELECT materia_id, requiere_materia_id, tipo
@@ -3056,6 +3088,8 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
             'puede_inscribirse': puede,
             'bloqueada_por': bloqueada_por,
             'regularizada': mid in cursadas_ok,
+            'regularidad_vencida': mid in regularidad_caida,
+            'motivo_regularidad':  regularidad_caida.get(mid),
             'aprobada': mid in aprobadas_ok,
         })
 
@@ -7247,7 +7281,8 @@ def _materias_para_reinscripcion(cur, alumno_id, carrera_id, ciclo):
     for m in _evaluar_materias_alumno(cur, alumno_id, carrera_id, ciclo):
         if m['inscripta']:
             ya_inscripta = True
-        elif m['puede_inscribirse'] and not m['regularizada'] and not m['aprobada']:
+        elif m['puede_inscribirse'] and not m['aprobada'] and (
+                not m['regularizada'] or m['regularidad_vencida']):
             ya_inscripta = False
         else:
             continue
@@ -7257,6 +7292,7 @@ def _materias_para_reinscripcion(cur, alumno_id, carrera_id, ciclo):
             'anio':               m['anio'],
             'regimen_aprobacion': m['regimen_aprobacion'],
             'ya_inscripta':       ya_inscripta,
+            'motivo_regularidad':  m.get('motivo_regularidad'),
         })
     return lista
 

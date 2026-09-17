@@ -902,7 +902,10 @@ button{font-family:inherit; cursor:pointer;}
               (fija ? ' checked disabled' : '') + '>' +
             '<span>' + escaparHtml(m.nombre) +
               '<span class="mat-sub">' +
-                (fija ? 'Ya est\u00e1s inscripto/a' : escaparHtml(m.regimen_aprobacion || '')) +
+                (fija ? 'Ya est\u00e1s inscripto/a'
+                    : (m.motivo_regularidad
+                        ? 'Ten\u00e9s que volver a cursarla: ' + escaparHtml(m.motivo_regularidad)
+                        : escaparHtml(m.regimen_aprobacion || ''))) +
               '</span></span>' +
             '</label>';
         });
