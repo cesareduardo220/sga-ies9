@@ -952,6 +952,8 @@
 
         /* ── Aviso solo lectura ── */
         #aviso-solo-lectura-mobile { display: block !important; }
+        /* ── Profesores: sin columna de acciones en celular ── */
+        #th-acciones-profe, #profesores-tbody td.acciones-profe { display: none !important; }
 
         /* ── Sin espacios duplicados: el aviso ya queda debajo del encabezado ── */
         .main { padding-top: 0 !important; }
@@ -8546,12 +8548,20 @@
         });
     }
 
+    const MQ_SOLO_LECTURA = window.matchMedia('(max-width: 768px)');
+    function actualizarSubProfesores() {
+        const sub = document.getElementById('sub-profesores');
+        if (!sub) return;
+        sub.textContent = (ROL === 'coordinador' && !MQ_SOLO_LECTURA.matches)
+            ? 'Gestión de profesores y asignación a materias'
+            : 'Listado de profesores y materias asignadas';
+    }
+    MQ_SOLO_LECTURA.addEventListener('change', actualizarSubProfesores);
+
     function renderProfesores() {
         const tbody = document.getElementById('profesores-tbody');
         const esCoord = ROL === 'coordinador';
-        document.getElementById('sub-profesores').textContent = esCoord
-            ? 'Gestión de profesores y asignación a materias'
-            : 'Listado de profesores y materias asignadas';
+        actualizarSubProfesores();
         document.getElementById('th-acciones-profe').style.display = esCoord ? '' : 'none';
         document.getElementById('buscar-profesores').style.display = 'block';
         const lista = filtrarProfesores();
@@ -8572,7 +8582,7 @@
                 <td style="font-size:0.85rem; ${p.materias.length ? '' : 'color:var(--sga-texto-gris);font-style:italic;'}">
                     ${materiasTexto}
                 </td>
-                ${esCoord ? `<td>
+                ${esCoord ? `<td class="acciones-profe">
                     ${ROL === 'coordinador' ? `
                         <div style="display:flex; gap:6px;">
                             <button class="btn-secundario" style="padding:6px 10px;" title="Asignar materias" onclick="abrirModalAsignar(${p.id}, '${p.apellido}, ${p.nombre}')">📚</button>
