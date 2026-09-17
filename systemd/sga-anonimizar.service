@@ -1,0 +1,10 @@
+[Unit]
+Description=SGA IES N9 - Anonimizar preinscripciones rechazadas
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=sgaadmin
+Group=sgaadmin
+WorkingDirectory=/home/sgaadmin/sga-ies9
+ExecStart=/home/sgaadmin/sga-ies9/venv/bin/python /home/sgaadmin/sga-ies9/anonimizar_preinscripciones.py

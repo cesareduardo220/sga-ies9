@@ -1,0 +1,9 @@
+[Unit]
+Description=SGA IES N9 - Anonimización diaria de preinscripciones rechazadas
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
