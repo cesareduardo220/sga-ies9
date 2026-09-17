@@ -2626,12 +2626,13 @@
             <div class="seccion-header">
                 <div>
                     <h2>Profesores</h2>
-                    <div class="sub">Gestión de profesores y asignación a materias</div>
+                    <div class="sub" id="sub-profesores">Gestión de profesores y asignación a materias</div>
                 </div>
                 <button class="btn-nuevo" id="btn-nuevo-profesor" onclick="abrirModalProfesor(null)">+ Nuevo profesor</button>
             </div>
 
-            <div id="profesores-cargando" class="cargando">Cargando...</div>
+            <input type="search" id="buscar-profesores" autocomplete="off" placeholder="Buscar por apellido, nombre, DNI, título o materia..." oninput="renderProfesores()" style="display:none; width:100%; box-sizing:border-box; margin:0 0 14px; padding:10px 14px; border:1px solid #d9dedb; border-radius:10px; background:#fff; font-size:0.9rem;">
+        <div id="profesores-cargando" class="cargando">Cargando...</div>
             <div id="profesores-vacio" class="empty-state" style="display:none">
                 <div class="empty-icon">👨‍🏫</div>
                 No hay profesores registrados aún.
@@ -2645,7 +2646,7 @@
                             <th>Título</th>
                             <th>Celular</th>
                             <th id="th-materias-anio">Materias asignadas</th>
-                            <th></th>
+                            <th id="th-acciones-profe"></th>
                         </tr>
                     </thead>
                     <tbody id="profesores-tbody"></tbody>
@@ -8529,9 +8530,36 @@
         renderProfesores();
     }
 
+    function _normProfe(t) {
+        return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    }
+
+    function filtrarProfesores() {
+        const q = _normProfe((document.getElementById('buscar-profesores') || {}).value).trim();
+        if (!q) return profesoresData;
+        const qSinPuntos = q.replace(/\./g, '');
+        return profesoresData.filter(p => {
+            const texto = _normProfe([p.apellido, p.nombre, p.dni,
+                String(p.dni || '').replace(/\D/g, ''), p.titulo,
+                (p.materias || []).map(m => m.nombre).join(' ')].join(' '));
+            return texto.includes(q) || texto.includes(qSinPuntos);
+        });
+    }
+
     function renderProfesores() {
         const tbody = document.getElementById('profesores-tbody');
-        tbody.innerHTML = profesoresData.map(p => {
+        const esCoord = ROL === 'coordinador';
+        document.getElementById('sub-profesores').textContent = esCoord
+            ? 'Gestión de profesores y asignación a materias'
+            : 'Listado de profesores y materias asignadas';
+        document.getElementById('th-acciones-profe').style.display = esCoord ? '' : 'none';
+        document.getElementById('buscar-profesores').style.display = 'block';
+        const lista = filtrarProfesores();
+        if (!lista.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--sga-texto-gris); font-style:italic;">No hay profesores que coincidan con la búsqueda.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = lista.map(p => {
             const materiasTexto = p.materias.length
                 ? p.materias.map(m => m.nombre).join(', ')
                 : 'Sin asignar';
@@ -8544,7 +8572,7 @@
                 <td style="font-size:0.85rem; ${p.materias.length ? '' : 'color:var(--sga-texto-gris);font-style:italic;'}">
                     ${materiasTexto}
                 </td>
-                <td>
+                <td style="${esCoord ? '' : 'display:none'}">
                     ${ROL === 'coordinador' ? `
                         <div style="display:flex; gap:6px;">
                             <button class="btn-secundario" style="padding:6px 10px;" title="Asignar materias" onclick="abrirModalAsignar(${p.id}, '${p.apellido}, ${p.nombre}')">📚</button>
