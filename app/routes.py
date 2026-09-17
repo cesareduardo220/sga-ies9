@@ -7905,7 +7905,7 @@ def api_preinscripciones_detalle(pid):
             SELECT p.id, t.tipo, p.estado, p.ciclo_lectivo, p.tipo_documento, p.dni,
                    p.departamento, p.anio_ingreso, p.observaciones,
                    p.creado_en, p.revisado_en, p.alumno_id, t.alumno_id,
-                   u.apellido, u.nombre,
+                   u.apellido, u.nombre, p.anonimizado_en,
                    {', '.join('p.' + c for c in columnas)}
             FROM preinscripciones p
             JOIN tokens_inscripcion t ON t.id = p.token_id
@@ -7917,7 +7917,7 @@ def api_preinscripciones_detalle(pid):
             return jsonify({'error': 'Preinscripción no encontrada'}), 404
 
         tipo = f[1]
-        datos = dict(zip(columnas, f[15:]))
+        datos = dict(zip(columnas, f[16:]))
         if datos.get('fecha_nacimiento'):
             datos['fecha_nacimiento'] = datos['fecha_nacimiento'].strftime('%d/%m/%Y')
 
@@ -7967,6 +7967,7 @@ def api_preinscripciones_detalle(pid):
             'creado_en':     f[9].strftime('%d/%m/%Y %H:%M') if f[9] else None,
             'revisado_en':   f[10].strftime('%d/%m/%Y %H:%M') if f[10] else None,
             'revisado_por':  f"{f[13]}, {f[14]}" if f[13] else None,
+            'anonimizado_en': f[15].strftime('%d/%m/%Y') if f[15] else None,
             'alumno_id':     alumno_ref,
             'datos':         datos,
             'materias':      materias,

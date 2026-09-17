@@ -7594,6 +7594,12 @@
                 <strong>Aprobada</strong> por ${preiEsc(d.revisado_por || '—')} el ${preiEsc(d.revisado_en || '')}.</div>`;
         }
 
+        // Aviso de anonimizacion (Ley 25.326), en cualquier estado
+        if (d.anonimizado_en) {
+            html += `<div class="prei-aviso" style="background:#F7F5F0; border:1.5px solid var(--sga-borde); color:var(--sga-texto-gris);">
+                <strong>Datos personales eliminados</strong> el ${preiEsc(d.anonimizado_en)}, según la Ley 25.326.</div>`;
+        }
+
         // Qué va a pasar al aprobar, según el tipo
         if (d.estado === 'pendiente') {
             const explicaciones = {
