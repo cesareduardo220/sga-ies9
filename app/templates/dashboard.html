@@ -7874,7 +7874,7 @@
         const texto = v.abierta
             ? `🟢 <strong>Formulario de los alumnos: abierto</strong>${rango}. ${vigencia}`
             : `⚪ <strong>Formulario de los alumnos: cerrado.</strong> Pueden recibir su token, pero no van a poder usarlo
-               hasta que ${v.puede_editar ? 'abras el formulario desde Configurar' : 'el coordinador abra el formulario'}.
+               hasta que ${v.puede_editar ? (window.matchMedia('(max-width: 768px)').matches ? 'abras el formulario desde Configurar, en la computadora' : 'abras el formulario desde Configurar') : 'el coordinador abra el formulario'}.
                ${rango ? '(Programado' + rango + '.) ' : ''}${vigencia}`;
         caja.style.cssText = (v.abierta
             ? 'background:#E6F9EE; border:1.5px solid #B7E4C7; color:#1a6e3c;'
