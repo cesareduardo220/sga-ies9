@@ -1473,7 +1473,7 @@
             <div class="seccion-header">
                 <div>
                     <h2>Alumnos</h2>
-                    <div class="sub">Gestión de alumnos de la carrera <span id="alumnos-contador" style="color:var(--sga-verde-medio); font-weight:600;"></span></div>
+                    <div class="sub"><span id="sub-alumnos">Gestión de alumnos de la carrera</span> <span id="alumnos-contador" style="color:var(--sga-verde-medio); font-weight:600;"></span></div>
                 </div>
                 <button class="btn-nuevo" id="btn-nuevo-alumno" onclick="abrirModalAlumno()">+ Nuevo alumno</button>
             </div>
@@ -2666,7 +2666,7 @@
                 <div class="seccion-header">
                     <div>
                         <h2>Mesas de Examen</h2>
-                        <div class="sub">Gestión de mesas, inscripción de alumnos y actas</div>
+                        <div class="sub" id="sub-mesas">Gestión de mesas, inscripción de alumnos y actas</div>
                     </div>
                     <button class="btn-nuevo" onclick="abrirModalNuevaMesa()">+ Nueva mesa</button>
                 </div>
@@ -2823,7 +2823,7 @@
             <div class="seccion-header">
                 <div>
                     <h2>Usuarios</h2>
-                    <div class="sub">Gestión de preceptoras de la carrera</div>
+                    <div class="sub" id="sub-preceptoras">Gestión de preceptoras de la carrera</div>
                 </div>
                 <button class="btn-nuevo" id="btn-nueva-preceptora" onclick="abrirModalPreceptora(null)">+ Nueva preceptora</button>
             </div>
@@ -2858,7 +2858,7 @@
             <div class="seccion-header">
                 <div>
                     <h2>Administradores</h2>
-                    <div class="sub">Gestión de cuentas del administrador del sistema</div>
+                    <div class="sub" id="sub-cuentas">Gestión de cuentas del administrador del sistema</div>
                 </div>
                 <button class="btn-nuevo" id="btn-nuevo-admin" onclick="abrirModalAdmin(null)">+ Nuevo administrador</button>
             </div>
@@ -2888,7 +2888,7 @@
             <div class="seccion-header">
                 <div>
                     <h2>Carreras</h2>
-                    <div class="sub">Gestión de carreras de la institución</div>
+                    <div class="sub" id="sub-carreras">Gestión de carreras de la institución</div>
                 </div>
                 <button class="btn-nuevo" onclick="abrirModalCarrera()">+ Nueva carrera</button>
             </div>
@@ -2901,7 +2901,7 @@
             <div class="seccion-header">
                 <div>
                     <h2>Coordinadores</h2>
-                    <div class="sub">Gestión de coordinadores por carrera</div>
+                    <div class="sub" id="sub-coordinadores">Gestión de coordinadores por carrera</div>
                 </div>
                 <button class="btn-nuevo" onclick="abrirModalCoord()">+ Nuevo coordinador</button>
             </div>
@@ -8574,6 +8574,27 @@
             : 'Listado de profesores y materias asignadas';
     }
     MQ_SOLO_LECTURA.addEventListener('change', actualizarSubProfesores);
+
+    // Subtitulos que prometen gestion pero en celular son de solo lectura
+    const SUBS_GESTION = {
+        'sub-alumnos':       ['Gestión de alumnos de la carrera', 'Listado de alumnos de la carrera'],
+        'sub-mesas':         ['Gestión de mesas, inscripción de alumnos y actas', 'Listado de mesas y actas'],
+        'sub-preceptoras':   ['Gestión de preceptoras de la carrera', 'Listado de preceptoras de la carrera'],
+        'sub-cuentas':       ['Gestión de cuentas del administrador del sistema', 'Listado de cuentas del administrador'],
+        'sub-carreras':      ['Gestión de carreras de la institución', 'Listado de carreras de la institución'],
+        'sub-coordinadores': ['Gestión de coordinadores por carrera', 'Listado de coordinadores por carrera']
+    };
+
+    function actualizarSubtitulosGestion() {
+        const soloLectura = MQ_SOLO_LECTURA.matches;
+        Object.keys(SUBS_GESTION).forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = soloLectura ? SUBS_GESTION[id][1] : SUBS_GESTION[id][0];
+        });
+    }
+    MQ_SOLO_LECTURA.addEventListener('change', actualizarSubtitulosGestion);
+    document.addEventListener('DOMContentLoaded', actualizarSubtitulosGestion);
 
     function renderProfesores() {
         const tbody = document.getElementById('profesores-tbody');
