@@ -1713,7 +1713,7 @@
             <div class="seccion-header">
                 <div>
                     <h2>Plan de Estudios</h2>
-                    <div class="sub">Espacios curriculares de la carrera</div>
+                    <div class="sub" id="materias-sub">Espacios curriculares de la carrera</div>
                 </div>
                 <a href="/api/materias/descargar-pdf" class="btn-secundario" style="text-decoration:none">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
@@ -5387,6 +5387,17 @@
         document.getElementById('materias-cargando').style.display = 'block';
         document.getElementById('materias-sin-plan').style.display = 'none';
         document.getElementById('materias-contenido').style.display = 'none';
+
+        try {
+            const resPlan  = await fetch('/api/plan-vigente');
+            const plan     = await resPlan.json();
+            const subEl    = document.getElementById('materias-sub');
+            if (subEl && plan && plan.nombre) {
+                const partes = [plan.nombre];
+                if (plan.resolucion) partes.push(plan.resolucion);
+                subEl.textContent = partes.join(' - ');
+            }
+        } catch (e) { /* si falla, queda el subtitulo por defecto */ }
 
         const res  = await fetch('/api/materias');
         const data = await res.json();

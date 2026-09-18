@@ -1270,6 +1270,31 @@ def api_materias_listar():
         'correl_cursada': r[6], 'correl_aprobada': r[7]
     } for r in rows])
 
+@auth.route('/api/plan-vigente', methods=['GET'])
+@login_requerido(['coordinador', 'preceptora'])
+def api_plan_vigente():
+    carrera_id = session.get('carrera_id')
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT nombre, resolucion, fecha_vigencia
+        FROM planes_estudio
+        WHERE carrera_id = %s AND activo = TRUE
+        ORDER BY fecha_vigencia DESC
+        LIMIT 1
+    """, (carrera_id,))
+    fila = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not fila:
+        return jsonify({})
+    return jsonify({
+        'nombre': (fila[0] or '').strip(),
+        'resolucion': (fila[1] or '').strip(),
+        'fecha_vigencia': fila[2].strftime('%d/%m/%Y') if fila[2] else ''
+    })
+
+
 # ================================================================
 # DESCARGAR PLAN DE ESTUDIOS EN PDF
 # ================================================================
