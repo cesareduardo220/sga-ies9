@@ -1904,13 +1904,14 @@ def api_alumnos_listar():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        SELECT id, apellido, nombre, dni, email, celular,
-               fecha_nacimiento, direccion, localidad,
-               contacto_emergencia_nombre, contacto_emergencia_telefono,
-               activo, anio_ingreso, tipo_documento, cuil, provincia, legajo
-        FROM alumnos
-        WHERE carrera_id = %s
-        ORDER BY apellido, nombre
+        SELECT ac.id, p.apellido, p.nombre, p.dni, p.email, p.celular,
+               p.fecha_nacimiento, p.direccion, p.localidad,
+               p.contacto_emergencia_nombre, p.contacto_emergencia_telefono,
+               ac.activo, ac.anio_ingreso, p.tipo_documento, p.cuil, p.provincia, p.legajo
+          FROM alumnos_carrera ac
+          JOIN personas p ON p.id = ac.persona_id
+         WHERE ac.carrera_id = %s
+         ORDER BY p.apellido, p.nombre
     """, (carrera_id,))
     rows = cur.fetchall()
     cur.close()
