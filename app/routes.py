@@ -36,6 +36,44 @@ def renovar_sesion():
     _chequear_promociones_vencidas()
 
 
+
+# ==========================================================
+# MODIFICACIONES SOLO DESDE COMPUTADORA
+# El sistema avisa en el celular que solo se puede consultar.
+# Aca se rechazan las escrituras que lleguen desde un movil,
+# para que esa leyenda valga tambien del lado del servidor.
+# ==========================================================
+
+RUTAS_LIBRES_EN_MOVIL = {
+    '/login',
+    '/cambiar-password',
+    '/configurar-admin',
+    '/api/inscripcion/validar',
+    '/api/inscripcion/guardar',
+}
+
+METODOS_DE_ESCRITURA = {'POST', 'PUT', 'PATCH', 'DELETE'}
+
+MARCAS_DE_MOVIL = ('android', 'iphone', 'ipad', 'ipod',
+                   'windows phone', 'mobile')
+
+
+def _es_movil():
+    agente = (request.headers.get('User-Agent') or '').lower()
+    return any(m in agente for m in MARCAS_DE_MOVIL)
+
+
+@auth.before_request
+def bloquear_escrituras_en_movil():
+    if request.method not in METODOS_DE_ESCRITURA:
+        return
+    if request.path in RUTAS_LIBRES_EN_MOVIL:
+        return
+    if not _es_movil():
+        return
+    return jsonify({'error': 'Las modificaciones solo estan disponibles desde una computadora.'}), 403
+
+
 # ================================================================
 # HELPERS
 # ================================================================
