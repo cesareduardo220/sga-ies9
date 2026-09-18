@@ -1292,6 +1292,17 @@ def api_materias_descargar_pdf():
     anio_lectivo = cur.fetchone()[0]
 
     cur.execute("""
+        SELECT nombre, resolucion
+        FROM planes_estudio
+        WHERE carrera_id = %s AND activo = TRUE
+        ORDER BY fecha_vigencia DESC
+        LIMIT 1
+    """, (carrera_id,))
+    _plan = cur.fetchone()
+    plan_nombre = (_plan[0] or '').strip() if _plan else ''
+    plan_resolucion = (_plan[1] or '').strip() if _plan else ''
+
+    cur.execute("""
         SELECT m.anio, m.orden, m.nombre, m.regimen, m.regimen_aprobacion,
                STRING_AGG(CASE WHEN co.tipo = 'cursada' THEN r.orden::text END, ', ' ORDER BY r.orden) AS correl_cursada,
                STRING_AGG(CASE WHEN co.tipo = 'aprobada' THEN r.orden::text END, ', ' ORDER BY r.orden) AS correl_aprobada
@@ -1357,6 +1368,10 @@ def api_materias_descargar_pdf():
     elementos.append(Paragraph('Instituto de Educación Superior N° 9 "Juana Azurduy"', estilo_titulo))
     elementos.append(Paragraph('San Pedro de Jujuy — Jujuy', estilo_sub))
     elementos.append(Paragraph(f'{nombre_carrera}', estilo_sub))
+    if plan_nombre:
+        elementos.append(Paragraph(plan_nombre, estilo_sub))
+    if plan_resolucion:
+        elementos.append(Paragraph(plan_resolucion, estilo_sub))
     elementos.append(Paragraph(f'Plan de Estudios — Año lectivo {anio_lectivo}', estilo_sub))
     elementos.append(Spacer(1, 0.4*cm))
 
