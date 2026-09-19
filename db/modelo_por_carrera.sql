@@ -1,35 +1,19 @@
+-- Modelo por carrera del SGA - IES N 9 "Juana Azurduy"
+-- Cada carrera es duena de la ficha completa de sus alumnos.
+-- Ningun dato personal se comparte entre carreras: lo que carga la
+-- preceptora de una carrera no modifica ni condiciona lo de otra.
+--
+-- Unicidad: DNI, CUIL, email y legajo son unicos DENTRO de cada carrera,
+-- no en todo el instituto. Asi una persona puede cursar dos carreras a la
+-- vez, y cada una lleva su propio registro.
+
 \set ON_ERROR_STOP on
 
 BEGIN;
 
--- Las dos tablas estan vacias. El CASCADE se lleva las 8 claves foraneas
--- que apuntan a alumnos_carrera; se vuelven a crear mas abajo.
-DROP TABLE IF EXISTS alumnos_carrera CASCADE;
-DROP TABLE IF EXISTS personas CASCADE;
-
--- Identidad: solo lo que precarga el formulario. No es fuente de verdad.
-CREATE TABLE personas (
-    id                SERIAL PRIMARY KEY,
-    dni               character varying(15)  NOT NULL,
-    tipo_documento    character varying(10)  NOT NULL DEFAULT 'DNI',
-    cuil              character varying(11),
-    apellido          character varying(100) NOT NULL,
-    nombre            character varying(100) NOT NULL,
-    fecha_nacimiento  date,
-    creado_en         timestamp without time zone NOT NULL DEFAULT now(),
-    CONSTRAINT personas_dni_key  UNIQUE (dni),
-    CONSTRAINT personas_cuil_key UNIQUE (cuil),
-    CONSTRAINT personas_tipo_documento_check
-        CHECK (tipo_documento::text = ANY (ARRAY['DNI'::character varying::text,
-                                                 'DNI_EXT'::character varying::text,
-                                                 'PAS'::character varying::text,
-                                                 'CI'::character varying::text]))
-);
-
--- Ficha completa del alumno EN ESA CARRERA. Cada carrera es duena de la suya.
+-- Ficha del alumno en una carrera. Una fila por alumno-carrera.
 CREATE TABLE alumnos_carrera (
     id                            SERIAL PRIMARY KEY,
-    persona_id                    integer NOT NULL,
     carrera_id                    integer NOT NULL,
     plan_id                       integer,
     anio_ingreso                  integer NOT NULL,
@@ -53,7 +37,6 @@ CREATE TABLE alumnos_carrera (
     contacto_emergencia_vinculo   character varying(50),
     contacto_emergencia_telefono  character varying(30),
     creado_en                     timestamp without time zone NOT NULL DEFAULT now(),
-    CONSTRAINT alumnos_carrera_persona_carrera_key UNIQUE (persona_id, carrera_id),
     CONSTRAINT alumnos_carrera_carrera_dni_key    UNIQUE (carrera_id, dni),
     CONSTRAINT alumnos_carrera_carrera_cuil_key   UNIQUE (carrera_id, cuil),
     CONSTRAINT alumnos_carrera_carrera_email_key  UNIQUE (carrera_id, email),
@@ -63,8 +46,6 @@ CREATE TABLE alumnos_carrera (
                                                  'DNI_EXT'::character varying::text,
                                                  'PAS'::character varying::text,
                                                  'CI'::character varying::text])),
-    CONSTRAINT alumnos_carrera_persona_id_fkey
-        FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE RESTRICT,
     CONSTRAINT alumnos_carrera_carrera_id_fkey
         FOREIGN KEY (carrera_id) REFERENCES carreras(id) ON DELETE RESTRICT,
     CONSTRAINT alumnos_carrera_plan_id_fkey
@@ -76,7 +57,31 @@ CREATE TABLE alumnos_carrera (
 CREATE INDEX idx_alumnos_carrera_carrera  ON alumnos_carrera (carrera_id);
 CREATE INDEX idx_alumnos_carrera_apellido ON alumnos_carrera (apellido, nombre);
 
--- Las 8 claves foraneas que el CASCADE se llevo
+-- Documentos ocupados dentro de cada carrera. Cruza alumnos, profesores,
+-- usuarios y preinscripciones pendientes: un mismo DNI no puede tener dos
+-- roles distintos en la misma carrera.
+-- referencia_id NO es clave foranea: apunta a distintas tablas segun origen.
+CREATE TABLE documentos_carrera (
+    id             SERIAL PRIMARY KEY,
+    carrera_id     integer NOT NULL,
+    dni            character varying(15) NOT NULL,
+    origen         character varying(20) NOT NULL,
+    referencia_id  integer,
+    creado_en      timestamp without time zone NOT NULL DEFAULT now(),
+    CONSTRAINT documentos_carrera_carrera_dni_key UNIQUE (carrera_id, dni),
+    CONSTRAINT documentos_carrera_origen_check
+        CHECK (origen::text = ANY (ARRAY['alumno'::character varying::text,
+                                         'profesor'::character varying::text,
+                                         'usuario'::character varying::text,
+                                         'preinscripcion'::character varying::text])),
+    CONSTRAINT documentos_carrera_carrera_id_fkey
+        FOREIGN KEY (carrera_id) REFERENCES carreras(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_documentos_carrera_ref ON documentos_carrera (origen, referencia_id);
+
+-- Las 8 tablas que referencian al alumno lo hacen por alumnos_carrera.id,
+-- es decir por su inscripcion en UNA carrera, no por la persona.
 ALTER TABLE examenes ADD CONSTRAINT examenes_alumno_id_fkey
     FOREIGN KEY (alumno_id) REFERENCES alumnos_carrera(id) ON DELETE CASCADE;
 ALTER TABLE historial_plan_alumno ADD CONSTRAINT historial_plan_alumno_alumno_id_fkey
@@ -93,11 +98,5 @@ ALTER TABLE reconocimientos_alumno ADD CONSTRAINT reconocimientos_alumno_alumno_
     FOREIGN KEY (alumno_id) REFERENCES alumnos_carrera(id) ON DELETE CASCADE;
 ALTER TABLE tokens_inscripcion ADD CONSTRAINT tokens_inscripcion_alumno_id_fkey
     FOREIGN KEY (alumno_id) REFERENCES alumnos_carrera(id) ON DELETE CASCADE;
-
--- Control
-SELECT conrelid::regclass AS tabla, conname AS restriccion
-  FROM pg_constraint
- WHERE contype = 'f' AND confrelid = 'alumnos_carrera'::regclass
- ORDER BY 1;
 
 COMMIT;
