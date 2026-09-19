@@ -1904,14 +1904,13 @@ def api_alumnos_listar():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        SELECT ac.id, p.apellido, p.nombre, p.dni, p.email, p.celular,
-               p.fecha_nacimiento, p.direccion, p.localidad,
-               p.contacto_emergencia_nombre, p.contacto_emergencia_telefono,
-               ac.activo, ac.anio_ingreso, p.tipo_documento, p.cuil, p.provincia, p.legajo
-          FROM alumnos_carrera ac
-          JOIN personas p ON p.id = ac.persona_id
-         WHERE ac.carrera_id = %s
-         ORDER BY p.apellido, p.nombre
+        SELECT id, apellido, nombre, dni, email, celular,
+               fecha_nacimiento, direccion, localidad,
+               contacto_emergencia_nombre, contacto_emergencia_telefono,
+               activo, anio_ingreso, tipo_documento, cuil, provincia, legajo
+          FROM alumnos_carrera
+         WHERE carrera_id = %s
+         ORDER BY apellido, nombre
     """, (carrera_id,))
     rows = cur.fetchall()
     cur.close()
@@ -1931,6 +1930,59 @@ def api_alumnos_listar():
         'contacto_emergencia_telefono': r[10],
         'activo': r[11], 'anio_ingreso': r[12], 'legajo': r[16]
     } for r in rows])
+
+
+def reservar_documento(cur, carrera_id, dni, origen, referencia_id=None):
+    """Reserva el documento dentro de la carrera.
+
+    Devuelve None si quedo reservado, o el origen que ya lo tenia
+    ('alumno', 'profesor', 'usuario', 'preinscripcion') si estaba tomado.
+    """
+    cur.execute("""
+        INSERT INTO documentos_carrera (carrera_id, dni, origen, referencia_id)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (carrera_id, dni) DO NOTHING
+        RETURNING id
+    """, (carrera_id, dni, origen, referencia_id))
+    if cur.fetchone() is not None:
+        return None
+    cur.execute("""
+        SELECT origen FROM documentos_carrera
+         WHERE carrera_id = %s AND dni = %s
+    """, (carrera_id, dni))
+    fila = cur.fetchone()
+    return fila[0] if fila else 'desconocido'
+
+
+def liberar_documento(cur, carrera_id=None, dni=None, origen=None, referencia_id=None):
+    """Libera una reserva, por origen+referencia o por carrera+dni."""
+    if origen is not None and referencia_id is not None:
+        cur.execute("""
+            DELETE FROM documentos_carrera
+             WHERE origen = %s AND referencia_id = %s
+        """, (origen, referencia_id))
+    elif carrera_id is not None and dni:
+        cur.execute("""
+            DELETE FROM documentos_carrera
+             WHERE carrera_id = %s AND dni = %s
+        """, (carrera_id, dni))
+    else:
+        raise ValueError('liberar_documento: faltan datos para ubicar la reserva')
+    return cur.rowcount
+
+
+def traspasar_documento(cur, carrera_id, dni, origen, referencia_id):
+    """Cambia el origen de una reserva sin liberarla.
+
+    Se usa al aprobar una preinscripcion: el documento pasa de estar
+    reservado por la preinscripcion a estarlo por el alumno creado.
+    """
+    cur.execute("""
+        UPDATE documentos_carrera
+           SET origen = %s, referencia_id = %s
+         WHERE carrera_id = %s AND dni = %s
+    """, (origen, referencia_id, carrera_id, dni))
+    return cur.rowcount
 
 
 @auth.route('/api/alumnos', methods=['POST'])
