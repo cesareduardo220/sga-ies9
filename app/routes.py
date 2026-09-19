@@ -1932,59 +1932,6 @@ def api_alumnos_listar():
     } for r in rows])
 
 
-def reservar_documento(cur, carrera_id, dni, origen, referencia_id=None):
-    """Reserva el documento dentro de la carrera.
-
-    Devuelve None si quedo reservado, o el origen que ya lo tenia
-    ('alumno', 'profesor', 'usuario', 'preinscripcion') si estaba tomado.
-    """
-    cur.execute("""
-        INSERT INTO documentos_carrera (carrera_id, dni, origen, referencia_id)
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (carrera_id, dni) DO NOTHING
-        RETURNING id
-    """, (carrera_id, dni, origen, referencia_id))
-    if cur.fetchone() is not None:
-        return None
-    cur.execute("""
-        SELECT origen FROM documentos_carrera
-         WHERE carrera_id = %s AND dni = %s
-    """, (carrera_id, dni))
-    fila = cur.fetchone()
-    return fila[0] if fila else 'desconocido'
-
-
-def liberar_documento(cur, carrera_id=None, dni=None, origen=None, referencia_id=None):
-    """Libera una reserva, por origen+referencia o por carrera+dni."""
-    if origen is not None and referencia_id is not None:
-        cur.execute("""
-            DELETE FROM documentos_carrera
-             WHERE origen = %s AND referencia_id = %s
-        """, (origen, referencia_id))
-    elif carrera_id is not None and dni:
-        cur.execute("""
-            DELETE FROM documentos_carrera
-             WHERE carrera_id = %s AND dni = %s
-        """, (carrera_id, dni))
-    else:
-        raise ValueError('liberar_documento: faltan datos para ubicar la reserva')
-    return cur.rowcount
-
-
-def traspasar_documento(cur, carrera_id, dni, origen, referencia_id):
-    """Cambia el origen de una reserva sin liberarla.
-
-    Se usa al aprobar una preinscripcion: el documento pasa de estar
-    reservado por la preinscripcion a estarlo por el alumno creado.
-    """
-    cur.execute("""
-        UPDATE documentos_carrera
-           SET origen = %s, referencia_id = %s
-         WHERE carrera_id = %s AND dni = %s
-    """, (origen, referencia_id, carrera_id, dni))
-    return cur.rowcount
-
-
 @auth.route('/api/alumnos', methods=['POST'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_alumnos_crear():
@@ -7008,7 +6955,8 @@ def _estado_reinscripcion_alumnos(cur, carrera_id, ciclo, alumno_ids=None):
         ) tk ON TRUE
         LEFT JOIN LATERAL (
             SELECT p.id, p.estado FROM preinscripciones p
-            WHERE p.dni = a.dni AND p.ciclo_lectivo = %s
+            WHERE p.dni = a.dni AND p.carrera_id = a.carrera_id
+              AND p.ciclo_lectivo = %s
               AND (p.estado = 'pendiente'
                    OR (p.estado = 'aprobada' AND p.anio_ingreso IS NULL))
             ORDER BY p.creado_en DESC LIMIT 1
@@ -7738,18 +7686,18 @@ def api_inscripcion_guardar():
             plan_id = None
 
             # Quien ya está cargado se reinscribe, no se da de alta.
-            # El DNI es único en todo el sistema, no solo en la carrera.
-            cur.execute("SELECT carrera_id FROM alumnos_carrera WHERE dni = %s", (documento,))
-            existente = cur.fetchone()
-            if existente:
+            # Quien ya esta cargado en ESTA carrera se reinscribe, no se da de alta.
+            # En otra carrera no importa: cada carrera lleva su propio registro.
+            cur.execute("""
+                SELECT 1 FROM alumnos_carrera
+                 WHERE dni = %s AND carrera_id = %s
+            """, (documento, carrera_id))
+            if cur.fetchone():
                 conn.rollback()
-                if existente[0] == carrera_id:
-                    msg = ('Ya hay un alumno registrado con este documento en la carrera. '
-                           'Acercate a preceptoría para que te den un token de reinscripción.')
-                else:
-                    msg = ('Ya hay un alumno registrado con este documento. '
-                           'Acercate a preceptoría para revisar tu situación.')
-                return jsonify({'error': msg}), 409
+                return jsonify({'error':
+                    'Ya hay un alumno registrado con este documento en la carrera. '
+                    'Acercate a preceptoria para que te den un token de reinscripcion.'
+                }), 409
 
         # ---------- Año de ingreso (solo altas) ----------
         anio_ingreso = None
@@ -7849,12 +7797,12 @@ def api_inscripcion_guardar():
         # ---------- Duplicado en el mismo ciclo ----------
         cur.execute("""
             SELECT id FROM preinscripciones
-            WHERE dni = %s AND ciclo_lectivo = %s
+            WHERE dni = %s AND carrera_id = %s AND ciclo_lectivo = %s
               -- No cuentan las rechazadas ni las altas ya aprobadas
               -- (después del alta el alumno se reinscribe para elegir materias).
               AND (estado = 'pendiente'
                    OR (estado = 'aprobada' AND anio_ingreso IS NULL))
-        """, (documento, ciclo))
+        """, (documento, carrera_id, ciclo))
         if cur.fetchone():
             conn.rollback()
             return jsonify({
