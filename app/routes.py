@@ -488,7 +488,7 @@ def get_pendientes_libro_folio(carrera_id):
                i.anio_lectivo
         FROM cursadas cu
         JOIN inscripciones i  ON i.id  = cu.inscripcion_id
-        JOIN alumnos a        ON a.id  = i.alumno_id
+        JOIN alumnos_carrera a        ON a.id  = i.alumno_id
         JOIN materias m       ON m.id  = i.materia_id
         WHERE cu.condicion = 'promocionado'
           AND NOT cu.promocion_provisoria
@@ -1740,13 +1740,13 @@ def api_confirmar_cambio_plan():
 
         # 6. Migrar alumnos según política
         cur.execute("""
-            SELECT id FROM alumnos WHERE carrera_id = %s
+            SELECT id FROM alumnos_carrera WHERE carrera_id = %s
         """, (carrera_id,))
         alumnos = [r[0] for r in cur.fetchall()]
 
         for alumno_id in alumnos:
             cur.execute("""
-                UPDATE alumnos SET plan_id = %s WHERE id = %s
+                UPDATE alumnos_carrera SET plan_id = %s WHERE id = %s
             """, (nuevo_plan_id, alumno_id))
             cur.execute("""
                 INSERT INTO historial_plan_alumno
@@ -1852,7 +1852,7 @@ def api_stats_carrera():
     conn = get_db()
     cur = conn.cursor()
 
-    cur.execute("SELECT COUNT(*) FROM alumnos WHERE carrera_id = %s AND activo = TRUE", (carrera_id,))
+    cur.execute("SELECT COUNT(*) FROM alumnos_carrera WHERE carrera_id = %s AND activo = TRUE", (carrera_id,))
     total_alumnos = cur.fetchone()[0]
 
     cur.execute("SELECT COUNT(*) FROM materias WHERE carrera_id = %s AND activa = TRUE", (carrera_id,))
@@ -1875,7 +1875,7 @@ def api_stats_carrera():
     # Últimos 5 alumnos
     cur.execute("""
         SELECT id, apellido, nombre, dni
-        FROM alumnos
+        FROM alumnos_carrera
         WHERE carrera_id = %s AND activo = TRUE
         ORDER BY id DESC
         LIMIT 5
@@ -2056,7 +2056,7 @@ def api_alumnos_crear():
 
     try:
         cur.execute("""
-            INSERT INTO alumnos (
+            INSERT INTO alumnos_carrera (
                 carrera_id, apellido, nombre, dni, tipo_documento, cuil,
                 email, celular, fecha_nacimiento, direccion, localidad, provincia,
                 contacto_emergencia_nombre, contacto_emergencia_telefono,
@@ -2134,7 +2134,7 @@ def api_alumnos_editar(aid):
     cur = conn.cursor()
 
     # Obtener documento actual del alumno
-    cur.execute("SELECT dni, tipo_documento, email FROM alumnos WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
+    cur.execute("SELECT dni, tipo_documento, email FROM alumnos_carrera WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
     row = cur.fetchone()
     if not row:
         cur.close()
@@ -2178,7 +2178,7 @@ def api_alumnos_editar(aid):
 
     try:
         cur.execute("""
-            UPDATE alumnos SET
+            UPDATE alumnos_carrera SET
                 apellido = %s, nombre = %s, dni = %s, tipo_documento = %s, cuil = %s,
                 email = %s, celular = %s, fecha_nacimiento = %s,
                 direccion = %s, localidad = %s, provincia = %s,
@@ -2223,7 +2223,7 @@ def api_alumnos_toggle(aid):
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        UPDATE alumnos SET activo = NOT activo
+        UPDATE alumnos_carrera SET activo = NOT activo
         WHERE id = %s AND carrera_id = %s
         RETURNING activo
     """, (aid, carrera_id))
@@ -2251,7 +2251,7 @@ def api_alumnos_eliminar(aid):
         cur.close()
         conn.close()
         return jsonify({'error': 'No se puede eliminar: el alumno tiene inscripciones registradas. Podés desactivarlo en su lugar.'}), 409
-    cur.execute("DELETE FROM alumnos WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
+    cur.execute("DELETE FROM alumnos_carrera WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
     conn.commit()
     cur.close()
     conn.close()
@@ -2273,7 +2273,7 @@ def api_historial_alumno(aid):
     # Verificar que el alumno pertenece a esta carrera
     cur.execute("""
         SELECT id, apellido, nombre, dni, anio_ingreso
-        FROM alumnos WHERE id = %s AND carrera_id = %s
+        FROM alumnos_carrera WHERE id = %s AND carrera_id = %s
     """, (aid, carrera_id))
     alumno = cur.fetchone()
     if not alumno:
@@ -2419,7 +2419,7 @@ def api_historial_descargar_pdf(aid, anio_lectivo):
     cur  = conn.cursor()
 
     cur.execute("""
-        SELECT apellido, nombre, dni, tipo_documento FROM alumnos
+        SELECT apellido, nombre, dni, tipo_documento FROM alumnos_carrera
         WHERE id = %s AND carrera_id = %s
     """, (aid, carrera_id))
     alumno = cur.fetchone()
@@ -2546,7 +2546,7 @@ def api_historial_descargar_estado(aid):
     cur  = conn.cursor()
 
     cur.execute("""
-        SELECT apellido, nombre, dni, tipo_documento FROM alumnos
+        SELECT apellido, nombre, dni, tipo_documento FROM alumnos_carrera
         WHERE id = %s AND carrera_id = %s
     """, (aid, carrera_id))
     alumno = cur.fetchone()
@@ -2727,7 +2727,7 @@ def api_constancia_alumno(aid):
     cur.execute("""
         SELECT a.apellido, a.nombre, a.dni, a.carrera_id,
                c.nombre AS carrera
-        FROM alumnos a
+        FROM alumnos_carrera a
         JOIN carreras c ON c.id = a.carrera_id
         WHERE a.id = %s AND a.carrera_id = %s
     """, (aid, carrera_id))
@@ -2753,7 +2753,7 @@ def api_constancia_alumno(aid):
     inscripto_este_anio = cur.fetchone()[0] > 0
 
     # anio_ingreso del alumno — define si es ingresante
-    cur.execute("SELECT anio_ingreso FROM alumnos WHERE id = %s", (aid,))
+    cur.execute("SELECT anio_ingreso FROM alumnos_carrera WHERE id = %s", (aid,))
     anio_ingreso = cur.fetchone()[0]
     es_ingresante = (anio_ingreso == anio_actual)
 
@@ -2974,7 +2974,7 @@ def api_constancia_validar(aid):
     anio_actual = int(cur.fetchone()[0])
 
     # Datos del alumno — anio_ingreso es el año en que ingresó a la carrera
-    cur.execute("SELECT anio_ingreso FROM alumnos WHERE id = %s", (aid,))
+    cur.execute("SELECT anio_ingreso FROM alumnos_carrera WHERE id = %s", (aid,))
     row = cur.fetchone()
     anio_ingreso = row[0] if row else anio_actual
 
@@ -3230,7 +3230,7 @@ def api_inscripciones_alumno(aid):
     anio = int(cur.fetchone()[0])
 
     # Verificar que el alumno pertenece a esta carrera
-    cur.execute("SELECT id, apellido, nombre, dni, tipo_documento FROM alumnos WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
+    cur.execute("SELECT id, apellido, nombre, dni, tipo_documento FROM alumnos_carrera WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
     alumno = cur.fetchone()
     if not alumno:
         cur.close(); conn.close()
@@ -3330,7 +3330,7 @@ def api_inscripciones_guardar(aid):
     cur = conn.cursor()
 
     # ── 2. Verificar alumno ──
-    cur.execute("SELECT id FROM alumnos WHERE id = %s AND carrera_id = %s AND activo = TRUE",
+    cur.execute("SELECT id FROM alumnos_carrera WHERE id = %s AND carrera_id = %s AND activo = TRUE",
                 (aid, carrera_id))
     if not cur.fetchone():
         cur.close(); conn.close()
@@ -3578,7 +3578,7 @@ def api_inscripciones_autorizar_reapertura(aid):
     conn = get_db()
     cur  = conn.cursor()
 
-    cur.execute("SELECT id FROM alumnos WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
+    cur.execute("SELECT id FROM alumnos_carrera WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
     if not cur.fetchone():
         cur.close(); conn.close()
         return jsonify({'error': 'Alumno no encontrado'}), 404
@@ -3617,7 +3617,7 @@ def api_inscripciones_cancelar_autorizacion(aid):
     conn = get_db()
     cur  = conn.cursor()
 
-    cur.execute("SELECT id FROM alumnos WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
+    cur.execute("SELECT id FROM alumnos_carrera WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
     if not cur.fetchone():
         cur.close(); conn.close()
         return jsonify({'error': 'Alumno no encontrado'}), 404
@@ -3700,7 +3700,7 @@ def api_inscripciones_alumnos_por_anio(anio_plan):
     # Traer todos los alumnos activos
     cur.execute("""
         SELECT a.id, a.apellido, a.nombre, a.dni, a.tipo_documento
-        FROM alumnos a
+        FROM alumnos_carrera a
         WHERE a.carrera_id = %s AND a.activo = TRUE
         ORDER BY a.apellido, a.nombre
     """, (carrera_id,))
@@ -3718,7 +3718,7 @@ def api_inscripciones_alumnos_por_anio(anio_plan):
         # regularizada o aprobada
         cur.execute("""
             SELECT DISTINCT a.id
-            FROM alumnos a
+            FROM alumnos_carrera a
             WHERE a.carrera_id = %s AND a.activo = TRUE
               AND (
                 EXISTS (
@@ -3962,7 +3962,7 @@ def api_notas_materia_detalle(mid):
             cu.condicion, cu.cerrada, cu.observaciones,
             COALESCE(cu.promocion_provisoria, FALSE)
         FROM inscripciones i
-        JOIN alumnos a ON a.id = i.alumno_id
+        JOIN alumnos_carrera a ON a.id = i.alumno_id
         LEFT JOIN cursadas cu ON cu.inscripcion_id = i.id
         WHERE i.materia_id = %s AND i.anio_lectivo = %s AND a.carrera_id = %s
         ORDER BY a.apellido, a.nombre
@@ -4444,7 +4444,7 @@ def api_notas_descargar_plantilla(mid):
     cur.execute("""
         SELECT a.apellido, a.nombre, a.dni, i.id
         FROM inscripciones i
-        JOIN alumnos a ON a.id = i.alumno_id
+        JOIN alumnos_carrera a ON a.id = i.alumno_id
         WHERE i.materia_id = %s AND i.anio_lectivo = %s AND a.carrera_id = %s
         ORDER BY a.apellido, a.nombre
     """, (mid, anio, carrera_id))
@@ -4763,7 +4763,7 @@ def api_notas_descargar_asistencia(mid):
     cur.execute("""
         SELECT a.apellido, a.nombre, a.dni
         FROM inscripciones i
-        JOIN alumnos a ON a.id = i.alumno_id
+        JOIN alumnos_carrera a ON a.id = i.alumno_id
         WHERE i.materia_id = %s AND i.anio_lectivo = %s AND a.carrera_id = %s
         ORDER BY a.apellido, a.nombre
     """, (mid, anio, carrera_id))
@@ -5000,14 +5000,14 @@ def api_notas_importar(mid):
 
     cur.execute("""
         SELECT a.dni, i.id FROM inscripciones i
-        JOIN alumnos a ON a.id = i.alumno_id
+        JOIN alumnos_carrera a ON a.id = i.alumno_id
         WHERE i.materia_id = %s AND i.anio_lectivo = %s AND a.carrera_id = %s
     """, (mid, anio, carrera_id))
     dni_map = {r[0]: r[1] for r in cur.fetchall()}
 
     cur.execute("""
         SELECT a.dni, a.apellido || ', ' || a.nombre
-        FROM alumnos a WHERE a.carrera_id = %s AND a.activo = TRUE
+        FROM alumnos_carrera a WHERE a.carrera_id = %s AND a.activo = TRUE
     """, (carrera_id,))
     todos_dni = {r[0]: r[1] for r in cur.fetchall()}
 
@@ -5585,7 +5585,7 @@ def api_reportes_mejores_promedios():
                 al.apellido || ', ' || al.nombre AS nombre_completo,
                 al.dni,
                 ROUND(AVG(cu.nota_cursada)::numeric, 2) AS promedio
-            FROM alumnos al
+            FROM alumnos_carrera al
             JOIN inscripciones i  ON i.alumno_id  = al.id
             JOIN materias m       ON m.id          = i.materia_id
             JOIN cursadas cu      ON cu.inscripcion_id = i.id
@@ -5652,7 +5652,7 @@ def api_reportes_descargar_pdf():
                 al.apellido || ', ' || al.nombre AS nombre_completo,
                 al.dni,
                 ROUND(AVG(cu.nota_cursada)::numeric, 2) AS promedio
-            FROM alumnos al
+            FROM alumnos_carrera al
             JOIN inscripciones i  ON i.alumno_id  = al.id
             JOIN materias m       ON m.id          = i.materia_id
             JOIN cursadas cu      ON cu.inscripcion_id = i.id
@@ -5956,7 +5956,7 @@ def api_mesas_detalle(mid):
                cu.condicion, ime.resultado, ime.nota_escrita,
                ime.nota_oral, ime.nota_final
         FROM inscripciones_mesa ime
-        JOIN alumnos a ON a.id = ime.alumno_id
+        JOIN alumnos_carrera a ON a.id = ime.alumno_id
         LEFT JOIN inscripciones i ON i.alumno_id = a.id AND i.materia_id = %s
         LEFT JOIN cursadas cu ON cu.inscripcion_id = i.id
         WHERE ime.mesa_id = %s
@@ -6322,7 +6322,7 @@ def api_mesas_alumnos_disponibles(mid):
                    AND e.materia_id = %s
                    AND e.fecha_mesa >= uc.cargado_en::date) AS intentos
         FROM ultima_cursada uc
-        JOIN alumnos a ON a.id = uc.alumno_id
+        JOIN alumnos_carrera a ON a.id = uc.alumno_id
         WHERE a.carrera_id = %s
           AND a.activo     = TRUE
           AND a.id NOT IN (
@@ -6445,7 +6445,7 @@ def api_mesas_acta_pdf(mid):
         SELECT a.apellido, a.nombre, a.dni,
                ime.nota_escrita, ime.nota_oral, ime.nota_final, ime.resultado
         FROM inscripciones_mesa ime
-        JOIN alumnos a ON a.id = ime.alumno_id
+        JOIN alumnos_carrera a ON a.id = ime.alumno_id
         WHERE ime.mesa_id = %s
         ORDER BY a.apellido, a.nombre
     """, (mid,))
@@ -6835,7 +6835,7 @@ def api_tokens_listar():
                t.email_destino, t.email_estado, t.email_error,
                t.email_enviado_en, t.email_solicitado_en
         FROM tokens_inscripcion t
-        LEFT JOIN alumnos  a ON a.id = t.alumno_id
+        LEFT JOIN alumnos_carrera  a ON a.id = t.alumno_id
         LEFT JOIN carreras c ON c.id = t.carrera_id
         LEFT JOIN usuarios u ON u.id = t.generado_por
         LEFT JOIN preinscripciones p ON p.token_id = t.id
@@ -6997,7 +6997,7 @@ def _estado_reinscripcion_alumnos(cur, carrera_id, ciclo, alumno_ids=None):
                tk.id, tk.token, tk.vence_el, pr.id, pr.estado,
                tk.email_destino, tk.email_estado, tk.email_error,
                tk.email_enviado_en, tk.email_solicitado_en
-        FROM alumnos a
+        FROM alumnos_carrera a
         LEFT JOIN LATERAL (
             SELECT t.id, t.token, t.vence_el, t.email_destino, t.email_estado,
                    t.email_error, t.email_enviado_en, t.email_solicitado_en
@@ -7090,7 +7090,7 @@ def api_tokens_reinscripcion():
                 err = validar_email(email_nuevo) or revisar_dominio_email(email_nuevo, _dominios_email(cur))
                 if err:
                     return jsonify({'error': err}), 400
-                cur.execute("UPDATE alumnos SET email = %s WHERE id = %s", (email_nuevo, estados[0]['id']))
+                cur.execute("UPDATE alumnos_carrera SET email = %s WHERE id = %s", (email_nuevo, estados[0]['id']))
                 estados[0]['email'] = email_nuevo
             if not estados[0]['email']:
                 return jsonify({'error': 'El alumno no tiene correo cargado. '
@@ -7197,7 +7197,7 @@ def api_tokens_reenviar(tid):
 
         destino = email_nuevo or (destino_actual or '').lower()
         if not destino and alumno_id:
-            cur.execute("SELECT email FROM alumnos WHERE id = %s", (alumno_id,))
+            cur.execute("SELECT email FROM alumnos_carrera WHERE id = %s", (alumno_id,))
             fila = cur.fetchone()
             destino = ((fila[0] if fila else '') or '').strip().lower()
         if not destino:
@@ -7207,7 +7207,7 @@ def api_tokens_reenviar(tid):
             return jsonify({'error': err}), 400
 
         if alumno_id and email_nuevo:
-            cur.execute("UPDATE alumnos SET email = %s WHERE id = %s", (email_nuevo, alumno_id))
+            cur.execute("UPDATE alumnos_carrera SET email = %s WHERE id = %s", (email_nuevo, alumno_id))
         cur.execute("""
             UPDATE tokens_inscripcion
             SET email_destino = %s, email_estado = 'pendiente',
@@ -7501,7 +7501,7 @@ def api_inscripcion_validar():
                    a.contacto_emergencia_vinculo,
                    a.contacto_emergencia_telefono,
                    a.plan_id
-            FROM alumnos a
+            FROM alumnos_carrera a
             WHERE a.id = %s AND a.activo = TRUE
         """, (t[8],))
         a = cur.fetchone()
@@ -7680,7 +7680,7 @@ def api_inscripcion_guardar():
             # El documento no se edita en una reinscripción: sale del legajo.
             cur.execute("""
                 SELECT tipo_documento, dni, plan_id
-                FROM alumnos WHERE id = %s AND activo = TRUE
+                FROM alumnos_carrera WHERE id = %s AND activo = TRUE
             """, (alumno_id,))
             al = cur.fetchone()
             if not al:
@@ -7739,7 +7739,7 @@ def api_inscripcion_guardar():
 
             # Quien ya está cargado se reinscribe, no se da de alta.
             # El DNI es único en todo el sistema, no solo en la carrera.
-            cur.execute("SELECT carrera_id FROM alumnos WHERE dni = %s", (documento,))
+            cur.execute("SELECT carrera_id FROM alumnos_carrera WHERE dni = %s", (documento,))
             existente = cur.fetchone()
             if existente:
                 conn.rollback()
@@ -8095,7 +8095,7 @@ def api_preinscripciones_detalle(pid):
         alumno_ref = f[11] or f[12]
         if tipo == 'reinscripcion' and f[2] == 'pendiente' and f[12]:
             cur.execute(f"""
-                SELECT {', '.join(columnas)} FROM alumnos WHERE id = %s
+                SELECT {', '.join(columnas)} FROM alumnos_carrera WHERE id = %s
             """, (f[12],))
             actual = cur.fetchone()
             if actual:
@@ -8195,7 +8195,7 @@ def api_preinscripciones_aprobar(pid):
         omitidas   = []
 
         if tipo in ('ingresante', 'alta'):
-            cur.execute("SELECT 1 FROM alumnos WHERE dni = %s", (dni,))
+            cur.execute("SELECT 1 FROM alumnos_carrera WHERE dni = %s", (dni,))
             if cur.fetchone():
                 conn.rollback()
                 return jsonify({
@@ -8204,7 +8204,7 @@ def api_preinscripciones_aprobar(pid):
                 }), 409
 
             cur.execute("""
-                INSERT INTO alumnos (
+                INSERT INTO alumnos_carrera (
                     carrera_id, apellido, nombre, dni, tipo_documento, cuil,
                     email, celular, telefono, fecha_nacimiento,
                     direccion, localidad, localidad_id, departamento, provincia,
@@ -8234,7 +8234,7 @@ def api_preinscripciones_aprobar(pid):
         else:  # reinscripción
             alumno_id = alumno_token
             cur.execute("""
-                SELECT 1 FROM alumnos
+                SELECT 1 FROM alumnos_carrera
                 WHERE id = %s AND carrera_id = %s AND activo = TRUE
             """, (alumno_id, carrera_id))
             if not cur.fetchone():
@@ -8243,7 +8243,7 @@ def api_preinscripciones_aprobar(pid):
 
             # El documento no se toca. Si el CUIL vino vacío se conserva el del legajo.
             cur.execute("""
-                UPDATE alumnos SET
+                UPDATE alumnos_carrera SET
                     apellido = %s, nombre = %s, cuil = COALESCE(%s, cuil),
                     email = %s, celular = %s, telefono = %s, fecha_nacimiento = %s,
                     direccion = %s, localidad = %s, localidad_id = %s,
