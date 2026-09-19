@@ -57,29 +57,6 @@ CREATE TABLE alumnos_carrera (
 CREATE INDEX idx_alumnos_carrera_carrera  ON alumnos_carrera (carrera_id);
 CREATE INDEX idx_alumnos_carrera_apellido ON alumnos_carrera (apellido, nombre);
 
--- Documentos ocupados dentro de cada carrera. Cruza alumnos, profesores,
--- usuarios y preinscripciones pendientes: un mismo DNI no puede tener dos
--- roles distintos en la misma carrera.
--- referencia_id NO es clave foranea: apunta a distintas tablas segun origen.
-CREATE TABLE documentos_carrera (
-    id             SERIAL PRIMARY KEY,
-    carrera_id     integer NOT NULL,
-    dni            character varying(15) NOT NULL,
-    origen         character varying(20) NOT NULL,
-    referencia_id  integer,
-    creado_en      timestamp without time zone NOT NULL DEFAULT now(),
-    CONSTRAINT documentos_carrera_carrera_dni_key UNIQUE (carrera_id, dni),
-    CONSTRAINT documentos_carrera_origen_check
-        CHECK (origen::text = ANY (ARRAY['alumno'::character varying::text,
-                                         'profesor'::character varying::text,
-                                         'usuario'::character varying::text,
-                                         'preinscripcion'::character varying::text])),
-    CONSTRAINT documentos_carrera_carrera_id_fkey
-        FOREIGN KEY (carrera_id) REFERENCES carreras(id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_documentos_carrera_ref ON documentos_carrera (origen, referencia_id);
-
 -- Las 8 tablas que referencian al alumno lo hacen por alumnos_carrera.id,
 -- es decir por su inscripcion en UNA carrera, no por la persona.
 ALTER TABLE examenes ADD CONSTRAINT examenes_alumno_id_fkey
