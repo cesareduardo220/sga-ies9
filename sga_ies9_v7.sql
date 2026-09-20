@@ -4,7 +4,7 @@
 -- IES N 9 "Juana Azurduy" - San Pedro de Jujuy
 -- Practicas Profesionalizantes III
 --
--- Version: 7.0  (05/09/2026)
+-- Version: 7.1  (20/09/2026)
 -- Reemplaza a sga_ies9_v6.sql, que no incluia la columna
 -- promocion_provisoria y obligaba a correr una migracion aparte
 -- despues de cada instalacion desde cero.
@@ -20,6 +20,9 @@
 -- CAMBIOS RESPECTO DE v6
 --   + cursadas.promocion_provisoria (boolean NOT NULL DEFAULT false)
 --   + indice parcial idx_cursadas_promocion_provisoria
+--
+-- CAMBIOS EN 7.1
+--   + usuarios.sesion_token (text) para la sesion unica por usuario
 --
 -- Ya NO hace falta correr migracion_promocion_provisoria.sql
 -- despues de este script. Esa migracion sigue existiendo solo
@@ -843,6 +846,7 @@ CREATE TABLE public.usuarios (
     debe_cambiar_password boolean DEFAULT false NOT NULL,
     creado_en timestamp without time zone DEFAULT now() NOT NULL,
     domicilio character varying(255),
+    sesion_token text,
     CONSTRAINT usuarios_rol_check CHECK (((rol)::text = ANY ((ARRAY['admin'::character varying, 'coordinador'::character varying, 'preceptora'::character varying, 'sys'::character varying])::text[])))
 );
 
