@@ -15,5 +15,14 @@ def create_app():
 
     from .routes import auth
     app.register_blueprint(auth)
+    
+    # Evita que el navegador guarde las paginas privadas en cache.
+    # Sin esto, el boton Atras muestra la interfaz despues de cerrar sesion.
+    @app.after_request
+    def no_cachear(respuesta):
+        respuesta.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        respuesta.headers['Pragma'] = 'no-cache'
+        respuesta.headers['Expires'] = '0'
+        return respuesta
 
     return app
