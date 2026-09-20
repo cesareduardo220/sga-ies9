@@ -157,6 +157,7 @@
       <div class="eyebrow">Acceso al sistema</div>
       <h2>Iniciar sesión</h2>
       <div class="sub">Ingresá con tu DNI y contraseña para continuar.</div>
+      {% if request.args.get('desplazado') %}<div class="error-msg">Tu sesión se cerró porque se inició sesión con este usuario en otro dispositivo.</div>{% endif %}
 
       {% if error %}
       <div class="error-msg">⚠️ {{ error }}</div>

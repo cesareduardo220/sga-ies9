@@ -3726,6 +3726,41 @@
 <!-- MODAL: Nueva mesa -->
 
 <script>
+(function () {
+  var yaAviso = false;
+
+  function avisarDesplazado() {
+    if (yaAviso) return;
+    yaAviso = true;
+    var capa = document.createElement('div');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px;';
+    capa.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:420px;padding:28px 26px;text-align:center;font-family:inherit;box-shadow:0 12px 40px rgba(0,0,0,.35)">'
+      + '<div style="font-size:15px;font-weight:700;color:#14532d;margin-bottom:10px">Sesión finalizada</div>'
+      + '<div style="font-size:14px;color:#374151;line-height:1.5">Se inició sesión con este usuario en otro dispositivo. Por seguridad, esta sesión se cerró.</div>'
+      + '<div style="font-size:13px;color:#6b7280;margin-top:14px">Redirigiendo al ingreso…</div>'
+      + '</div>';
+    document.body.appendChild(capa);
+    setTimeout(function () { window.location.href = '/login?desplazado=1'; }, 3000);
+  }
+
+  var fetchOriginal = window.fetch;
+  window.fetch = function (recurso, opciones) {
+    opciones = opciones || {};
+    opciones.headers = new Headers(opciones.headers || {});
+    opciones.headers.set('X-Requested-With', 'fetch');
+    return fetchOriginal(recurso, opciones).then(function (res) {
+      if (res.status === 401) { avisarDesplazado(); }
+      return res;
+    });
+  };
+
+  setInterval(function () {
+    fetchOriginal('/sesion-viva', { headers: { 'X-Requested-With': 'fetch' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (!d.ok) { avisarDesplazado(); } })
+      .catch(function () {});
+  }, 60000);
+})();
     const ROL        = "{{ rol }}";
     const NOMBRE     = "{{ nombre }}";
     const APELLIDO   = "{{ apellido }}";

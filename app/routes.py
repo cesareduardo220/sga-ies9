@@ -78,12 +78,33 @@ def bloquear_escrituras_en_movil():
 # HELPERS
 # ================================================================
 
+import secrets
+
+
+def _token_vigente():
+    """True si el token de la cookie coincide con el guardado en la base."""
+    if 'user_id' not in session:
+        return False
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT sesion_token FROM usuarios WHERE id = %s", (session['user_id'],))
+    fila = cur.fetchone()
+    cur.close()
+    conn.close()
+    return bool(fila) and fila[0] and fila[0] == session.get('sesion_token')
+
+
 def login_requerido(roles_permitidos):
     def decorador(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
             if 'rol' not in session:
                 return redirect(url_for('auth.login'))
+            if not _token_vigente():
+                session.clear()
+                if request.headers.get('X-Requested-With') == 'fetch' or 'application/json' in (request.headers.get('Accept') or ''):
+                    return jsonify({'error': 'sesion_desplazada'}), 401
+                return redirect(url_for('auth.login', desplazado=1))
             if session['rol'] not in roles_permitidos:
                 return redirect(url_for('auth.dashboard'))
             return f(*args, **kwargs)
@@ -631,6 +652,14 @@ def login():
             session['apellido']   = user[2]
             session['rol']        = user[3]
             session['carrera_id'] = user[4]
+            _tok = secrets.token_hex(32)
+            session['sesion_token'] = _tok
+            _c = get_db()
+            _cu = _c.cursor()
+            _cu.execute("UPDATE usuarios SET sesion_token = %s WHERE id = %s", (_tok, user[0]))
+            _c.commit()
+            _cu.close()
+            _c.close()
             if user[3] == 'sys':
                 return redirect(url_for('auth.dashboard'))
             if user[3] == 'admin' and not user[7]:
@@ -810,8 +839,21 @@ def dashboard():
 # LOGOUT
 # ================================================================
 
+@auth.route('/sesion-viva')
+def sesion_viva():
+    """Consultada por el front cada 60s. No renueva nada, solo informa."""
+    return jsonify({'ok': _token_vigente()})
+
+
 @auth.route('/logout')
 def logout():
+    if 'user_id' in session:
+        _c = get_db()
+        _cu = _c.cursor()
+        _cu.execute("UPDATE usuarios SET sesion_token = NULL WHERE id = %s", (session['user_id'],))
+        _c.commit()
+        _cu.close()
+        _c.close()
     session.clear()
     return redirect(url_for('auth.login'))
 
