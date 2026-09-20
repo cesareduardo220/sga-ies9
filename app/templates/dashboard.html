@@ -8575,6 +8575,7 @@
             : 'Listado de profesores y materias asignadas';
     }
     MQ_SOLO_LECTURA.addEventListener('change', actualizarSubProfesores);
+    document.addEventListener('DOMContentLoaded', actualizarSubProfesores);
 
     // Subtitulos que prometen gestion pero en celular son de solo lectura
     const SUBS_GESTION = {
@@ -8583,7 +8584,8 @@
         'sub-preceptoras':   ['Gestión de preceptoras de la carrera', 'Listado de preceptoras de la carrera'],
         'sub-cuentas':       ['Gestión de cuentas del administrador del sistema', 'Listado de cuentas del administrador'],
         'sub-carreras':      ['Gestión de carreras de la institución', 'Listado de carreras de la institución'],
-        'sub-coordinadores': ['Gestión de coordinadores por carrera', 'Listado de coordinadores por carrera']
+        'sub-coordinadores': ['Gestión de coordinadores por carrera', 'Listado de coordinadores por carrera'],
+        'notas-sub': ['Seleccioná un año y una materia para cargar notas', 'Listado de espacios curriculares y estado de notas']
     };
 
     function actualizarSubtitulosGestion() {
@@ -8835,7 +8837,7 @@
     async function cargarNotasMaterias() {
         document.getElementById('notas-selector').style.display = 'block';
         document.getElementById('notas-detalle').style.display = 'none';
-        document.getElementById('notas-sub').textContent = 'Seleccioná un año y una materia para cargar notas';
+        document.getElementById('notas-sub').textContent = MQ_SOLO_LECTURA.matches ? SUBS_GESTION['notas-sub'][1] : SUBS_GESTION['notas-sub'][0];
         notasMateriaId = null;
         document.getElementById('notas-cargando').style.display = 'block';
         document.getElementById('notas-anios-wrap').style.display = 'none';
