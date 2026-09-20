@@ -599,8 +599,10 @@ def login():
     # Si no hay ningun usuario cargado, avisar que falta la instalacion inicial
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM usuarios")
-    hay_usuarios = cur.fetchone()[0] > 0
+    cur.execute("SELECT COUNT(*), COUNT(*) FILTER (WHERE rol = 'admin' AND dni IS NULL) FROM usuarios")
+    _fila = cur.fetchone()
+    hay_usuarios = _fila[0] > 0
+    admin_sin_dni = _fila[1] > 0
     cur.close()
     conn.close()
     if not hay_usuarios:
@@ -640,7 +642,7 @@ def login():
         else:
             error = 'Usuario o contraseña incorrectos'
 
-    return render_template('login.html', error=error)
+    return render_template('login.html', error=error, admin_sin_dni=admin_sin_dni)
 
 
 # ================================================================

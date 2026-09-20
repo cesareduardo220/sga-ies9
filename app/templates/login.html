@@ -132,7 +132,7 @@
           <div class="rol-icono">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
           </div>
-          <div class="rol-info"><strong>Administrador</strong><span>Usá el usuario "admin" para gestionar el sistema.</span></div>
+          <div class="rol-info"><strong>Administrador</strong><span>{% if admin_sin_dni %}Primer ingreso: usá el usuario "admin" para completar la configuración.{% else %}Ingresá con tu DNI. Gestiona la estructura del sistema.{% endif %}</span></div>
         </div>
         <div class="rol-item">
           <div class="rol-icono">
@@ -156,7 +156,7 @@
     <div class="login-form-wrap">
       <div class="eyebrow">Acceso al sistema</div>
       <h2>Iniciar sesión</h2>
-      <div class="sub">Ingresá con tu usuario institucional para continuar.</div>
+      <div class="sub">Ingresá con tu DNI y contraseña para continuar.</div>
 
       {% if error %}
       <div class="error-msg">⚠️ {{ error }}</div>
@@ -164,16 +164,16 @@
 
       <form method="POST" action="/login">
         <div class="campo">
-          <label for="li-user">DNI o usuario</label>
+          <label for="li-user">DNI</label>
           <div class="input-wrap">
-            <input id="li-user" type="text" name="usuario" placeholder="Ej: 38421005 o admin" autocomplete="username" required>
+            <input id="li-user" type="text" name="usuario" placeholder="Ej: 38421005" autocomplete="username" required>
           </div>
         </div>
 
         <div class="campo">
           <label for="li-pass">Contraseña</label>
           <div class="input-wrap con-icono">
-            <input id="li-pass" type="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
+            <input id="li-pass" type="password" name="password" autocomplete="current-password" required>
             <button type="button" class="btn-ojo" onclick="toggleOjo('li-pass', this)">
               <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
