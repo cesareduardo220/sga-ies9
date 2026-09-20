@@ -1584,12 +1584,17 @@ def api_importar_plan():
             SELECT id, nombre, anio, orden FROM materias
             WHERE carrera_id = %s ORDER BY anio, orden
         """, (carrera_id,))
-        materias_actuales = {r[1].lower().strip(): {'id': r[0], 'anio': r[2], 'orden': r[3]}
+        materias_actuales = {r[1].lower().strip(): {'id': r[0], 'anio': r[2], 'orden': r[3], 'nombre': r[1]}
                             for r in cur.fetchall()}
         cur.close(); conn.close()
 
         nombres_nuevos = {f['nombre'].lower().strip() for f in filas_nuevo}
         nombres_actuales = set(materias_actuales.keys())
+        
+        # Mapas para mostrar el nombre original (la comparacion sigue en minuscula)
+        orig_nuevos = {f['nombre'].lower().strip(): f['nombre'] for f in filas_nuevo}
+        orden_nuevos = {f['nombre'].lower().strip(): f['orden'] for f in filas_nuevo}
+        orig_viejos = {k: v['nombre'] for k, v in materias_actuales.items()}
 
         iguales    = nombres_actuales & nombres_nuevos
         eliminadas = nombres_actuales - nombres_nuevos
@@ -1605,8 +1610,8 @@ def api_importar_plan():
                     union = len(palabras_v | palabras_n)
                     if union > 0 and interseccion / union >= 0.5:
                         similares.append({
-                            'vieja': nom_viejo,
-                            'nueva': nom_nuevo,
+                            'vieja': orig_viejos.get(nom_viejo, nom_viejo),
+                            'nueva': orig_nuevos.get(nom_nuevo, nom_nuevo),
                             'id_vieja': materias_actuales[nom_viejo]['id']
                         })
 
@@ -1614,9 +1619,9 @@ def api_importar_plan():
             'ok': True,
             'hay_plan_actual': bool(materias_actuales),
             'comparacion': {
-                'iguales':    list(iguales),
-                'eliminadas': list(eliminadas),
-                'nuevas':     list(nuevas),
+                'iguales': [orig_nuevos.get(n, n) for n in sorted(iguales, key=lambda n: orden_nuevos.get(n, 9999))],
+                'eliminadas': [orig_viejos.get(n, n) for n in sorted(eliminadas, key=lambda n: materias_actuales.get(n, {}).get('orden', 9999))],
+                'nuevas': [orig_nuevos.get(n, n) for n in sorted(nuevas, key=lambda n: orden_nuevos.get(n, 9999))],
                 'similares':  similares,
             },
             'filas_nuevo': filas_nuevo,
