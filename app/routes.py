@@ -5187,11 +5187,12 @@ def api_preceptoras_listar():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        SELECT id, usuario, nombre, apellido, dni, email, celular,
-               activo, debe_cambiar_password
-        FROM usuarios
-        WHERE rol = 'preceptora' AND carrera_id = %s
-        ORDER BY apellido, nombre
+        SELECT u.id, u.usuario, u.nombre, u.apellido, u.dni, u.email, u.celular,
+               uc.activo, u.debe_cambiar_password
+        FROM usuarios u
+        JOIN usuario_carrera uc ON uc.usuario_id = u.id
+        WHERE u.rol = 'preceptora' AND uc.carrera_id = %s
+        ORDER BY u.apellido, u.nombre
     """, (carrera_id,))
     rows = cur.fetchall()
     cur.close()
@@ -5221,10 +5222,24 @@ def api_preceptoras_crear():
     if not dni.isdigit() or len(dni) < 7:
         return jsonify({'error': 'DNI inválido'}), 400
 
-    # usuario = DNI, contraseña inicial = DNI
+    # Si el DNI ya existe, no se crea otra persona: se la vincula a esta carrera.
     conn = get_db()
     cur = conn.cursor()
     try:
+        cur.execute("SELECT id, rol, nombre, apellido FROM usuarios WHERE dni = %s", (dni,))
+        existente = cur.fetchone()
+
+        if existente:
+            if existente[1] != 'preceptora':
+                return jsonify({'error': 'Ese DNI ya esta registrado en el sistema con otro rol'}), 409
+            cur.execute("SELECT 1 FROM usuario_carrera WHERE usuario_id = %s AND carrera_id = %s", (existente[0], carrera_id))
+            if cur.fetchone():
+                return jsonify({'error': 'Esa preceptora ya esta en esta carrera'}), 409
+            cur.execute("INSERT INTO usuario_carrera (usuario_id, carrera_id) VALUES (%s, %s)", (existente[0], carrera_id))
+            conn.commit()
+            return jsonify({'ok': True, 'id': existente[0], 'vinculada': True,
+                            'nombre': existente[2], 'apellido': existente[3]})
+
         cur.execute("""
             INSERT INTO usuarios
                 (usuario, password_hash, rol, nombre, apellido, dni,
@@ -5233,6 +5248,7 @@ def api_preceptoras_crear():
             RETURNING id
         """, (dni, generate_password_hash(dni), nombre, apellido, dni, email, celular, carrera_id))
         nuevo_id = cur.fetchone()[0]
+        cur.execute("INSERT INTO usuario_carrera (usuario_id, carrera_id) VALUES (%s, %s)", (nuevo_id, carrera_id))
         conn.commit()
         return jsonify({'ok': True, 'id': nuevo_id})
     except Exception as e:
@@ -5289,6 +5305,34 @@ def api_preceptoras_toggle(uid):
     if not resultado:
         return jsonify({'error': 'Preceptora no encontrada'}), 404
     return jsonify({'ok': True, 'activo': resultado[0]})
+
+
+@auth.route('/api/usuarios/preceptoras/<int:uid>', methods=['DELETE'])
+@login_requerido(['coordinador'])
+def api_preceptoras_eliminar(uid):
+    """Quita a la preceptora de ESTA carrera. Si no le queda ninguna, la borra."""
+    carrera_id = session.get('carrera_id')
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT 1 FROM usuarios WHERE id = %s AND rol = 'preceptora'", (uid,))
+        if not cur.fetchone():
+            return jsonify({'error': 'No encontrada'}), 404
+
+        cur.execute("DELETE FROM usuario_carrera WHERE usuario_id = %s AND carrera_id = %s", (uid, carrera_id))
+        cur.execute("SELECT COUNT(*) FROM usuario_carrera WHERE usuario_id = %s", (uid,))
+        quedan = cur.fetchone()[0]
+
+        if quedan == 0:
+            cur.execute("DELETE FROM usuarios WHERE id = %s AND rol = 'preceptora'", (uid,))
+        conn.commit()
+        return jsonify({'ok': True, 'eliminada': quedan == 0})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 @auth.route('/api/usuarios/preceptoras/<int:uid>/reset', methods=['POST'])

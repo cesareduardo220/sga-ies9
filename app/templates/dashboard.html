@@ -5034,7 +5034,18 @@
         alert('Contraseña reseteada. El coordinador deberá cambiarla al ingresar.');
     }
 
-    async function eliminarCoord(id, apellido) {
+async function eliminarPreceptora(id, apellido) {
+    if (!confirm(`Se quitara a ${apellido} de esta carrera. Si no trabaja en ninguna otra, se eliminara del sistema.`)) return;
+    const res = await fetch(`/api/usuarios/preceptoras/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      alert(d.error || 'No se pudo eliminar');
+      return;
+    }
+    cargarPreceptoras();
+  }
+
+  async function eliminarCoord(id, apellido) {
         if (!confirm(`¿Eliminar al coordinador ${apellido}? Esta acción no se puede deshacer.`)) return;
         await fetch(`/api/coordinadores/${id}`, { method: 'DELETE' });
         cargarCoordinadores();
@@ -10340,6 +10351,7 @@
                                 onclick="togglePreceptora(${p.id}, ${p.activo})">
                             ${p.activo ? 'Desactivar' : 'Activar'}
                         </button>
+                    <button class="btn-secundario" style="padding:6px 10px; color:var(--sga-error);" title="Eliminar" onclick="eliminarPreceptora(${p.id}, '${p.apellido.replace(/'/g,"\\'")}')">🗑️</button>
                     </div>
                 </td>
             </tr>
