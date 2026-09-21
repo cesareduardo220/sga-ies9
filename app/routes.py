@@ -539,9 +539,13 @@ def get_estado_inscripciones(carrera_id=None):
       (inscripciones_fecha_inicio / inscripciones_fecha_fin).
     - Cada carrera puede extender su cierre (inscripciones_fecha_fin_c<id>)
       y cerrarse a mano (inscripciones_cerrado_manual_c<id> + motivo).
+    - Año de inscripción: el año calendario en que abre la ventana (nunca
+      anterior al configurado ni más de uno por delante). Si es el año
+      siguiente al configurado, la carrera tiene que haber terminado el
+      suyo (_pendientes_anio); si no, la ventana queda cerrada para ella.
     Sin carrera (admin) devuelve la ventana general, sin cierre manual.
     """
-    claves = ['inscripciones_fecha_inicio', 'inscripciones_fecha_fin']
+    claves = ['inscripciones_fecha_inicio', 'inscripciones_fecha_fin', 'anio_lectivo_actual']
     if carrera_id is not None:
         claves += [f'inscripciones_fecha_fin_c{carrera_id}',
                    f'inscripciones_cerrado_manual_c{carrera_id}',
@@ -550,8 +554,6 @@ def get_estado_inscripciones(carrera_id=None):
     cur  = conn.cursor()
     cur.execute("SELECT clave, valor FROM configuracion WHERE clave = ANY(%s)", (claves,))
     conf = {r[0]: r[1] for r in cur.fetchall()}
-    cur.close()
-    conn.close()
 
     hoy = date.today()
 
@@ -562,10 +564,17 @@ def get_estado_inscripciones(carrera_id=None):
         finicio      = date(hoy.year, 4, 28)
         ffin_general = date(hoy.year, 5, 31)
 
+    try:
+        anio_conf = int(conf.get('anio_lectivo_actual', hoy.year))
+    except ValueError:
+        anio_conf = hoy.year
+    anio_insc = min(max(finicio.year, anio_conf), anio_conf + 1)
+
     ffin           = ffin_general
     prorroga       = False
     cerrado_manual = False
     motivo_cierre  = ''
+    pendientes     = []
     if carrera_id is not None:
         try:
             ffin_carrera = date.fromisoformat(conf.get(f'inscripciones_fecha_fin_c{carrera_id}', ''))
@@ -576,6 +585,10 @@ def get_estado_inscripciones(carrera_id=None):
             prorroga = True
         cerrado_manual = (conf.get(f'inscripciones_cerrado_manual_c{carrera_id}', 'false').lower() == 'true')
         motivo_cierre  = conf.get(f'inscripciones_motivo_cierre_c{carrera_id}', '') or ''
+        if anio_insc > anio_conf:
+            pendientes = _pendientes_anio(cur, anio_conf, carrera_id)
+    cur.close()
+    conn.close()
 
     if cerrado_manual:
         abierto = False
@@ -589,11 +602,19 @@ def get_estado_inscripciones(carrera_id=None):
     elif hoy > ffin:
         abierto = False
         motivo  = f'Cerrado automáticamente — el período terminó el {ffin.strftime("%d/%m/%Y")}'
+    elif pendientes:
+        abierto = False
+        n = len(pendientes)
+        nombres = ', '.join(p['materia'] for p in pendientes[:3]) + (', …' if n > 3 else '')
+        motivo  = (f'Para inscribir al año lectivo {anio_insc} primero hay que terminar {anio_conf}: '
+                   f'{"falta" if n == 1 else "faltan"} cerrar {n} '
+                   f'{"materia" if n == 1 else "materias"} ({nombres})')
     else:
         abierto = True
         motivo  = f'Abierto hasta el {ffin.strftime("%d/%m/%Y")}'
         if prorroga:
             motivo += ' (prórroga de la carrera)'
+        motivo += f' · año lectivo {anio_insc}'
 
     return {
         'abierto':           abierto,
@@ -604,8 +625,15 @@ def get_estado_inscripciones(carrera_id=None):
         'prorroga':          prorroga,
         'cerrado_manual':    cerrado_manual,
         'motivo_cierre':     motivo_cierre,
+        'anio_inscripcion':  anio_insc,
+        'pendientes_cierre': pendientes,
         'hoy':               hoy.isoformat(),
     }
+
+
+def _anio_inscripcion(carrera_id):
+    """Año lectivo al que se inscribe hoy en la carrera (ver get_estado_inscripciones)."""
+    return get_estado_inscripciones(carrera_id)['anio_inscripcion']
 
 
 # ================================================================
@@ -2157,10 +2185,8 @@ def api_alumnos_crear():
     conn = get_db()
     cur = conn.cursor()
 
-    # Obtener año lectivo actual como fallback
-    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
-    row = cur.fetchone()
-    anio_lectivo = int(row[0]) if row else 2026
+    # Año de ingreso por defecto: el año de inscripción vigente
+    anio_lectivo = _anio_inscripcion(carrera_id)
 
     email_alumno = (data.get('email') or '').strip()
     if email_alumno:
@@ -3349,8 +3375,7 @@ def api_inscripciones_alumno(aid):
     cur = conn.cursor()
 
     # Año lectivo actual
-    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
-    anio = int(cur.fetchone()[0])
+    anio = _anio_inscripcion(carrera_id)
 
     # Verificar que el alumno pertenece a esta carrera
     cur.execute("SELECT id, apellido, nombre, dni, tipo_documento FROM alumnos_carrera WHERE id = %s AND carrera_id = %s", (aid, carrera_id))
@@ -3460,8 +3485,7 @@ def api_inscripciones_guardar(aid):
         return jsonify({'error': 'Alumno no encontrado o inactivo'}), 404
 
     # ── 3. Año lectivo actual ──
-    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
-    anio = int(cur.fetchone()[0])
+    anio = _anio_inscripcion(carrera_id)
 
     # ── 4. Inscripciones actuales del alumno en este ciclo ──
     cur.execute("""
@@ -3747,8 +3771,7 @@ def api_inscripciones_autorizar_reapertura(aid):
         cur.close(); conn.close()
         return jsonify({'error': 'Alumno no encontrado'}), 404
 
-    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
-    anio = int(cur.fetchone()[0])
+    anio = _anio_inscripcion(carrera_id)
 
     cur.execute("""
         INSERT INTO inscripciones_auditoria
@@ -3786,8 +3809,7 @@ def api_inscripciones_cancelar_autorizacion(aid):
         cur.close(); conn.close()
         return jsonify({'error': 'Alumno no encontrado'}), 404
 
-    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
-    anio = int(cur.fetchone()[0])
+    anio = _anio_inscripcion(carrera_id)
 
     cur.execute("""
         UPDATE inscripciones_auditoria
@@ -3858,8 +3880,7 @@ def api_inscripciones_alumnos_por_anio(anio_plan):
     cur  = conn.cursor()
 
     # Año lectivo actual
-    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
-    anio_lectivo = int(cur.fetchone()[0])
+    anio_lectivo = _anio_inscripcion(carrera_id)
 
     # Traer todos los alumnos activos
     cur.execute("""
