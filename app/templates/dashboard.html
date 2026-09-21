@@ -2935,7 +2935,7 @@
                 <button class="btn-nuevo" onclick="confirmarCambioAnioLectivo()">💾 Guardar cambio</button>
             </div>
 
-            <!-- ─── Ventana de inscripciones (solo coordinador) ─── -->
+            <!-- ─── Ventana de inscripciones (admin: general · coordinación: su carrera) ─── -->
             <div class="tarjeta-form" id="tarjeta-config-inscripciones" style="max-width:560px; margin-top:24px; display:none;">
                 <div class="tarjeta-form-titulo">🗓️ Período de inscripciones</div>
                 <p style="font-size:0.85rem; color:var(--sga-texto-gris); margin:0 0 16px;">
@@ -2944,6 +2944,7 @@
                 </p>
 
                 <div id="config-insc-estado" style="padding:12px 14px; border-radius:10px; margin-bottom:16px; font-size:0.88rem; display:none;"></div>
+                <p id="config-insc-nota" style="font-size:0.82rem; color:var(--sga-texto-gris); margin:0 0 14px;"></p>
 
                 <div style="display:flex; flex-direction:column; gap:14px;">
                     <div class="campo-edit">
@@ -5539,8 +5540,8 @@ async function eliminarPreceptora(id, apellido) {
         const tarjeta = document.getElementById('tarjeta-config-inscripciones');
         if (!tarjeta) return;
 
-        // Solo mostrar si el rol del usuario es coordinador
-        if (typeof ROL !== 'undefined' && ROL !== 'coordinador') {
+        // Solo mostrar si el rol del usuario es coordinador o admin
+        if (typeof ROL !== 'undefined' && ROL !== 'coordinador' && ROL !== 'admin') {
             tarjeta.style.display = 'none';
             return;
         }
@@ -5578,6 +5579,26 @@ async function eliminarPreceptora(id, apellido) {
             } else {
                 btnCerrar.style.display  = 'inline-block';
                 btnReabrir.style.display = 'none';
+            }
+            // Admin: fija la ventana general. Coordinación: solo extiende el cierre de su carrera.
+            const esAdmin = (typeof ROL !== 'undefined' && ROL === 'admin');
+            ['insc-inicio-dia', 'insc-inicio-mes', 'insc-inicio-anio'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = !esAdmin;
+            });
+            if (esAdmin) {
+                btnCerrar.style.display  = 'none';
+                btnReabrir.style.display = 'none';
+            }
+            const nota = document.getElementById('config-insc-nota');
+            if (nota) {
+                if (esAdmin) {
+                    nota.textContent = 'Estas fechas valen para todas las carreras. Cada coordinación puede extender el cierre de la suya.';
+                } else {
+                    const [fa, fm, fd] = (data.fecha_fin_general || '').split('-');
+                    nota.textContent = `La apertura y el cierre generales los fija la administración. `
+                                     + `El cierre general es el ${fd}/${fm}/${fa}; se puede extender para esta carrera.`;
+                }
             }
         } catch (e) {
             console.error('Error al cargar ventana de inscripciones:', e);

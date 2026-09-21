@@ -532,30 +532,23 @@ def get_pendientes_libro_folio(carrera_id):
     } for r in rows]
 
 
-def get_estado_inscripciones():
+def get_estado_inscripciones(carrera_id=None):
     """
-    Calcula el estado de la ventana de inscripciones según:
-    - fecha del servidor (date.today())
-    - fechas configuradas en la DB (inscripciones_fecha_inicio / fin)
-    - cierre manual del coordinador (inscripciones_cerrado_manual)
-
-    Retorna dict con:
-        abierto:    True/False
-        motivo:     str (descripción del estado actual)
-        fecha_inicio, fecha_fin:  date
-        cerrado_manual:           bool
-        motivo_cierre:            str
-        hoy:                      date
+    Estado de la ventana de inscripciones.
+    - Apertura y cierre generales: los fija el admin
+      (inscripciones_fecha_inicio / inscripciones_fecha_fin).
+    - Cada carrera puede extender su cierre (inscripciones_fecha_fin_c<id>)
+      y cerrarse a mano (inscripciones_cerrado_manual_c<id> + motivo).
+    Sin carrera (admin) devuelve la ventana general, sin cierre manual.
     """
+    claves = ['inscripciones_fecha_inicio', 'inscripciones_fecha_fin']
+    if carrera_id is not None:
+        claves += [f'inscripciones_fecha_fin_c{carrera_id}',
+                   f'inscripciones_cerrado_manual_c{carrera_id}',
+                   f'inscripciones_motivo_cierre_c{carrera_id}']
     conn = get_db()
     cur  = conn.cursor()
-    cur.execute("""
-        SELECT clave, valor FROM configuracion
-        WHERE clave IN ('inscripciones_fecha_inicio',
-                        'inscripciones_fecha_fin',
-                        'inscripciones_cerrado_manual',
-                        'inscripciones_motivo_cierre')
-    """)
+    cur.execute("SELECT clave, valor FROM configuracion WHERE clave = ANY(%s)", (claves,))
     conf = {r[0]: r[1] for r in cur.fetchall()}
     cur.close()
     conn.close()
@@ -563,18 +556,30 @@ def get_estado_inscripciones():
     hoy = date.today()
 
     try:
-        finicio = date.fromisoformat(conf.get('inscripciones_fecha_inicio', '2026-04-28'))
-        ffin    = date.fromisoformat(conf.get('inscripciones_fecha_fin',    '2026-05-31'))
+        finicio      = date.fromisoformat(conf.get('inscripciones_fecha_inicio', '2026-04-28'))
+        ffin_general = date.fromisoformat(conf.get('inscripciones_fecha_fin',    '2026-05-31'))
     except Exception:
-        finicio = date(hoy.year, 4, 28)
-        ffin    = date(hoy.year, 5, 31)
+        finicio      = date(hoy.year, 4, 28)
+        ffin_general = date(hoy.year, 5, 31)
 
-    cerrado_manual = (conf.get('inscripciones_cerrado_manual', 'false').lower() == 'true')
-    motivo_cierre  = conf.get('inscripciones_motivo_cierre', '') or ''
+    ffin           = ffin_general
+    prorroga       = False
+    cerrado_manual = False
+    motivo_cierre  = ''
+    if carrera_id is not None:
+        try:
+            ffin_carrera = date.fromisoformat(conf.get(f'inscripciones_fecha_fin_c{carrera_id}', ''))
+        except Exception:
+            ffin_carrera = None
+        if ffin_carrera and ffin_carrera > ffin_general:
+            ffin     = ffin_carrera
+            prorroga = True
+        cerrado_manual = (conf.get(f'inscripciones_cerrado_manual_c{carrera_id}', 'false').lower() == 'true')
+        motivo_cierre  = conf.get(f'inscripciones_motivo_cierre_c{carrera_id}', '') or ''
 
     if cerrado_manual:
         abierto = False
-        motivo  = f'Cerrado manualmente por el coordinador'
+        motivo  = 'Cerrado manualmente por la coordinación'
         if motivo_cierre:
             # Limpiar puntos/espacios al final para evitar doble punto cuando se concatena
             motivo += f': {motivo_cierre.rstrip(". ")}'
@@ -587,15 +592,19 @@ def get_estado_inscripciones():
     else:
         abierto = True
         motivo  = f'Abierto hasta el {ffin.strftime("%d/%m/%Y")}'
+        if prorroga:
+            motivo += ' (prórroga de la carrera)'
 
     return {
-        'abierto':        abierto,
-        'motivo':         motivo,
-        'fecha_inicio':   finicio.isoformat(),
-        'fecha_fin':      ffin.isoformat(),
-        'cerrado_manual': cerrado_manual,
-        'motivo_cierre':  motivo_cierre,
-        'hoy':            hoy.isoformat(),
+        'abierto':           abierto,
+        'motivo':            motivo,
+        'fecha_inicio':      finicio.isoformat(),
+        'fecha_fin':         ffin.isoformat(),
+        'fecha_fin_general': ffin_general.isoformat(),
+        'prorroga':          prorroga,
+        'cerrado_manual':    cerrado_manual,
+        'motivo_cierre':     motivo_cierre,
+        'hoy':               hoy.isoformat(),
     }
 
 
@@ -2138,7 +2147,7 @@ def api_alumnos_crear():
         return jsonify({'error': err_fnac}), 400
 
     # Validar ventana de inscripciones (misma que para inscripciones a materias)
-    estado_ventana = get_estado_inscripciones()
+    estado_ventana = get_estado_inscripciones(carrera_id)
     if not estado_ventana['abierto']:
         return jsonify({
             'error': f'No se pueden cargar alumnos nuevos. {estado_ventana["motivo"]}.',
@@ -3378,7 +3387,7 @@ def api_inscripciones_alumno(aid):
         c2.close(); conn2.close()
 
     # ── Estado de la ventana de inscripciones ──
-    ventana = get_estado_inscripciones()
+    ventana = get_estado_inscripciones(carrera_id)
 
     # Determinar si el panel debe estar en modo solo-lectura
     # Modo edición permitido si:
@@ -3433,7 +3442,7 @@ def api_inscripciones_guardar(aid):
     ids_nuevos = set(data.get('materia_ids', []))
 
     # ── 1. Validar ventana de inscripciones (excepto coordinador con autorización) ──
-    estado_ventana = get_estado_inscripciones()
+    estado_ventana = get_estado_inscripciones(carrera_id)
     if not estado_ventana['abierto']:
         return jsonify({
             'error': f'Inscripciones cerradas. {estado_ventana["motivo"]}.',
@@ -3558,11 +3567,11 @@ def api_inscripciones_guardar(aid):
 @login_requerido(['coordinador', 'preceptora', 'admin'])
 def api_inscripciones_ventana_get():
     """Devuelve el estado actual de la ventana de inscripciones."""
-    return jsonify(get_estado_inscripciones())
+    return jsonify(get_estado_inscripciones(session.get('carrera_id')))
 
 
 @auth.route('/api/inscripciones/ventana', methods=['POST'])
-@login_requerido(['coordinador'])
+@login_requerido(['coordinador', 'admin'])
 def api_inscripciones_ventana_set():
     """
     Actualiza las fechas de la ventana de inscripciones.
@@ -3594,12 +3603,34 @@ def api_inscripciones_ventana_set():
     conn = get_db()
     cur  = conn.cursor()
     try:
-        cur.execute("""INSERT INTO configuracion (clave, valor) VALUES ('inscripciones_fecha_inicio', %s)
-                       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
-                    (finicio.isoformat(),))
-        cur.execute("""INSERT INTO configuracion (clave, valor) VALUES ('inscripciones_fecha_fin', %s)
-                       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
-                    (ffin.isoformat(),))
+        if session.get('rol') == 'admin':
+            # Ventana general: vale para todas las carreras
+            cur.execute("""INSERT INTO configuracion (clave, valor) VALUES ('inscripciones_fecha_inicio', %s)
+                           ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
+                        (finicio.isoformat(),))
+            cur.execute("""INSERT INTO configuracion (clave, valor) VALUES ('inscripciones_fecha_fin', %s)
+                           ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
+                        (ffin.isoformat(),))
+            _detalle = {'alcance': 'general',
+                        'fecha_inicio': finicio.isoformat(), 'fecha_fin': ffin.isoformat()}
+        else:
+            # Coordinación: solo extiende el cierre de su carrera
+            cur.execute("SELECT valor FROM configuracion WHERE clave = 'inscripciones_fecha_fin'")
+            _fila = cur.fetchone()
+            ffin_general = date.fromisoformat(_fila[0]) if _fila else None
+            if ffin_general and ffin < ffin_general:
+                conn.rollback()
+                return jsonify({'error': (f'La prórroga no puede cerrar antes del cierre general '
+                                          f'({ffin_general.strftime("%d/%m/%Y")}).')}), 400
+            clave_fin = f'inscripciones_fecha_fin_c{carrera_id}'
+            if ffin_general and ffin == ffin_general:
+                cur.execute("DELETE FROM configuracion WHERE clave = %s", (clave_fin,))
+            else:
+                cur.execute("""INSERT INTO configuracion (clave, valor) VALUES (%s, %s)
+                               ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
+                            (clave_fin, ffin.isoformat()))
+            _detalle = {'alcance': 'carrera', 'carrera_id': carrera_id,
+                        'fecha_fin': ffin.isoformat()}
 
         cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
         anio = int(cur.fetchone()[0])
@@ -3609,15 +3640,13 @@ def api_inscripciones_ventana_set():
                 (alumno_id, coordinador_id, accion, motivo, detalle, anio_lectivo)
             VALUES (NULL, %s, 'modificacion_fechas', %s, %s::jsonb, %s)
         """, (user_id, motivo,
-              json.dumps({'fecha_inicio': finicio.isoformat(), 'fecha_fin': ffin.isoformat()}),
+              json.dumps(_detalle),
               anio))
         # Nota: alumno_id NULL para este tipo de acción (es global, no para un alumno)
 
         conn.commit()
     except Exception as e:
         conn.rollback()
-        # Si falla por NOT NULL en alumno_id, reintentamos sin auditoría individual
-        # (la tabla tiene NOT NULL en alumno_id por diseño)
         cur.close(); conn.close()
         return jsonify({'error': f'Error al guardar: {str(e)}'}), 500
     finally:
@@ -3626,6 +3655,31 @@ def api_inscripciones_ventana_set():
             conn.close()
 
     return jsonify({'ok': True, 'mensaje': 'Fechas de inscripciones actualizadas correctamente'})
+
+
+def _set_cierre_manual(cur, user_id, cerrado, motivo):
+    """
+    Cierre o reapertura manual de las inscripciones de la carrera de la
+    sesión, con registro en inscripciones_auditoria. No hace commit.
+    """
+    carrera_id = session.get('carrera_id')
+    if carrera_id is None:
+        raise ValueError('Sesión sin carrera')
+    valores = ((f'inscripciones_cerrado_manual_c{carrera_id}', 'true' if cerrado else 'false'),
+               (f'inscripciones_motivo_cierre_c{carrera_id}',
+                motivo if cerrado else f'(Reapertura) {motivo}'))
+    for clave, valor in valores:
+        cur.execute("""INSERT INTO configuracion (clave, valor) VALUES (%s, %s)
+                       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor""",
+                    (clave, valor))
+    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
+    anio = int(cur.fetchone()[0])
+    cur.execute("""
+        INSERT INTO inscripciones_auditoria
+            (alumno_id, coordinador_id, accion, motivo, detalle, anio_lectivo)
+        VALUES (NULL, %s, %s, %s, %s::jsonb, %s)
+    """, (user_id, 'cierre_manual' if cerrado else 'reapertura_manual', motivo,
+          json.dumps({'carrera_id': carrera_id}), anio))
 
 
 @auth.route('/api/inscripciones/cerrar-manual', methods=['POST'])
@@ -3641,9 +3695,7 @@ def api_inscripciones_cerrar_manual():
 
     conn = get_db()
     cur  = conn.cursor()
-    cur.execute("UPDATE configuracion SET valor = 'true' WHERE clave = 'inscripciones_cerrado_manual'")
-    cur.execute("UPDATE configuracion SET valor = %s WHERE clave = 'inscripciones_motivo_cierre'",
-                (motivo,))
+    _set_cierre_manual(cur, user_id, True, motivo)
     conn.commit()
     cur.close(); conn.close()
 
@@ -3663,9 +3715,7 @@ def api_inscripciones_reabrir_manual():
 
     conn = get_db()
     cur  = conn.cursor()
-    cur.execute("UPDATE configuracion SET valor = 'false' WHERE clave = 'inscripciones_cerrado_manual'")
-    cur.execute("UPDATE configuracion SET valor = %s WHERE clave = 'inscripciones_motivo_cierre'",
-                (f'(Reapertura) {motivo}',))
+    _set_cierre_manual(cur, user_id, False, motivo)
     conn.commit()
     cur.close(); conn.close()
 
@@ -8367,7 +8417,7 @@ def api_preinscripciones_aprobar(pid):
     carrera_id = session.get('carrera_id')
     user_id    = session.get('user_id')
 
-    estado_ventana = get_estado_inscripciones()
+    estado_ventana = get_estado_inscripciones(carrera_id)
     if not estado_ventana['abierto']:
         return jsonify({
             'error': f'No se pueden aprobar preinscripciones. {estado_ventana["motivo"]}.',
