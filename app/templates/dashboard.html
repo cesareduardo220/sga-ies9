@@ -2823,16 +2823,16 @@
         <div class="seccion" id="sec-usuarios">
             <div class="seccion-header">
                 <div>
-                    <h2>Usuarios</h2>
-                    <div class="sub" id="sub-preceptoras">Gestión de preceptoras de la carrera</div>
+                    <h2>Preceptoría</h2>
+                    <div class="sub" id="sub-preceptoras">Personal de preceptoría de la carrera</div>
                 </div>
-                <button class="btn-nuevo" id="btn-nueva-preceptora" onclick="abrirModalPreceptora(null)">+ Nueva preceptora</button>
+                <button class="btn-nuevo" id="btn-nueva-preceptora" onclick="abrirModalPreceptora(null)">+ Agregar personal</button>
             </div>
 
             <div id="preceptoras-cargando" class="cargando">Cargando...</div>
             <div id="preceptoras-vacio" class="empty-state" style="display:none">
                 <div class="empty-icon">👤</div>
-                No hay preceptoras registradas. Creá la primera con el botón de arriba.
+                Todavía no hay personal de preceptoría. Agregalo con el botón de arriba.
             </div>
             <div id="preceptoras-tabla-wrap" class="tabla-card" style="display:none;overflow-x:auto">
                 <table class="tabla-alumnos">
@@ -3075,7 +3075,7 @@
             <div class="campo-edit">
                 <label>Motivo de la reapertura <span style="color:#c00;">*</span></label>
                 <textarea id="input-insc-motivo-reabrir" class="input-edit-ficha" rows="4"
-                          placeholder="Ej: Se incorporó una nueva preceptora con alumnos pendientes" style="font-family:inherit;"></textarea>
+                          placeholder="Ej: Se sumó personal a preceptoría con alumnos pendientes" style="font-family:inherit;"></textarea>
             </div>
         </div>
         <div class="modal-card-footer">
@@ -3478,7 +3478,7 @@
                     <input type="text" id="input-prof-nombre" class="input-edit-ficha" placeholder="Nombre">
                 </div>
                 <div class="campo-edit">
-                    <label>DNI</label>
+                    <label>DNI *</label>
                     <input type="text" id="input-prof-dni" class="input-edit-ficha" placeholder="Con o sin puntos">
                 </div>
                 <div class="campo-edit">
@@ -3541,7 +3541,7 @@
             <div class="modal-icono" style="background:var(--sga-crema-2); color:var(--sga-verde-medio);">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
             </div>
-            <h3 id="modal-preceptora-titulo">Nueva preceptora</h3>
+            <h3 id="modal-preceptora-titulo">Agregar personal de preceptoría</h3>
         </div>
         <div class="modal-card-body">
             <div id="modal-preceptora-error" class="form-error" style="display:none;margin-bottom:12px"></div>
@@ -3848,7 +3848,7 @@
                 { id: 'reportes',          icon: '📄', label: 'Reportes' },
             ]},
             { seccion: 'sistema', items: [
-                { id: 'usuarios', icon: '👤', label: 'Usuarios' },
+                { id: 'usuarios', icon: '👤', label: 'Preceptoría' },
             ]},
         ],
         preceptora: [
@@ -5035,7 +5035,7 @@
     }
 
 async function eliminarPreceptora(id, apellido) {
-    if (!confirm(`Se quitara a ${apellido} de esta carrera. Si no trabaja en ninguna otra, se eliminara del sistema.`)) return;
+    if (!confirm(`Se quitará a ${apellido} de esta carrera. Si no trabaja en ninguna otra, se eliminará del sistema.`)) return;
     const res = await fetch(`/api/usuarios/preceptoras/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
@@ -8627,7 +8627,7 @@ async function eliminarPreceptora(id, apellido) {
     const SUBS_GESTION = {
         'sub-alumnos':       ['Gestión de alumnos de la carrera', 'Listado de alumnos de la carrera'],
         'sub-mesas':         ['Gestión de mesas, inscripción de alumnos y actas', 'Listado de mesas y actas'],
-        'sub-preceptoras':   ['Gestión de preceptoras de la carrera', 'Listado de preceptoras de la carrera'],
+        'sub-preceptoras':   ['Personal de preceptoría de la carrera', 'Listado del personal de preceptoría de la carrera'],
         'sub-cuentas':       ['Gestión de cuentas del administrador del sistema', 'Listado de cuentas del administrador'],
         'sub-carreras':      ['Gestión de carreras de la institución', 'Listado de carreras de la institución'],
         'sub-coordinadores': ['Gestión de coordinadores por carrera', 'Listado de coordinadores por carrera'],
@@ -8725,6 +8725,11 @@ async function eliminarPreceptora(id, apellido) {
             errDiv.style.display = 'block';
             return;
         }
+        if (!payload.dni) {
+            errDiv.textContent = 'El DNI es obligatorio.';
+            errDiv.style.display = 'block';
+            return;
+        }
 
         const url    = editandoProfeId ? `/api/profesores/${editandoProfeId}` : '/api/profesores';
         const method = editandoProfeId ? 'PUT' : 'POST';
@@ -8734,6 +8739,9 @@ async function eliminarPreceptora(id, apellido) {
         });
         const data = await res.json();
 
+        if (data.ok && data.vinculado) {
+            alert(`${data.apellido}, ${data.nombre} ya estaba registrado como profesor en otra carrera.\n\nSe lo sumó a esta carrera. Sus datos personales son compartidos entre carreras: los que cargaste no reemplazan a los que ya tenía.`);
+        }
         if (data.ok) {
             cerrarModal('modal-profesor');
             cargarProfesores();
@@ -10341,7 +10349,7 @@ async function eliminarPreceptora(id, apellido) {
                 </td>
                 <td>
                     <span class="badge-estado ${p.activo ? 'activo' : 'inactivo'}">
-                        ${p.activo ? 'Activa' : 'Inactiva'}
+                        ${p.activo ? 'Con acceso' : 'Sin acceso'}
                     </span>
                 </td>
                 <td>
@@ -10365,7 +10373,7 @@ async function eliminarPreceptora(id, apellido) {
 
         if (id) {
             const p = preceptorasData.find(x => x.id === id);
-            document.getElementById('modal-preceptora-titulo').textContent = 'Editar preceptora';
+            document.getElementById('modal-preceptora-titulo').textContent = 'Editar datos';
             document.getElementById('input-prec-apellido').value = p.apellido || '';
             document.getElementById('input-prec-nombre').value   = p.nombre   || '';
             document.getElementById('input-prec-email').value    = p.email    || '';
@@ -10373,7 +10381,7 @@ async function eliminarPreceptora(id, apellido) {
             // En edición no se puede cambiar el DNI
             document.getElementById('grupo-prec-dni').style.display = 'none';
         } else {
-            document.getElementById('modal-preceptora-titulo').textContent = 'Nueva preceptora';
+            document.getElementById('modal-preceptora-titulo').textContent = 'Agregar personal de preceptoría';
             document.getElementById('input-prec-apellido').value = '';
             document.getElementById('input-prec-nombre').value   = '';
             document.getElementById('input-prec-dni').value      = '';
@@ -10428,11 +10436,14 @@ async function eliminarPreceptora(id, apellido) {
         });
         const data = await res.json();
 
+        if (data.ok && data.vinculada) {
+            alert(`${data.apellido}, ${data.nombre} ya formaba parte de la preceptoría de otra carrera.\n\nSe sumó a esta carrera con su misma cuenta y contraseña. Sus datos personales son compartidos entre carreras: los que cargaste no reemplazan a los que ya tenía.`);
+        }
         if (data.ok) {
             cerrarModalPreceptora();
             mostrarExito('usuarios-msg', editandoPreceptoraId
-                ? '✅ Preceptora actualizada correctamente.'
-                : '✅ Preceptora creada. Su contraseña inicial es su DNI.');
+                ? '✅ Datos actualizados correctamente.'
+                : (data.vinculada ? '✅ Se sumó a esta carrera con su cuenta existente.' : '✅ Personal agregado. Su contraseña inicial es su DNI.'));
             cargarPreceptoras();
         } else {
             errDiv.style.display = 'block';
@@ -10442,13 +10453,13 @@ async function eliminarPreceptora(id, apellido) {
 
     async function togglePreceptora(id, activo) {
         const accion = activo ? 'desactivar' : 'activar';
-        if (!confirm(`¿Querés ${accion} esta preceptora?`)) return;
+        if (!confirm(`¿Querés ${accion} el acceso de esta persona en esta carrera?`)) return;
 
         const res  = await fetch(`/api/usuarios/preceptoras/${id}/toggle`, { method: 'POST' });
         const data = await res.json();
 
         if (data.ok) {
-            mostrarExito('usuarios-msg', `✅ Preceptora ${data.activo ? 'activada' : 'desactivada'}.`);
+            mostrarExito('usuarios-msg', `✅ Acceso ${data.activo ? 'habilitado' : 'deshabilitado'} en esta carrera.`);
             cargarPreceptoras();
         } else {
             mostrarError('usuarios-msg', data.error || 'Error al cambiar estado.');
@@ -10469,7 +10480,7 @@ async function eliminarPreceptora(id, apellido) {
         const data = await res.json();
 
         if (data.ok) {
-            mostrarExito('usuarios-msg', '✅ Contraseña reseteada. La preceptora deberá cambiarla al ingresar.');
+            mostrarExito('usuarios-msg', '✅ Contraseña reseteada. Deberá cambiarla al ingresar.');
             cargarPreceptoras();
         } else {
             mostrarError('usuarios-msg', data.error || 'Error al resetear contraseña.');

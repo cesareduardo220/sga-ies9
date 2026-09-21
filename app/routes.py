@@ -5288,7 +5288,7 @@ def api_preceptoras_crear():
                 return jsonify({'error': 'Ese DNI ya esta registrado en el sistema con otro rol'}), 409
             cur.execute("SELECT 1 FROM usuario_carrera WHERE usuario_id = %s AND carrera_id = %s", (existente[0], carrera_id))
             if cur.fetchone():
-                return jsonify({'error': 'Esa preceptora ya esta en esta carrera'}), 409
+                return jsonify({'error': 'Esa persona ya forma parte de la preceptoría de esta carrera'}), 409
             cur.execute("INSERT INTO usuario_carrera (usuario_id, carrera_id) VALUES (%s, %s)", (existente[0], carrera_id))
             conn.commit()
             return jsonify({'ok': True, 'id': existente[0], 'vinculada': True,
@@ -5337,7 +5337,7 @@ def api_preceptoras_editar(uid):
     """, (nombre, apellido, email, celular, uid, carrera_id))
     if cur.rowcount == 0:
         conn.rollback(); cur.close(); conn.close()
-        return jsonify({'error': 'Preceptora no encontrada en esta carrera'}), 404
+        return jsonify({'error': 'No se encontró a esa persona en esta carrera'}), 404
     conn.commit()
     cur.close()
     conn.close()
@@ -5360,7 +5360,7 @@ def api_preceptoras_toggle(uid):
     cur.close()
     conn.close()
     if not resultado:
-        return jsonify({'error': 'Preceptora no encontrada'}), 404
+        return jsonify({'error': 'No se encontró a esa persona en esta carrera'}), 404
     return jsonify({'ok': True, 'activo': resultado[0]})
 
 
@@ -5403,7 +5403,7 @@ def api_preceptoras_reset(uid):
     row = cur.fetchone()
     if not row:
         cur.close(); conn.close()
-        return jsonify({'error': 'Preceptora no encontrada'}), 404
+        return jsonify({'error': 'No se encontró a esa persona en esta carrera'}), 404
     cur.execute("""
         UPDATE usuarios
         SET password_hash = %s, debe_cambiar_password = TRUE
