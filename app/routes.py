@@ -5279,8 +5279,11 @@ def api_preceptoras_editar(uid):
     cur.execute("""
         UPDATE usuarios
         SET nombre = %s, apellido = %s, email = %s, celular = %s
-        WHERE id = %s AND rol = 'preceptora' AND carrera_id = %s
+        WHERE id = %s AND rol = 'preceptora' AND EXISTS (SELECT 1 FROM usuario_carrera uc WHERE uc.usuario_id = usuarios.id AND uc.carrera_id = %s)
     """, (nombre, apellido, email, celular, uid, carrera_id))
+    if cur.rowcount == 0:
+        conn.rollback(); cur.close(); conn.close()
+        return jsonify({'error': 'Preceptora no encontrada en esta carrera'}), 404
     conn.commit()
     cur.close()
     conn.close()
@@ -5294,8 +5297,8 @@ def api_preceptoras_toggle(uid):
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        UPDATE usuarios SET activo = NOT activo
-        WHERE id = %s AND rol = 'preceptora' AND carrera_id = %s
+        UPDATE usuario_carrera SET activo = NOT activo
+        WHERE usuario_id = %s AND carrera_id = %s AND EXISTS (SELECT 1 FROM usuarios u WHERE u.id = usuario_carrera.usuario_id AND u.rol = 'preceptora')
         RETURNING activo
     """, (uid, carrera_id))
     resultado = cur.fetchone()
@@ -5342,7 +5345,7 @@ def api_preceptoras_reset(uid):
     carrera_id = session.get('carrera_id')
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT dni FROM usuarios WHERE id = %s AND rol = 'preceptora' AND carrera_id = %s", (uid, carrera_id))
+    cur.execute("SELECT dni FROM usuarios WHERE id = %s AND rol = 'preceptora' AND EXISTS (SELECT 1 FROM usuario_carrera uc WHERE uc.usuario_id = usuarios.id AND uc.carrera_id = %s)", (uid, carrera_id))
     row = cur.fetchone()
     if not row:
         cur.close(); conn.close()
@@ -5350,7 +5353,7 @@ def api_preceptoras_reset(uid):
     cur.execute("""
         UPDATE usuarios
         SET password_hash = %s, debe_cambiar_password = TRUE
-        WHERE id = %s AND rol = 'preceptora' AND carrera_id = %s
+        WHERE id = %s AND rol = 'preceptora' AND EXISTS (SELECT 1 FROM usuario_carrera uc WHERE uc.usuario_id = usuarios.id AND uc.carrera_id = %s)
     """, (generate_password_hash(row[0]), uid, carrera_id))
     conn.commit()
     cur.close()
