@@ -7084,7 +7084,7 @@ def _vencimiento_token(cur):
 @auth.route('/api/tokens', methods=['GET'])
 @login_requerido(['admin', 'coordinador', 'preceptora'])
 def api_tokens_listar():
-    ciclo   = request.args.get('ciclo', type=int) or get_ciclo_lectivo()['anio_inicio']
+    ciclo   = request.args.get('ciclo', type=int) or _anio_inscripcion(_carrera_tokens(request.args.get('carrera_id', type=int)))
     carrera = _carrera_tokens(request.args.get('carrera_id', type=int))
     estado  = (request.args.get('estado') or '').strip()
     tipo    = (request.args.get('tipo') or '').strip()
@@ -7192,7 +7192,12 @@ def _generar_tokens_sin_alumno(tipo):
     if not email:
         return jsonify({'error': 'Indicá el correo del alumno para enviarle el token.'}), 400
 
-    ciclo = get_ciclo_lectivo()['anio_inicio']
+    # Año de inscripción de la carrera. Si tiene que terminar el año
+    # anterior antes de inscribir al siguiente, no se generan tokens.
+    _ventana = get_estado_inscripciones(carrera_id)
+    if _ventana['pendientes_cierre']:
+        return jsonify({'error': _ventana['motivo']}), 409
+    ciclo = _ventana['anio_inscripcion']
 
     conn = get_db()
     cur = conn.cursor()
@@ -7335,7 +7340,7 @@ def api_tokens_reinscripcion_alumnos():
     cur = conn.cursor()
     try:
         return jsonify(_estado_reinscripcion_alumnos(
-            cur, _carrera_tokens(), get_ciclo_lectivo()['anio_inicio']))
+            cur, _carrera_tokens(), _anio_inscripcion(_carrera_tokens())))
     finally:
         cur.close()
         conn.close()
@@ -7357,7 +7362,12 @@ def api_tokens_reinscripcion():
     if not carrera_id:
         return jsonify({'error': 'La carrera es obligatoria'}), 400
  
-    ciclo = get_ciclo_lectivo()['anio_inicio']
+    # Año de inscripción de la carrera. Si tiene que terminar el año
+    # anterior antes de inscribir al siguiente, no se generan tokens.
+    _ventana = get_estado_inscripciones(carrera_id)
+    if _ventana['pendientes_cierre']:
+        return jsonify({'error': _ventana['motivo']}), 409
+    ciclo = _ventana['anio_inscripcion']
  
     conn = get_db()
     cur = conn.cursor()
