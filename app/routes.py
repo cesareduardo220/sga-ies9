@@ -5429,14 +5429,16 @@ def api_profesores_listar():
     cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
     anio = int(cur.fetchone()[0])
 
+    # Solo los profesores vinculados a esta carrera
     cur.execute("""
         SELECT p.id, p.nombre, p.apellido, p.dni, p.email, p.celular, p.titulo, p.activo,
                m.id, m.nombre, m.anio
         FROM profesores p
+        JOIN profesor_carrera pc ON pc.profesor_id = p.id AND pc.carrera_id = %s
         LEFT JOIN materia_profesor mp ON mp.profesor_id = p.id AND mp.anio_lectivo = %s
         LEFT JOIN materias m ON m.id = mp.materia_id AND m.carrera_id = %s
         ORDER BY p.apellido, p.nombre, m.anio, m.nombre
-    """, (anio, carrera_id))
+    """, (carrera_id, anio, carrera_id))
 
     rows = cur.fetchall()
     cur.close()
@@ -5465,6 +5467,7 @@ def api_profesores_listar():
 @auth.route('/api/profesores', methods=['POST'])
 @login_requerido(['coordinador'])
 def api_profesores_crear():
+    carrera_id = session.get('carrera_id')
     data = request.get_json()
     nombre   = data.get('nombre', '').strip()
     apellido = data.get('apellido', '').strip()
@@ -5473,17 +5476,32 @@ def api_profesores_crear():
     celular  = data.get('celular', '').strip() or None
     titulo   = data.get('titulo', '').strip() or None
 
-    if not nombre or not apellido:
-        return jsonify({'error': 'Nombre y apellido son obligatorios'}), 400
+    if not nombre or not apellido or not dni:
+        return jsonify({'error': 'Nombre, apellido y DNI son obligatorios'}), 400
+    if not dni.isdigit() or len(dni) < 7:
+        return jsonify({'error': 'DNI inválido'}), 400
 
     conn = get_db()
     cur = conn.cursor()
     try:
+        # Si el profesor ya existe (da clases en otra carrera), se lo vincula a esta
+        cur.execute("SELECT id, nombre, apellido FROM profesores WHERE dni = %s", (dni,))
+        existente = cur.fetchone()
+        if existente:
+            cur.execute("SELECT 1 FROM profesor_carrera WHERE profesor_id = %s AND carrera_id = %s", (existente[0], carrera_id))
+            if cur.fetchone():
+                return jsonify({'error': 'Ese profesor ya está en esta carrera'}), 409
+            cur.execute("INSERT INTO profesor_carrera (profesor_id, carrera_id) VALUES (%s, %s)", (existente[0], carrera_id))
+            conn.commit()
+            return jsonify({'ok': True, 'id': existente[0], 'vinculado': True,
+                            'nombre': existente[1], 'apellido': existente[2]})
+
         cur.execute("""
             INSERT INTO profesores (nombre, apellido, dni, email, celular, titulo)
             VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-        """, (nombre, apellido, dni or None, email, celular, titulo))
+        """, (nombre, apellido, dni, email, celular, titulo))
         nuevo_id = cur.fetchone()[0]
+        cur.execute("INSERT INTO profesor_carrera (profesor_id, carrera_id) VALUES (%s, %s)", (nuevo_id, carrera_id))
         conn.commit()
         return jsonify({'ok': True, 'id': nuevo_id})
     except Exception as e:
@@ -5499,6 +5517,7 @@ def api_profesores_crear():
 @auth.route('/api/profesores/<int:pid>', methods=['PUT'])
 @login_requerido(['coordinador'])
 def api_profesores_editar(pid):
+    carrera_id = session.get('carrera_id')
     data = request.get_json()
     nombre   = data.get('nombre', '').strip()
     apellido = data.get('apellido', '').strip()
@@ -5507,17 +5526,24 @@ def api_profesores_editar(pid):
     celular  = data.get('celular', '').strip() or None
     titulo   = data.get('titulo', '').strip() or None
 
-    if not nombre or not apellido:
-        return jsonify({'error': 'Nombre y apellido son obligatorios'}), 400
+    if not nombre or not apellido or not dni:
+        return jsonify({'error': 'Nombre, apellido y DNI son obligatorios'}), 400
+    if not dni.isdigit() or len(dni) < 7:
+        return jsonify({'error': 'DNI inválido'}), 400
 
     conn = get_db()
     cur = conn.cursor()
     try:
+        # Solo se puede editar un profesor vinculado a esta carrera
         cur.execute("""
             UPDATE profesores SET nombre=%s, apellido=%s, dni=%s,
                 email=%s, celular=%s, titulo=%s
-            WHERE id=%s
-        """, (nombre, apellido, dni or None, email, celular, titulo, pid))
+            WHERE id=%s AND EXISTS (SELECT 1 FROM profesor_carrera pc
+                                    WHERE pc.profesor_id = profesores.id AND pc.carrera_id = %s)
+        """, (nombre, apellido, dni, email, celular, titulo, pid, carrera_id))
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({'error': 'Profesor no encontrado en esta carrera'}), 404
         conn.commit()
         return jsonify({'ok': True})
     except Exception as e:
@@ -5533,15 +5559,34 @@ def api_profesores_editar(pid):
 @auth.route('/api/profesores/<int:pid>', methods=['DELETE'])
 @login_requerido(['coordinador'])
 def api_profesores_eliminar(pid):
+    """Quita al profesor de ESTA carrera (vinculo y asignaciones de esta carrera).
+    Si no le queda ninguna otra, lo borra del sistema."""
+    carrera_id = session.get('carrera_id')
     conn = get_db()
     cur = conn.cursor()
-    # Desvincular de materias primero
-    cur.execute("DELETE FROM materia_profesor WHERE profesor_id = %s", (pid,))
-    cur.execute("DELETE FROM profesores WHERE id = %s", (pid,))
-    conn.commit()
-    cur.close()
-    conn.close()
-    return jsonify({'ok': True})
+    try:
+        cur.execute("SELECT 1 FROM profesor_carrera WHERE profesor_id = %s AND carrera_id = %s", (pid, carrera_id))
+        if not cur.fetchone():
+            return jsonify({'error': 'Profesor no encontrado en esta carrera'}), 404
+
+        cur.execute("""
+            DELETE FROM materia_profesor mp
+            USING materias m
+            WHERE mp.materia_id = m.id AND mp.profesor_id = %s AND m.carrera_id = %s
+        """, (pid, carrera_id))
+        cur.execute("DELETE FROM profesor_carrera WHERE profesor_id = %s AND carrera_id = %s", (pid, carrera_id))
+        cur.execute("SELECT COUNT(*) FROM profesor_carrera WHERE profesor_id = %s", (pid,))
+        quedan = cur.fetchone()[0]
+        if quedan == 0:
+            cur.execute("DELETE FROM profesores WHERE id = %s", (pid,))
+        conn.commit()
+        return jsonify({'ok': True, 'eliminado': quedan == 0})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 @auth.route('/api/profesores/<int:pid>/asignar', methods=['POST'])
@@ -5570,6 +5615,11 @@ def api_profesores_asignar(pid):
         if not cur.fetchone():
             cur.close(); conn.close()
             return jsonify({'error': 'Materia no encontrada'}), 404
+
+        # Verificar que el profesor pertenece a la carrera
+        cur.execute("SELECT 1 FROM profesor_carrera WHERE profesor_id = %s AND carrera_id = %s", (pid, carrera_id))
+        if not cur.fetchone():
+            return jsonify({'error': 'Profesor no encontrado en esta carrera'}), 404
 
         cur.execute("""
             INSERT INTO materia_profesor (materia_id, profesor_id, anio_lectivo)
