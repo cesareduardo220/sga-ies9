@@ -610,6 +610,8 @@ def index():
 
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
+    if 'rol' in session and not _token_vigente():
+        session.clear()
     if 'rol' in session:
         return redirect(url_for('auth.dashboard'))
 
@@ -850,7 +852,7 @@ def logout():
     if 'user_id' in session:
         _c = get_db()
         _cu = _c.cursor()
-        _cu.execute("UPDATE usuarios SET sesion_token = NULL WHERE id = %s", (session['user_id'],))
+        _cu.execute("UPDATE usuarios SET sesion_token = NULL WHERE id = %s AND sesion_token = %s", (session['user_id'], session.get('sesion_token')))
         _c.commit()
         _cu.close()
         _c.close()
