@@ -23,6 +23,7 @@
 --
 -- CAMBIOS EN 7.1
 --   + usuarios.sesion_token (text) para la sesion unica por usuario
+--   + tabla usuario_carrera: una preceptora puede trabajar en varias carreras
 --
 -- Ya NO hace falta correr migracion_promocion_provisoria.sql
 -- despues de este script. Esa migracion sigue existiendo solo
@@ -852,6 +853,21 @@ CREATE TABLE public.usuarios (
 
 
 ALTER TABLE public.usuarios OWNER TO postgres;
+
+--
+-- Name: usuario_carrera; Type: TABLE; Schema: public
+-- Vinculo entre una persona (usuarios) y las carreras donde trabaja.
+--
+
+CREATE TABLE public.usuario_carrera (
+    usuario_id integer NOT NULL REFERENCES public.usuarios(id) ON DELETE CASCADE,
+    carrera_id integer NOT NULL REFERENCES public.carreras(id) ON DELETE CASCADE,
+    activo boolean NOT NULL DEFAULT true,
+    creado_en timestamp without time zone NOT NULL DEFAULT now(),
+    PRIMARY KEY (usuario_id, carrera_id)
+);
+
+ALTER TABLE public.usuario_carrera OWNER TO postgres;
 
 --
 -- Name: usuarios_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
