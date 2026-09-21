@@ -8674,7 +8674,7 @@ async function eliminarPreceptora(id, apellido) {
                         <div style="display:flex; gap:6px;">
                             <button class="btn-secundario" style="padding:6px 10px;" title="Asignar materias" onclick="abrirModalAsignar(${p.id}, '${p.apellido}, ${p.nombre}')">📚</button>
                             <button class="btn-secundario" style="padding:6px 10px;" title="Editar" onclick="abrirModalProfesor(${p.id})">✏️</button>
-                            <button class="btn-secundario" style="padding:6px 10px; color:var(--sga-error);" title="Eliminar" onclick="eliminarProfesor(${p.id}, '${p.apellido}')">🗑️</button>
+                            <button class="btn-secundario" style="padding:6px 10px; color:var(--sga-error);" title="Eliminar" onclick="eliminarProfesor(${p.id}, '${p.apellido.replace(/'/g,"\\'")}')">🗑️</button>
                         </div>
                     ` : '—'}
                 </td>` : ''}
@@ -8744,10 +8744,11 @@ async function eliminarPreceptora(id, apellido) {
     }
 
     async function eliminarProfesor(id, apellido) {
-        if (!confirm(`¿Eliminar al profesor ${apellido}?\nSe quitará también su asignación de materia.`)) return;
+        if (!confirm(`Se quitará a ${apellido} de esta carrera, junto con sus materias asignadas en ella.\nSi no da clases en ninguna otra, se eliminará del sistema.`)) return;
         const res  = await fetch(`/api/profesores/${id}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (data.ok) cargarProfesores();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) { alert(data.error || 'No se pudo eliminar'); return; }
+        cargarProfesores();
     }
 
     async function abrirModalAsignar(profId, profNombre) {
