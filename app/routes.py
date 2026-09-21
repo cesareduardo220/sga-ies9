@@ -477,23 +477,27 @@ def validar_password_fuerte(password):
 
 def get_ciclo_lectivo():
     """
-    Calcula el ciclo lectivo vigente según la fecha actual del servidor.
-    El ciclo va del 01/04 de un año al 31/03 del siguiente.
-    Ejemplo: hoy = 18/06/2026 → ciclo 2026-2027
-             hoy = 15/02/2027 → ciclo 2026-2027 (aún no terminó)
+    Ciclo del año lectivo CONFIGURADO (anio_lectivo_actual).
+    Va del 01/04 de ese año al 31/03 del siguiente.
+    'vencido' = el año configurado ya terminó y el admin todavía
+    no pasó el sistema al año siguiente.
     """
-    hoy = date.today()
-    if hoy.month >= 4:
-        anio_inicio = hoy.year
-    else:
-        anio_inicio = hoy.year - 1
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    anio_inicio = int(row[0]) if row else date.today().year
+    fin = date(anio_inicio + 1, 3, 31)
     return {
         'anio_inicio': anio_inicio,
         'anio_fin':    anio_inicio + 1,
         'inicio':      date(anio_inicio, 4, 1),
-        'fin':         date(anio_inicio + 1, 3, 31),
-        'label':       f"{anio_inicio} — {anio_inicio + 1}",
-        'vencido':     hoy > date(anio_inicio + 1, 3, 31),
+        'fin':         fin,
+        'label':       f"{anio_inicio}",
+        'periodo':     f"1/4/{anio_inicio} al 31/3/{anio_inicio + 1}",
+        'vencido':     date.today() > fin,
     }
 
 
@@ -874,8 +878,9 @@ def dashboard():
     bloqueado  = False
     if rol in ('coordinador', 'preceptora') and carrera_id:
         pendientes = get_pendientes_libro_folio(carrera_id)
-        # Bloqueo: si el ciclo venció Y hay pendientes
-        if ciclo['vencido'] and pendientes:
+        # Bloqueo: algun pendiente cuyo PROPIO ciclo ya termino (31/03 del año siguiente)
+        hoy = date.today()
+        if any(hoy > date(p['anio_lectivo'] + 1, 3, 31) for p in pendientes):
             bloqueado = True
 
     return render_template(
@@ -886,6 +891,9 @@ def dashboard():
         carrera_id=carrera_id,
         nombre_carrera=nombre_carrera,
         ciclo_label=ciclo['label'],
+        anio_lectivo=ciclo['anio_inicio'],
+        ciclo_periodo=ciclo['periodo'],
+        ciclo_fin=ciclo['fin'].isoformat(),
         pendientes_libro_folio=pendientes,
         bloqueado=bloqueado,
     )
@@ -2850,7 +2858,7 @@ def api_constancia_alumno(aid):
                     f'Necesita al menos 2 para emitir la constancia.')
     else:
         motivo_no = (f'Necesita al menos 2 materias aprobadas o promocionadas '
-                    f'en el ciclo lectivo {ciclo["label"]}. '
+                    f'en el año lectivo {ciclo["label"]}. '
                     f'Actualmente tiene {cant_aprobadas}.')
 
     if not puede_emitir:

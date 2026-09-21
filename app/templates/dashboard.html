@@ -1173,8 +1173,8 @@
 <div id="pantalla-bloqueo" class="sga-bloqueo-overlay">
     <div class="sga-bloqueo-card">
         <div class="sga-bloqueo-header">
-            <div class="titulo">🔴 Sistema bloqueado — Ciclo {{ ciclo_label }}</div>
-            <div class="sub">El ciclo lectivo finalizó y hay alumnos promocionados sin libro/folio registrado. Completá estos datos para continuar.</div>
+            <div class="titulo">🔴 Sistema bloqueado</div>
+            <div class="sub">El año lectivo finalizó y hay alumnos promocionados sin libro/folio registrado. Completá estos datos para continuar.</div>
         </div>
         <div class="sga-bloqueo-body">
             <div class="sga-bloqueo-cont">
@@ -1283,8 +1283,9 @@
         <path d="M-11,-54 C-11,-20 -11,20 -11,54" transform="translate(70,68)" stroke="#fff" stroke-width="5" fill="none"/>
       </svg>
       <div>
-        <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.07em; opacity:0.65;">Ciclo lectivo activo</div>
-        <div style="font-family:'Raleway',sans-serif; font-weight:800; font-size:1.05rem;" id="panel-menu-ciclo">{{ ciclo_label or '2026' }}</div>
+        <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.07em; opacity:0.65;">Año lectivo</div>
+        <div style="font-family:'Raleway',sans-serif; font-weight:800; font-size:1.05rem;" id="panel-menu-ciclo">{{ anio_lectivo }}</div>
+        <div id="panel-menu-periodo" style="font-size:0.72rem; opacity:0.75;">{{ ciclo_periodo }}</div>
       </div>
     </div>
     <div id="nav-menu"></div>
@@ -2224,7 +2225,7 @@
         </div>
         <div class="modal-card-body">
             <p>
-                Este alumno ya tiene inscripciones guardadas para el ciclo lectivo actual.
+                Este alumno ya tiene inscripciones guardadas para el año lectivo actual.
                 Para modificarlas, registrá el motivo. Quedará asentado en la auditoría del sistema
                 con tu usuario y la fecha actual.
             </p>
@@ -3766,6 +3767,14 @@
     const APELLIDO   = "{{ apellido }}";
     const CICLO      = "{{ ciclo_label }}";
     const BLOQUEADO  = {{ 'true' if bloqueado else 'false' }};
+    const CICLO_FIN  = '{{ ciclo_fin }}';
+    function actualizarPanelAnio(anio) {
+        const a = parseInt(anio, 10);
+        const v = document.getElementById('panel-menu-ciclo');
+        const p = document.getElementById('panel-menu-periodo');
+        if (v) v.textContent = a;
+        if (p) p.textContent = `1/4/${a} al 31/3/${a + 1}`;
+    }
     const PENDIENTES_LF = {{ pendientes_libro_folio | tojson }};
 
     // Variables globales de estado — declaradas temprano para que navegarA las vea
@@ -4132,6 +4141,7 @@
             .then(r => r.json())
             .then(d => {
                 document.getElementById('badge-anio-lectivo').textContent = 'Año lectivo ' + d.anio;
+                actualizarPanelAnio(d.anio);
             })
             .catch(() => {});
     }
@@ -5707,6 +5717,7 @@ async function eliminarPreceptora(id, apellido) {
         }
         mostrarMensaje('config-mensaje', `✅ Año lectivo actualizado a ${anio}`, 'exito');
         document.getElementById('badge-anio-lectivo').textContent = 'Año lectivo ' + anio;
+        actualizarPanelAnio(anio);
     }
 
     // ══ ALUMNOS ══
@@ -6601,6 +6612,7 @@ async function eliminarPreceptora(id, apellido) {
             .then(r => r.json())
             .then(d => {
                 document.getElementById('badge-anio-lectivo').textContent = 'Año lectivo ' + d.anio;
+                actualizarPanelAnio(d.anio);
             });
     }
 
@@ -9230,15 +9242,14 @@ async function eliminarPreceptora(id, apellido) {
 
         // Calcular días restantes del ciclo lectivo
         const hoy = new Date();
-        const anioFin = hoy.getMonth() >= 3 ? hoy.getFullYear() + 1 : hoy.getFullYear();
-        const finCiclo = new Date(anioFin, 2, 31); // 31 de marzo
+        const finCiclo = new Date(CICLO_FIN + 'T23:59:59'); // fin del año lectivo configurado (lo calcula el servidor)
         const diasRestantes = Math.ceil((finCiclo - hoy) / (1000 * 60 * 60 * 24));
         const elDias = document.getElementById('panel-lf-dias');
         if (elDias) {
             const verboDias = diasRestantes === 1 ? 'Queda' : 'Quedan';
             const labelDias = diasRestantes === 1 ? '1 día' : `${diasRestantes} días`;
             if (diasRestantes > 30) {
-                elDias.textContent = `⏳ ${verboDias} ${labelDias} para el fin del ciclo lectivo`;
+                elDias.textContent = `⏳ ${verboDias} ${labelDias} para el fin del año lectivo`;
                 elDias.style.background = '#fff3cd';
                 elDias.style.color = '#856404';
             } else if (diasRestantes > 0) {
@@ -9246,7 +9257,7 @@ async function eliminarPreceptora(id, apellido) {
                 elDias.style.background = '#f8d7da';
                 elDias.style.color = '#842029';
             } else {
-                elDias.textContent = '🔴 El ciclo lectivo ya venció — sistema bloqueado al reingresar';
+                elDias.textContent = '🔴 El año lectivo ya finalizó — sistema bloqueado al reingresar';
                 elDias.style.background = '#f8d7da';
                 elDias.style.color = '#842029';
             }
