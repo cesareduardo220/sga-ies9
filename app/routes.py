@@ -608,6 +608,70 @@ def index():
 # LOGIN
 # ================================================================
 
+def _carreras_activas(uid):
+    """Carreras donde la persona tiene vinculo activo."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT c.id, c.nombre
+        FROM usuario_carrera uc JOIN carreras c ON c.id = uc.carrera_id
+        WHERE uc.usuario_id = %s AND uc.activo = TRUE
+        ORDER BY c.nombre
+    """, (uid,))
+    filas = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [{'id': f[0], 'nombre': f[1]} for f in filas]
+
+
+def _completar_login(user, carrera_id):
+    """Arma la sesion, genera el token y redirige segun el estado de la cuenta."""
+    session.clear()
+    session['user_id']    = user[0]
+    session['nombre']     = user[1]
+    session['apellido']   = user[2]
+    session['rol']        = user[3]
+    session['carrera_id'] = carrera_id
+    _tok = secrets.token_hex(32)
+    session['sesion_token'] = _tok
+    _c = get_db()
+    _cu = _c.cursor()
+    _cu.execute("UPDATE usuarios SET sesion_token = %s WHERE id = %s", (_tok, user[0]))
+    _c.commit()
+    _cu.close()
+    _c.close()
+    if user[3] == 'sys':
+        return redirect(url_for('auth.dashboard'))
+    if user[3] == 'admin' and not user[7]:
+        return redirect(url_for('auth.configurar_admin'))
+    if user[5]:
+        return redirect(url_for('auth.cambiar_password'))
+    return redirect(url_for('auth.dashboard'))
+
+
+@auth.route('/login/carrera', methods=['POST'])
+def login_carrera():
+    """Segundo paso del login para quien trabaja en varias carreras."""
+    uid = session.get('pendiente_user_id')
+    carrera_id = request.form.get('carrera_id', type=int)
+    if not uid or not carrera_id or carrera_id not in [c['id'] for c in _carreras_activas(uid)]:
+        session.clear()
+        return redirect(url_for('auth.login'))
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, nombre, apellido, rol, carrera_id, debe_cambiar_password, password_hash, dni
+        FROM usuarios WHERE id = %s AND activo = TRUE
+    """, (uid,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not user:
+        session.clear()
+        return redirect(url_for('auth.login'))
+    return _completar_login(user, carrera_id)
+
+
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
     if 'rol' in session and not _token_vigente():
@@ -649,27 +713,17 @@ def login():
         conn.close()
 
         if user and check_password_hash(user[6], password):
-            session['user_id']    = user[0]
-            session['nombre']     = user[1]
-            session['apellido']   = user[2]
-            session['rol']        = user[3]
-            session['carrera_id'] = user[4]
-            _tok = secrets.token_hex(32)
-            session['sesion_token'] = _tok
-            _c = get_db()
-            _cu = _c.cursor()
-            _cu.execute("UPDATE usuarios SET sesion_token = %s WHERE id = %s", (_tok, user[0]))
-            _c.commit()
-            _cu.close()
-            _c.close()
-            if user[3] == 'sys':
-                return redirect(url_for('auth.dashboard'))
-            if user[3] == 'admin' and not user[7]:
-                # Cuenta admin sin DNI todavía → asistente de configuración inicial
-                return redirect(url_for('auth.configurar_admin'))
-            if user[5]:
-                return redirect(url_for('auth.cambiar_password'))
-            return redirect(url_for('auth.dashboard'))
+            if user[3] == 'preceptora':
+                carreras = _carreras_activas(user[0])
+                if not carreras:
+                    error = 'No tenés carreras habilitadas. Contactá al coordinador.'
+                    return render_template('login.html', error=error, admin_sin_dni=admin_sin_dni)
+                if len(carreras) > 1:
+                    session.clear()
+                    session['pendiente_user_id'] = user[0]
+                    return render_template('login.html', carreras=carreras, admin_sin_dni=admin_sin_dni)
+                return _completar_login(user, carreras[0]['id'])
+            return _completar_login(user, user[4])
         else:
             error = 'Usuario o contraseña incorrectos'
 

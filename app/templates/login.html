@@ -156,13 +156,22 @@
     <div class="login-form-wrap">
       <div class="eyebrow">Acceso al sistema</div>
       <h2>Iniciar sesión</h2>
-      <div class="sub">Ingresá con tu DNI y contraseña para continuar.</div>
+      <div class="sub">{% if carreras %}Trabajás en más de una carrera. Elegí en cuál vas a ingresar.{% else %}Ingresá con tu DNI y contraseña para continuar.{% endif %}</div>
       {% if request.args.get('desplazado') %}<div class="error-msg">Tu sesión se cerró porque se inició sesión con este usuario en otro dispositivo.</div>{% endif %}
 
       {% if error %}
       <div class="error-msg">⚠️ {{ error }}</div>
       {% endif %}
 
+      {% if carreras %}
+      <form method="POST" action="/login/carrera">
+        {% for c in carreras %}
+        <button type="submit" name="carrera_id" value="{{ c.id }}" style="display:block;width:100%;text-align:left;padding:14px 16px;margin-bottom:10px;background:#fff;border:1px solid var(--borde);border-radius:10px;font-size:0.95rem;font-weight:600;color:var(--texto-oscuro);">{{ c.nombre }}</button>
+        {% endfor %}
+        <p style="font-size:0.82rem;color:var(--texto-gris);line-height:1.5;margin:18px 0 14px;">Si tenés otra pestaña o dispositivo abierto con este usuario, se va a cerrar. Guardá lo que estés editando antes de continuar.</p>
+        <a href="/login" style="font-size:0.85rem;color:var(--verde-medio);font-weight:600;text-decoration:none;">&larr; Volver</a>
+      </form>
+      {% else %}
       <form method="POST" action="/login">
         <div class="campo">
           <label for="li-user">DNI</label>
@@ -183,6 +192,7 @@
 
         <button type="submit" class="btn-primario">Ingresar al sistema</button>
       </form>
+      {% endif %}
 
       <div class="form-footer">¿Olvidaste tu contraseña? Contactá al coordinador<br>o administrador del sistema.</div>
     </div>
