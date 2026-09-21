@@ -1146,6 +1146,40 @@ def api_coord_eliminar(uid):
 # API — CONFIGURACIÓN (solo admin)
 # ================================================================
 
+def _pendientes_anio(cur, anio, carrera_id=None):
+    """
+    Pendientes del año lectivo `anio`, por carrera y materia:
+      - sin_nota: inscriptos a los que nunca se les cargó nota
+      - abiertas: cursadas sin cerrar
+      - sin_libro_folio: promocionados firmes sin libro o folio
+        (mismo criterio que get_pendientes_libro_folio)
+    Si carrera_id es None, revisa todas las carreras. No cierra el cursor.
+    """
+    filtro = ''
+    params = [anio]
+    if carrera_id is not None:
+        filtro = 'AND m.carrera_id = %s'
+        params.append(carrera_id)
+    cur.execute(f"""
+        SELECT c.nombre, m.nombre, m.anio,
+               COUNT(*) FILTER (WHERE cu.id IS NULL),
+               COUNT(*) FILTER (WHERE cu.id IS NOT NULL AND NOT cu.cerrada),
+               COUNT(*) FILTER (WHERE cu.condicion = 'promocionado'
+                                  AND NOT cu.promocion_provisoria
+                                  AND (cu.libro IS NULL OR cu.folio IS NULL))
+        FROM inscripciones i
+        JOIN materias m  ON m.id = i.materia_id
+        JOIN carreras c  ON c.id = m.carrera_id
+        LEFT JOIN cursadas cu ON cu.inscripcion_id = i.id
+        WHERE i.anio_lectivo = %s {filtro}
+        GROUP BY c.nombre, m.id, m.nombre, m.anio, m.orden
+        ORDER BY c.nombre, m.anio, m.orden
+    """, params)
+    return [{
+        'carrera': r[0], 'materia': r[1], 'anio_materia': r[2],
+        'sin_nota': r[3], 'abiertas': r[4], 'sin_libro_folio': r[5],
+    } for r in cur.fetchall() if r[3] or r[4] or r[5]]
+
 @auth.route('/api/config/anio-lectivo', methods=['GET'])
 @login_requerido(['admin'])
 def api_config_get():
@@ -1168,6 +1202,26 @@ def api_config_set():
 
     conn = get_db()
     cur = conn.cursor()
+    # ── Bloqueo del avance de año ──
+    # No se pasa a un año nuevo mientras el actual tenga pendientes en
+    # cualquier carrera. Retroceder queda libre para corregir un error.
+    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
+    _fila = cur.fetchone()
+    anio_actual = int(_fila[0]) if _fila else None
+    if anio_actual is not None and int(anio) > anio_actual + 1:
+        cur.close(); conn.close()
+        return jsonify({'error': (f'El año lectivo avanza de a uno: después de '
+                                  f'{anio_actual} sigue {anio_actual + 1}.')}), 400
+    if anio_actual is not None and int(anio) > anio_actual:
+        pendientes = _pendientes_anio(cur, anio_actual)
+        if pendientes:
+            cur.close(); conn.close()
+            return jsonify({
+                'error': (f'No se puede pasar a {anio}: el año lectivo {anio_actual} '
+                          f'tiene materias sin terminar. Primero hay que cargar las '
+                          f'notas, cerrar las cursadas y completar libro y folio.'),
+                'pendientes': pendientes
+            }), 409
     cur.execute("""
         UPDATE configuracion SET valor = %s WHERE clave = 'anio_lectivo_actual'
     """, (anio,))

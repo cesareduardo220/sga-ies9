@@ -5702,6 +5702,46 @@ async function eliminarPreceptora(id, apellido) {
         abrirModal('modal-confirmar-anio-lectivo');
     }
 
+    // Lista de materias pendientes cuando el servidor rechaza el cambio de año
+    function mostrarPendientesAnio(pendientes) {
+        let caja = document.getElementById('config-pendientes');
+        if (!caja) {
+            const ref = document.getElementById('config-mensaje');
+            if (!ref) return;
+            caja = document.createElement('div');
+            caja.id = 'config-pendientes';
+            caja.style.cssText = 'margin-top:8px;font-size:13px;line-height:1.5';
+            ref.insertAdjacentElement('afterend', caja);
+        }
+        caja.replaceChildren();
+        if (!pendientes.length) return;
+        const encabezado = document.createElement('div');
+        encabezado.style.cssText = 'font-weight:600;color:#842029';
+        encabezado.textContent = 'Materias sin terminar:';
+        caja.appendChild(encabezado);
+        let carreraPrevia = null;
+        let lista = null;
+        pendientes.forEach(p => {
+            if (p.carrera !== carreraPrevia) {
+                const titulo = document.createElement('div');
+                titulo.style.cssText = 'font-weight:600;margin-top:6px';
+                titulo.textContent = p.carrera;
+                caja.appendChild(titulo);
+                lista = document.createElement('ul');
+                lista.style.cssText = 'margin:2px 0 0 18px;padding:0';
+                caja.appendChild(lista);
+                carreraPrevia = p.carrera;
+            }
+            const partes = [];
+            if (p.sin_nota)        partes.push(`${p.sin_nota} sin nota`);
+            if (p.abiertas)        partes.push(`${p.abiertas} ${p.abiertas === 1 ? 'cursada abierta' : 'cursadas abiertas'}`);
+            if (p.sin_libro_folio) partes.push(`${p.sin_libro_folio} sin libro y folio`);
+            const li = document.createElement('li');
+            li.textContent = `${p.materia} (${p.anio_materia}° año): ${partes.join(', ')}`;
+            lista.appendChild(li);
+        });
+    }
+
     async function anioLectivoConfirmado() {
         cerrarModal('modal-confirmar-anio-lectivo');
         const anio = document.getElementById('input-anio-lectivo').value.trim();
@@ -5711,6 +5751,7 @@ async function eliminarPreceptora(id, apellido) {
             body: JSON.stringify({ anio })
         });
         const data = await res.json();
+        mostrarPendientesAnio(data.pendientes || []);
         if (data.error) {
             mostrarMensaje('config-mensaje', data.error, 'error');
             return;
