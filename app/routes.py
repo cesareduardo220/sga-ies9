@@ -25,12 +25,50 @@ auth = Blueprint('auth', __name__)
 # TIMEOUT DE INACTIVIDAD — renueva la sesión en cada request
 # ================================================================
 
+LIMITE_INACTIVIDAD = timedelta(minutes=60)
+
+
+def _cerrar_sesion_servidor():
+    """Libera el token de sesión única y limpia la sesión del navegador."""
+    if 'user_id' in session:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("UPDATE usuarios SET sesion_token = NULL WHERE id = %s AND sesion_token = %s",
+                    (session['user_id'], session.get('sesion_token')))
+        conn.commit()
+        cur.close()
+        conn.close()
+    session.clear()
+
+
 @auth.before_request
 def renovar_sesion():
     if 'rol' not in session:
         return
-    session.modified = True
-    session.permanent = True
+
+    # Inactividad: la marca la lleva el servidor, así la sesión vence aunque
+    # la pestaña quede abierta. El chequeo automático cada 60 s y el cierre
+    # por inactividad no cuentan como actividad del usuario.
+    automatica = request.path in ('/sesion-viva', '/sesion-expirar')
+    ultima = session.get('ultima_actividad')
+    if ultima:
+        try:
+            ultima = datetime.fromisoformat(ultima)
+        except ValueError:
+            ultima = None
+    if ultima and datetime.now() - ultima > LIMITE_INACTIVIDAD:
+        _cerrar_sesion_servidor()
+        if automatica:
+            return jsonify({'ok': False, 'expirada': True})
+        if request.headers.get('X-Requested-With') == 'fetch' or 'application/json' in (request.headers.get('Accept') or ''):
+            return jsonify({'error': 'sesion_expirada'}), 401
+        return redirect(url_for('auth.login', expirada=1))
+
+    if not automatica:
+        session['ultima_actividad'] = datetime.now().isoformat(timespec='seconds')
+        session.modified = True
+        session.permanent = True
+
     # Resolución automática de promociones provisorias vencidas.
     # Se dispara con la actividad de cualquier usuario logueado.
     _chequear_promociones_vencidas()
@@ -981,19 +1019,28 @@ def dashboard():
 @auth.route('/sesion-viva')
 def sesion_viva():
     """Consultada por el front cada 60s. No renueva nada, solo informa."""
-    return jsonify({'ok': _token_vigente()})
+    return jsonify({
+        'ok':      _token_vigente(),
+        'user_id': session.get('user_id'),
+        'rol':     session.get('rol'),
+    })
+
+
+@auth.route('/sesion-expirar', methods=['POST'])
+def sesion_expirar():
+    """
+    Cierre por inactividad pedido por el propio navegador, antes de mostrar
+    el aviso. El servidor también lo hace solo (ver renovar_sesion); esto
+    evita esperar al próximo pedido para liberar el token.
+    """
+    _cerrar_sesion_servidor()
+    return jsonify({'ok': True})
+
 
 
 @auth.route('/logout')
 def logout():
-    if 'user_id' in session:
-        _c = get_db()
-        _cu = _c.cursor()
-        _cu.execute("UPDATE usuarios SET sesion_token = NULL WHERE id = %s AND sesion_token = %s", (session['user_id'], session.get('sesion_token')))
-        _c.commit()
-        _cu.close()
-        _c.close()
-    session.clear()
+    _cerrar_sesion_servidor()
     return redirect(url_for('auth.login'))
 
 

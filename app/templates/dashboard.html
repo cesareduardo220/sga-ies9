@@ -3732,6 +3732,20 @@
 (function () {
   var yaAviso = false;
 
+  function avisarExpirada() {
+    if (yaAviso) return;
+    yaAviso = true;
+    var capa = document.createElement('div');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px;';
+    capa.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:420px;padding:28px 26px;text-align:center;font-family:inherit;box-shadow:0 12px 40px rgba(0,0,0,.35)">'
+      + '<div style="font-size:15px;font-weight:700;color:#14532d;margin-bottom:10px">Tu sesión expiró</div>'
+      + '<div style="font-size:14px;color:#374151;line-height:1.5">Por seguridad, la sesión se cierra después de 60 minutos sin actividad. Iniciá sesión de nuevo para continuar.</div>'
+      + '<div style="font-size:13px;color:#6b7280;margin-top:14px">Redirigiendo al ingreso…</div>'
+      + '</div>';
+    document.body.appendChild(capa);
+    setTimeout(function () { window.location.href = '/login?expirada=1'; }, 3000);
+  }
+
   function avisarDesplazado() {
     if (yaAviso) return;
     yaAviso = true;
@@ -3757,10 +3771,32 @@
     });
   };
 
+  function avisarOtroUsuario() {
+    if (document.getElementById('sga-modal-otro-usuario')) return;
+    const div = document.createElement('div');
+    div.id = 'sga-modal-otro-usuario';
+    div.className = 'sga-modal-overlay';
+    div.innerHTML = '<div class="sga-modal-card">' +
+      '<h3>Se cambió el usuario en este navegador</h3>' +
+      '<p>En otra pestaña se inició sesión con otro usuario. Esta pantalla ya no corresponde ' +
+      'a la sesión activa, así que lo que hagas acá se guardaría con el otro usuario.</p>' +
+      '<button onclick="window.location.reload()">Actualizar esta pestaña</button></div>';
+    document.body.appendChild(div);
+  }
+
+  let sgaSesionUsuario = null;
   setInterval(function () {
     fetchOriginal('/sesion-viva', { headers: { 'X-Requested-With': 'fetch' } })
       .then(function (r) { return r.json(); })
-      .then(function (d) { if (!d.ok) { avisarDesplazado(); } })
+      .then(function (d) {
+        if (!d.ok) {
+          if (d.expirada) { avisarExpirada(); } else { avisarDesplazado(); }
+          return;
+        }
+        if (d.rol && typeof ROL !== 'undefined' && d.rol !== ROL) { avisarOtroUsuario(); return; }
+        if (sgaSesionUsuario === null) { sgaSesionUsuario = d.user_id; return; }
+        if (d.user_id !== sgaSesionUsuario) { avisarOtroUsuario(); }
+      })
       .catch(function () {});
   }, 60000);
 })();
@@ -4614,11 +4650,11 @@
 
     // ══════════════════════════════════════════════════════
     // SESIÓN — aviso visual de cierre por inactividad (60 min)
-    // El servidor ya expira la sesión solo (PERMANENT_SESSION_LIFETIME
-    // en __init__.py); esto es solo para avisar antes de que la próxima
-    // acción falle de forma confusa.
+    // Al cumplirse el límite, el navegador le pide al servidor que cierre la
+    // sesión (/sesion-expirar) y recién después muestra el aviso. El servidor
+    // también la vence solo por inactividad (renovar_sesion en routes.py).
     // ══════════════════════════════════════════════════════
-    const SGA_INACTIVIDAD_LIMITE_MS = 60 * 60 * 1000; // 60 minutos
+    const SGA_INACTIVIDAD_LIMITE_MS = 55 * 60 * 1000; // 55 min: un poco antes que el corte del servidor (60)
     let sgaUltimaActividad = Date.now();
 
     ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evento => {
@@ -4627,9 +4663,17 @@
 
     setInterval(() => {
         if (Date.now() - sgaUltimaActividad >= SGA_INACTIVIDAD_LIMITE_MS) {
-            mostrarAvisoSesionExpirada();
+            cerrarSesionPorInactividad();
         }
     }, 30 * 1000); // chequea cada 30s
+
+    let sgaSesionExpirando = false;
+    async function cerrarSesionPorInactividad() {
+        if (sgaSesionExpirando) return;
+        sgaSesionExpirando = true;
+        try { await fetch('/sesion-expirar', { method: 'POST' }); } catch (e) { /* igual se avisa */ }
+        mostrarAvisoSesionExpirada();
+    }
 
     function mostrarAvisoSesionExpirada(){
         if (document.getElementById('sga-modal-sesion-expirada')) return; // ya se está mostrando

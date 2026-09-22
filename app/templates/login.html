@@ -158,6 +158,7 @@
       <h2>Iniciar sesión</h2>
       <div class="sub">{% if carreras %}Trabajás en más de una carrera. Elegí en cuál vas a ingresar.{% else %}Ingresá con tu DNI y contraseña para continuar.{% endif %}</div>
       {% if request.args.get('desplazado') %}<div class="error-msg">Tu sesión se cerró porque se inició sesión con este usuario en otro dispositivo.</div>{% endif %}
+      {% if request.args.get('expirada') %}<div class="error-msg">Tu sesión se cerró por inactividad. Iniciá sesión de nuevo para continuar.</div>{% endif %}
 
       {% if error %}
       <div class="error-msg">⚠️ {{ error }}</div>
