@@ -1173,8 +1173,8 @@
 <div id="pantalla-bloqueo" class="sga-bloqueo-overlay">
     <div class="sga-bloqueo-card">
         <div class="sga-bloqueo-header">
-            <div class="titulo">🔴 Sistema bloqueado</div>
-            <div class="sub">El año lectivo finalizó y hay alumnos promocionados sin libro/folio registrado. Completá estos datos para continuar.</div>
+            <div class="titulo">📖 Falta completar libro y folio</div>
+            <div class="sub">El año lectivo terminó y hay alumnos promocionados sin libro y folio. Completalos acá y guardá para seguir usando el sistema.</div>
         </div>
         <div class="sga-bloqueo-body">
             <div class="sga-bloqueo-cont">
@@ -1294,6 +1294,7 @@
 
 <!-- ══ MAIN ══ -->
 <div class="main">
+    {% include '_aviso_anio.html' %}
     <div class="contenido">
 
         <!-- DASHBOARD COORDINADOR / PRECEPTORA / ADMIN — Home limpio, solo el cerebro -->
@@ -2300,7 +2301,7 @@
 
                 <!-- Totales — solo cursada cerrada -->
                 <div id="notas-totales-wrap" style="display:none">
-                    <div style="font-size:0.78rem; color:var(--sga-texto-gris); margin-bottom:10px; font-weight:600;" id="notas-totales-label">RESUMEN DEL CICLO LECTIVO</div>
+                    <div style="font-size:0.78rem; color:var(--sga-texto-gris); margin-bottom:10px; font-weight:600;" id="notas-totales-label">RESUMEN DEL AÑO LECTIVO</div>
                     <div class="fila-totales" id="notas-totales"></div>
                 </div>
 
@@ -4196,6 +4197,37 @@
         callback();
     }
 
+    // ── Barra de aviso de fin de año: se vuelve a pedir al servidor después de
+    //    guardar notas, cerrar una cursada o cargar libro y folio. ──
+    async function actualizarAvisoAnio() {
+        try {
+            const html = (await (await fetch('/api/aviso-anio')).text()).trim();
+            const actual = document.getElementById('aviso-anio');
+            if (actual) actual.remove();
+            if (html) {
+                const contenido = document.querySelector('.main > .contenido');
+                if (contenido) contenido.insertAdjacentHTML('beforebegin', html);
+            }
+        } catch (e) {
+            console.error('No se pudo actualizar el aviso del año lectivo:', e);
+        }
+    }
+    (function () {
+        const fetchOriginal = window.fetch;
+        const RUTAS_AVISO = ['/api/notas/guardar/', '/api/notas/cerrar/', '/api/pendientes-libro-folio'];
+        window.fetch = async function (recurso, opciones) {
+            const res = await fetchOriginal.apply(this, arguments);
+            try {
+                const url = typeof recurso === 'string' ? recurso : recurso.url;
+                const metodo = ((opciones && opciones.method) || 'GET').toUpperCase();
+                if (metodo === 'POST' && res.ok && RUTAS_AVISO.some(r => url.startsWith(r))) {
+                    actualizarAvisoAnio();
+                }
+            } catch (e) { /* el aviso nunca interfiere con la respuesta */ }
+            return res;
+        };
+    })();
+
     function navegarA(id, label) {
         // ── Guardia inscripciones: ¿hay autorización pendiente? ──
         if (typeof inscHayAutorizacionPendiente === 'function' && inscHayAutorizacionPendiente() && id !== 'inscripciones') {
@@ -5775,6 +5807,8 @@ async function eliminarPreceptora(id, apellido) {
         mostrarPendientesAnio(data.pendientes || []);
         if (data.error) {
             mostrarMensaje('config-mensaje', data.error, 'error');
+            const anioReal = (document.getElementById('badge-anio-lectivo').textContent.match(/\d{4}/) || [])[0];
+            if (anioReal) document.getElementById('input-anio-lectivo').value = anioReal;
             return;
         }
         mostrarMensaje('config-mensaje', `✅ Año lectivo actualizado a ${anio}`, 'exito');
@@ -9108,7 +9142,7 @@ async function eliminarPreceptora(id, apellido) {
         if (notasCerrada) {
             notasRenderTotales(data.totales);
             document.getElementById('notas-totales-label').textContent =
-                `RESUMEN DEL CICLO LECTIVO ${notasAnioLectivo}`;
+                `RESUMEN DEL AÑO LECTIVO ${notasAnioLectivo}`;
             wrapTotales.style.display = 'block';
         } else {
             wrapTotales.style.display = 'none';
@@ -9302,7 +9336,7 @@ async function eliminarPreceptora(id, apellido) {
 
         document.getElementById('panel-lf-count').textContent = pendientes.length;
 
-        // Calcular días restantes del ciclo lectivo
+        // Calcular días restantes del año lectivo
         const hoy = new Date();
         const finCiclo = new Date(CICLO_FIN + 'T23:59:59'); // fin del año lectivo configurado (lo calcula el servidor)
         const diasRestantes = Math.ceil((finCiclo - hoy) / (1000 * 60 * 60 * 24));
@@ -9319,7 +9353,7 @@ async function eliminarPreceptora(id, apellido) {
                 elDias.style.background = '#f8d7da';
                 elDias.style.color = '#842029';
             } else {
-                elDias.textContent = '🔴 El año lectivo ya finalizó — sistema bloqueado al reingresar';
+                elDias.textContent = '🔴 El año lectivo ya terminó: completá libro y folio para poder pasar al año siguiente';
                 elDias.style.background = '#f8d7da';
                 elDias.style.color = '#842029';
             }

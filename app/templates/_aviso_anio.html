@@ -1,0 +1,26 @@
+{% if aviso_anio %}
+<div id="aviso-anio" style="padding:10px 18px; background:#FDECEC; border-bottom:1.5px solid #E5A5A5; color:#842029; font-size:0.86rem; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+  <div style="flex:1; min-width:240px;">
+    {% if rol == 'admin' %}
+      {% set nc = aviso_anio.carreras|length %}
+      <strong>El año lectivo {{ aviso_anio.anio }} terminó.</strong>
+      Falta{{ 'n' if nc != 1 else '' }} terminar materias en {{ nc }} carrera{{ 's' if nc != 1 else '' }}: {{ aviso_anio.carreras|join(', ') }}.
+      Hasta que estén completas no se puede pasar al año siguiente.
+    {% else %}
+      {% set nm = aviso_anio.materias|length %}
+      <strong>Año lectivo {{ aviso_anio.anio }}:</strong>
+      falta{{ 'n' if nm != 1 else '' }} terminar {{ nm }} materia{{ 's' if nm != 1 else '' }}
+      ({{ aviso_anio.materias[:3]|join(', ') }}{{ ', …' if nm > 3 else '' }}).
+      {% if aviso_anio.dias > 1 %}Quedan {{ aviso_anio.dias }} días para el fin del año lectivo.
+      {% elif aviso_anio.dias == 1 %}Queda 1 día para el fin del año lectivo.
+      {% elif aviso_anio.dias == 0 %}Hoy termina el año lectivo.
+      {% else %}El año lectivo ya terminó: hasta completarlas no se puede inscribir al año siguiente.{% endif %}
+    {% endif %}
+  </div>
+  {% if rol == 'admin' %}
+  <button class="btn-secundario" onclick="irAConfig()">Ir a Configuración</button>
+  {% else %}
+  <button class="btn-secundario" onclick="navegarA('notas', 'Notas')">Ir a Notas</button>
+  {% endif %}
+</div>
+{% endif %}

@@ -882,6 +882,41 @@ def configurar_admin():
 # DASHBOARD
 # ================================================================
 
+def _calcular_aviso_anio(rol, carrera_id, ciclo=None):
+    """
+    Aviso de fin de año lectivo (pendientes del año configurado):
+      coordinación y preceptoría: desde 30 días antes del fin, su carrera;
+      admin: una vez terminado el año, todas las carreras.
+    Devuelve None si no hay nada que avisar.
+    """
+    ciclo = ciclo or get_ciclo_lectivo()
+    dias_fin = (ciclo['fin'] - date.today()).days
+    if not ((rol in ('coordinador', 'preceptora') and carrera_id and dias_fin <= 30) or
+            (rol == 'admin' and dias_fin < 0)):
+        return None
+    conn_a = get_db(); cur_a = conn_a.cursor()
+    pend_a = _pendientes_anio(cur_a, ciclo['anio_inicio'],
+                              None if rol == 'admin' else carrera_id)
+    cur_a.close(); conn_a.close()
+    if not pend_a:
+        return None
+    return {
+        'anio':     ciclo['anio_inicio'],
+        'dias':     dias_fin,
+        'materias': [p['materia'] for p in pend_a],
+        'carreras': sorted({p['carrera'] for p in pend_a}),
+    }
+
+
+@auth.route('/api/aviso-anio', methods=['GET'])
+@login_requerido(['admin', 'coordinador', 'preceptora'])
+def api_aviso_anio():
+    """Barra de aviso ya armada (vacía si no hay pendientes), para refrescarla sin recargar."""
+    rol = session.get('rol')
+    return render_template('_aviso_anio.html', rol=rol,
+                           aviso_anio=_calcular_aviso_anio(rol, session.get('carrera_id')))
+
+
 @auth.route('/dashboard')
 def dashboard():
     if 'rol' not in session:
@@ -920,6 +955,8 @@ def dashboard():
         if any(hoy > date(p['anio_lectivo'] + 1, 3, 31) for p in pendientes):
             bloqueado = True
 
+    aviso_anio = _calcular_aviso_anio(rol, carrera_id, ciclo)
+
     return render_template(
         'dashboard.html',
         nombre=session['nombre'],
@@ -933,6 +970,7 @@ def dashboard():
         ciclo_fin=ciclo['fin'].isoformat(),
         pendientes_libro_folio=pendientes,
         bloqueado=bloqueado,
+        aviso_anio=aviso_anio,
     )
 
 
