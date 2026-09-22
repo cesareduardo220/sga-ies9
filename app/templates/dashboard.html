@@ -8042,12 +8042,11 @@ async function eliminarPreceptora(id, apellido) {
         const rango = (v.fecha_inicio || v.fecha_fin)
             ? ` ${v.fecha_inicio ? 'desde el ' + tokFecha(v.fecha_inicio) : ''}${v.fecha_inicio && v.fecha_fin ? ' ' : ''}${v.fecha_fin ? 'hasta el ' + tokFecha(v.fecha_fin) : ''}`
             : '';
-        const vigencia = `Los tokens nuevos valen ${v.vigencia_dias} días.`;
+        const vigencia = 'Los tokens valen mientras dure el período de inscripción de la carrera (se configura en Configuración → Período de inscripciones).';
         const texto = v.abierta
             ? `🟢 <strong>Formulario de los alumnos: abierto</strong>${rango}. ${vigencia}`
-            : `⚪ <strong>Formulario de los alumnos: cerrado.</strong> Pueden recibir su token, pero no van a poder usarlo
-               hasta que ${v.puede_editar ? (window.matchMedia('(max-width: 768px)').matches ? 'abras el formulario desde Configurar, en la computadora' : 'abras el formulario desde Configurar') : 'el coordinador abra el formulario'}.
-               ${rango ? '(Programado' + rango + '.) ' : ''}${vigencia}`;
+            : `⚪ <strong>Formulario de los alumnos: cerrado.</strong> ${v.motivo}. Mientras esté cerrado no se pueden entregar tokens.
+               ${rango ? '(Período' + rango + '.) ' : ''}${vigencia}`;
         caja.style.cssText = (v.abierta
             ? 'background:#E6F9EE; border:1.5px solid #B7E4C7; color:#1a6e3c;'
             : 'background:#F7F5F0; border:1.5px solid var(--sga-borde); color:var(--sga-texto-gris);') +

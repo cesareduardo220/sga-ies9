@@ -1301,6 +1301,7 @@ def api_config_set():
         UPDATE configuracion SET valor = %s WHERE clave = 'anio_lectivo_actual'
     """, (anio,))
     conn.commit()
+    _sincronizar_vencimientos_tokens()
     cur.close()
     conn.close()
     return jsonify({'ok': True})
@@ -3707,6 +3708,7 @@ def api_inscripciones_ventana_set():
         # Nota: alumno_id NULL para este tipo de acción (es global, no para un alumno)
 
         conn.commit()
+        _sincronizar_vencimientos_tokens(None if session.get('rol') == 'admin' else carrera_id)
     except Exception as e:
         conn.rollback()
         cur.close(); conn.close()
@@ -7110,13 +7112,42 @@ def _carrera_tokens(pedida=None):
     return session.get('carrera_id')
 
 
-def _vencimiento_token(cur):
-    dias = _get_config(cur, 'autoinscripcion_vigencia_dias', '15')
+def _vencimiento_token(cur, carrera_id):
+    """
+    Los tokens valen mientras dure el período de inscripción de su carrera
+    (cierre general o prórroga). Ver también _sincronizar_vencimientos_tokens.
+    """
+    return date.fromisoformat(get_estado_inscripciones(carrera_id)['fecha_fin'])
+
+
+def _sincronizar_vencimientos_tokens(carrera_id=None):
+    """
+    Pone en vence_el de los tokens disponibles el cierre actual del período de
+    inscripción de su carrera. Se llama cada vez que cambian las fechas o el
+    año lectivo, así la lista, los controles y los correos reflejan siempre lo
+    que dice Inscripciones. Sin carrera, recorre todas.
+    """
+    conn = get_db()
+    cur = conn.cursor()
     try:
-        dias = int(dias)
-    except (TypeError, ValueError):
-        dias = 15
-    return date.today() + timedelta(days=dias)
+        if carrera_id is None:
+            cur.execute("SELECT id FROM carreras")
+            ids = [r[0] for r in cur.fetchall()]
+        else:
+            ids = [carrera_id]
+        for cid in ids:
+            v = get_estado_inscripciones(cid)
+            cur.execute("""
+                UPDATE tokens_inscripcion SET vence_el = %s
+                WHERE carrera_id = %s AND ciclo_lectivo = %s AND estado = 'disponible'
+            """, (v['fecha_fin'], cid, v['anio_inscripcion']))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f'No se pudieron sincronizar los vencimientos de tokens: {e}')
+    finally:
+        cur.close()
+        conn.close()
  
  
 @auth.route('/api/tokens', methods=['GET'])
@@ -7230,11 +7261,13 @@ def _generar_tokens_sin_alumno(tipo):
     if not email:
         return jsonify({'error': 'Indicá el correo del alumno para enviarle el token.'}), 400
 
-    # Año de inscripción de la carrera. Si tiene que terminar el año
-    # anterior antes de inscribir al siguiente, no se generan tokens.
+    # Los tokens se entregan solo con el período de inscripción de la carrera
+    # abierto: no antes, no después, no con cierre manual ni con pendientes
+    # del año anterior. Entregar un token y poder usarlo van siempre juntos.
     _ventana = get_estado_inscripciones(carrera_id)
-    if _ventana['pendientes_cierre']:
-        return jsonify({'error': _ventana['motivo']}), 409
+    if not _ventana['abierto']:
+        return jsonify({'error': ('No se pueden entregar tokens mientras la inscripción '
+                                  f"esté cerrada. {_ventana['motivo']}.")}), 409
     ciclo = _ventana['anio_inscripcion']
 
     conn = get_db()
@@ -7258,7 +7291,7 @@ def _generar_tokens_sin_alumno(tipo):
                          'Si no le llegó, reenvialo desde "Ver tokens entregados".'
             }), 409
 
-        vence = _vencimiento_token(cur)
+        vence = _vencimiento_token(cur, carrera_id)
         token = _generar_tokens(cur, 1)[0]
         cur.execute("""
             INSERT INTO tokens_inscripcion
@@ -7400,11 +7433,13 @@ def api_tokens_reinscripcion():
     if not carrera_id:
         return jsonify({'error': 'La carrera es obligatoria'}), 400
  
-    # Año de inscripción de la carrera. Si tiene que terminar el año
-    # anterior antes de inscribir al siguiente, no se generan tokens.
+    # Los tokens se entregan solo con el período de inscripción de la carrera
+    # abierto: no antes, no después, no con cierre manual ni con pendientes
+    # del año anterior. Entregar un token y poder usarlo van siempre juntos.
     _ventana = get_estado_inscripciones(carrera_id)
-    if _ventana['pendientes_cierre']:
-        return jsonify({'error': _ventana['motivo']}), 409
+    if not _ventana['abierto']:
+        return jsonify({'error': ('No se pueden entregar tokens mientras la inscripción '
+                                  f"esté cerrada. {_ventana['motivo']}.")}), 409
     ciclo = _ventana['anio_inscripcion']
  
     conn = get_db()
@@ -7447,7 +7482,7 @@ def api_tokens_reinscripcion():
               AND estado = 'disponible' AND vence_el < CURRENT_DATE
         """, (session['user_id'], [a['id'] for a in alumnos], ciclo))
 
-        vence = _vencimiento_token(cur)
+        vence = _vencimiento_token(cur, carrera_id)
         tokens = _generar_tokens(cur, len(alumnos))
         generados = []
  
@@ -7559,78 +7594,27 @@ def api_tokens_reenviar(tid):
 @auth.route('/api/autoinscripcion/ventana', methods=['GET'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_autoinscripcion_ventana_get():
-    """Estado de la inscripción en línea y su configuración."""
+    """
+    Estado del formulario de los alumnos. Ya no tiene configuración propia:
+    sigue al período de inscripción de la carrera (Configuración).
+    """
+    v = get_estado_inscripciones(session.get('carrera_id'))
     conn = get_db()
     cur = conn.cursor()
     try:
-        abierta, motivo = _autoinscripcion_abierta(cur)
-        habilitada = (_get_config(cur, 'autoinscripcion_habilitada', 'false') or '').lower()
-        return jsonify({
-            'abierta':       abierta,
-            'motivo':        motivo,
-            'habilitada':    habilitada in ('true', '1', 'si', 'sí'),
-            'fecha_inicio':  _get_config(cur, 'autoinscripcion_fecha_inicio', ''),
-            'fecha_fin':     _get_config(cur, 'autoinscripcion_fecha_fin', ''),
-            'vigencia_dias': int(_get_config(cur, 'autoinscripcion_vigencia_dias', '15') or 15),
-            'puede_editar':  session.get('rol') == 'coordinador',
-            'instituto':     _get_config(cur, 'nombre_instituto', ''),
-        })
+        instituto = _get_config(cur, 'nombre_instituto', '')
     finally:
         cur.close()
         conn.close()
-
-
-@auth.route('/api/autoinscripcion/ventana', methods=['POST'])
-@login_requerido(['coordinador'])
-def api_autoinscripcion_ventana_set():
-    """
-    Abre o cierra la inscripción en línea y ajusta sus fechas y la vigencia
-    de los tokens nuevos. Las fechas son opcionales: vacías = sin límite.
-    """
-    data = request.get_json(silent=True) or {}
-    habilitada = bool(data.get('habilitada'))
-    inicio = (data.get('fecha_inicio') or '').strip()
-    fin    = (data.get('fecha_fin') or '').strip()
-
-    try:
-        f_inicio = datetime.strptime(inicio, '%Y-%m-%d').date() if inicio else None
-        f_fin    = datetime.strptime(fin, '%Y-%m-%d').date() if fin else None
-    except ValueError:
-        return jsonify({'error': 'Las fechas no tienen un formato válido.'}), 400
-    if f_inicio and f_fin and f_inicio > f_fin:
-        return jsonify({'error': 'La fecha de inicio no puede ser posterior a la de cierre.'}), 400
-
-    vigencia = data.get('vigencia_dias')
-    try:
-        vigencia = 15 if vigencia in (None, '') else int(vigencia)
-    except (TypeError, ValueError):
-        return jsonify({'error': 'La vigencia tiene que ser un número de días.'}), 400
-    if vigencia < 1 or vigencia > 90:
-        return jsonify({'error': 'La vigencia de los tokens tiene que estar entre 1 y 90 días.'}), 400
-
-    valores = {
-        'autoinscripcion_habilitada':    'true' if habilitada else 'false',
-        'autoinscripcion_fecha_inicio':  inicio,
-        'autoinscripcion_fecha_fin':     fin,
-        'autoinscripcion_vigencia_dias': str(vigencia),
-    }
-    conn = get_db()
-    cur = conn.cursor()
-    try:
-        for clave, valor in valores.items():
-            cur.execute("""
-                INSERT INTO configuracion (clave, valor) VALUES (%s, %s)
-                ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
-            """, (clave, valor))
-        conn.commit()
-        abierta, motivo = _autoinscripcion_abierta(cur)
-        return jsonify({'ok': True, 'abierta': abierta, 'motivo': motivo})
-    except Exception:
-        conn.rollback()
-        return jsonify({'error': 'No se pudo guardar la configuración.'}), 500
-    finally:
-        cur.close()
-        conn.close()
+    return jsonify({
+        'abierta':          v['abierto'],
+        'motivo':           v['motivo'],
+        'fecha_inicio':     v['fecha_inicio'],
+        'fecha_fin':        v['fecha_fin'],
+        'anio_inscripcion': v['anio_inscripcion'],
+        'puede_editar':     False,
+        'instituto':        instituto,
+    })
 
 
 @auth.route('/api/tokens/<int:tid>/anular', methods=['POST'])
@@ -7667,28 +7651,35 @@ def api_tokens_anular(tid):
 # ============================================================
  
  
-def _autoinscripcion_abierta(cur):
+def _autoinscripcion_abierta(cur, carrera_id=None, ciclo=None):
     """
-    Devuelve (True, None) si el formulario público está operativo,
-    o (False, motivo) si no.
+    El formulario público sigue a la ventana de inscripción (get_estado_inscripciones):
+    fechas generales del admin, prórroga y cierre manual de la carrera, y bloqueo
+    por pendientes del año anterior. Sin carrera (la página, antes de escribir el
+    token) se evalúa la ventana general. Con ciclo, el token tiene que ser del año
+    que se está inscribiendo. Devuelve (True, None) o (False, motivo); los motivos
+    son genéricos porque el formulario es público.
+    Sin carrera, la página se muestra abierta si alguna carrera está inscribiendo
+    (por ejemplo, una con prórroga después del cierre general).
     """
-    habilitada = (_get_config(cur, 'autoinscripcion_habilitada', 'false') or '').lower()
-    if habilitada not in ('true', '1', 'si', 'sí'):
-        return False, 'En este momento no hay inscripciones abiertas.'
- 
+    if carrera_id is None:
+        cur.execute("SELECT id FROM carreras WHERE activa")
+        for (cid,) in cur.fetchall():
+            if get_estado_inscripciones(cid)['abierto']:
+                return True, None
+    v = get_estado_inscripciones(carrera_id)
     hoy = date.today()
-    desde = _get_config(cur, 'autoinscripcion_fecha_inicio')
-    hasta = _get_config(cur, 'autoinscripcion_fecha_fin')
- 
-    try:
-        if desde and hoy < datetime.strptime(desde, '%Y-%m-%d').date():
-            return False, 'El período de inscripción todavía no comenzó.'
-        if hasta and hoy > datetime.strptime(hasta, '%Y-%m-%d').date():
-            return False, 'El período de inscripción ya finalizó.'
-    except ValueError:
-        # Fecha mal cargada en configuración: se cierra por las dudas.
-        return False, 'En este momento no hay inscripciones abiertas.'
- 
+    inicio = date.fromisoformat(v['fecha_inicio'])
+    fin = date.fromisoformat(v['fecha_fin'])
+    if hoy < inicio:
+        return False, f'El período de inscripción comienza el {inicio.strftime("%d/%m/%Y")}.'
+    if hoy > fin:
+        return False, f'El período de inscripción terminó el {fin.strftime("%d/%m/%Y")}.'
+    if not v['abierto']:
+        return False, 'En este momento la inscripción no está disponible. Consultá en preceptoría.'
+    if ciclo is not None and int(ciclo) != v['anio_inscripcion']:
+        return False, ('Este token es de un período de inscripción anterior. '
+                       'Acercate a preceptoría para que te generen uno nuevo.')
     return True, None
  
  
@@ -7772,9 +7763,6 @@ def api_inscripcion_validar():
     conn = get_db()
     cur = conn.cursor()
     try:
-        abierta, motivo = _autoinscripcion_abierta(cur)
-        if not abierta:
-            return jsonify({'error': motivo}), 403
  
         cur.execute("""
             SELECT t.id, t.tipo, t.estado, t.vence_el, t.ciclo_lectivo,
@@ -7793,6 +7781,9 @@ def api_inscripcion_validar():
  
         if t[2] == 'usado':
             return jsonify({'error': 'Este token ya fue utilizado.'}), 409
+        abierta, motivo = _autoinscripcion_abierta(cur, t[5], t[4])
+        if not abierta:
+            return jsonify({'error': motivo}), 403
  
         if t[3] and t[3] < date.today():
             return jsonify({
@@ -7976,9 +7967,6 @@ def api_inscripcion_guardar():
     conn = get_db()
     cur = conn.cursor()
     try:
-        abierta, motivo = _autoinscripcion_abierta(cur)
-        if not abierta:
-            return jsonify({'error': motivo}), 403
  
         # FOR UPDATE bloquea la fila del token hasta el commit: si llegan
         # dos envíos simultáneos con el mismo token, el segundo espera y
@@ -7997,6 +7985,10 @@ def api_inscripcion_guardar():
         if t[2] == 'usado':
             conn.rollback()
             return jsonify({'error': 'Este token ya fue utilizado.'}), 409
+        abierta, motivo = _autoinscripcion_abierta(cur, t[5], t[4])
+        if not abierta:
+            conn.rollback()
+            return jsonify({'error': motivo}), 403
         if t[3] and t[3] < date.today():
             conn.rollback()
             return jsonify({'error': 'Este token venció. Acercate a preceptoría.'}), 410

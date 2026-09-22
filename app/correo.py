@@ -74,7 +74,7 @@ def _armar_mensaje(destino, token, tipo, vence, nombre, url_publica, instituto):
         f"Este es tu código para completar {que} en línea en {instituto}:\n\n"
         f"    {token}\n\n"
         f"Ingresá en: {enlace}\n\n"
-        f"El código vence el {vence_txt} y sirve para una sola inscripción. "
+        f"Podés usarlo mientras esté abierto el período de inscripción de tu carrera (actualmente, hasta el {vence_txt}). Sirve para una sola inscripción. "
         f"Es personal: no lo compartas.\n\n"
         f"Si no pediste este código, podés ignorar este correo.\n"
     )
@@ -92,8 +92,9 @@ def _armar_mensaje(destino, token, tipo, vence, nombre, url_publica, instituto):
     <p style="text-align:center; margin:0 0 22px;">
       <a href="{escape(enlace)}" style="background:#1B5E3F; color:#ffffff; text-decoration:none;
          padding:12px 22px; border-radius:10px; font-weight:bold; display:inline-block;">Ir a la inscripción</a></p>
-    <p style="margin:0 0 8px; font-size:14px;">El código vence el <strong>{escape(vence_txt)}</strong>
-      y sirve para una sola inscripción. Es personal: no lo compartas.</p>
+    <p style="margin:0 0 8px; font-size:14px;">Podés usarlo mientras esté abierto el período de inscripción
+      de tu carrera (actualmente, hasta el <strong>{escape(vence_txt)}</strong>).
+      Sirve para una sola inscripción. Es personal: no lo compartas.</p>
     <p style="margin:0; font-size:12px; color:#6B7280;">Si el botón no funciona, copiá este enlace en el navegador:
       {escape(enlace)}<br>Si no pediste este código, podés ignorar este correo.</p>
   </div>
