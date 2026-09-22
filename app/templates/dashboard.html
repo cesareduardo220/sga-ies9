@@ -4214,7 +4214,7 @@
     }
     (function () {
         const fetchOriginal = window.fetch;
-        const RUTAS_AVISO = ['/api/notas/guardar/', '/api/notas/cerrar/', '/api/pendientes-libro-folio'];
+        const RUTAS_AVISO = ['/api/notas/guardar/', '/api/notas/cerrar/', '/api/pendientes-libro-folio', '/api/config/anio-lectivo'];
         window.fetch = async function (recurso, opciones) {
             const res = await fetchOriginal.apply(this, arguments);
             try {
