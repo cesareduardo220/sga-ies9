@@ -7391,10 +7391,14 @@ async function eliminarPreceptora(id, apellido) {
     async function guardarInscripciones() {
         if (!inscAlumnoActual) return;
 
-        const checks = document.querySelectorAll('#insc-materias-wrap input[type=checkbox]:not(:disabled)');
+        // Solo las casillas de materia (.insc-cb-materia). La de "seleccionar todas
+        // las habilitadas" no tiene data-id, y si entraba acá mandaba un valor nulo
+        // que hacía fallar el guardado entero.
+        const checks = document.querySelectorAll('#insc-materias-wrap input.insc-cb-materia:not(:disabled)');
         const ids = Array.from(checks)
             .filter(c => c.checked)
-            .map(c => parseInt(c.dataset.id));
+            .map(c => parseInt(c.dataset.id, 10))
+            .filter(id => Number.isInteger(id));
 
         // Agregar las que ya estaban inscriptas y están bloqueadas (no se tocan)
         inscMateriasData.forEach(m => {
@@ -7422,6 +7426,18 @@ async function eliminarPreceptora(id, apellido) {
         mostrarMensaje('insc-mensaje', (data.advertencia ? '⚠️ ' : '✅ ') + data.mensaje, data.advertencia ? 'alerta' : 'exito');
         hayCambios = false;
         inscAutorizacionActiva = false;  // la autorización se consumió al guardar
+
+        // Sin advertencias: se vuelve a la lista para seguir con el próximo alumno,
+        // así se ven los contadores actualizados. Con advertencias, se queda en la
+        // ficha para que el aviso se pueda leer.
+        if (!data.advertencia) {
+            setTimeout(() => {
+                if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('✅ ' + data.mensaje);
+                if (typeof navegarA === 'function') { navegarA('inscripciones', 'Inscripciones'); }
+                else { cargarInscripciones(); }
+            }, 1200);
+            return;
+        }
 
         // Guardamos el id antes de recargar (el panel se va a re-renderizar completo)
         const alumnoIdGuardado = inscAlumnoActual.id;

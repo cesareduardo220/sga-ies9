@@ -3552,6 +3552,12 @@ def api_inscripciones_guardar(aid):
     data       = request.get_json()
     ids_nuevos = set(data.get('materia_ids', []))
 
+    # La lista viene del navegador: si trae algo que no es un id de materia,
+    # se corta acá con un mensaje claro en vez de fallar contra la base.
+    if not all(isinstance(m, int) and not isinstance(m, bool) for m in ids_nuevos):
+        return jsonify({'error': 'La lista de materias llegó con valores inválidos. '
+                                 'Recargá la página y volvé a intentar.'}), 400
+
     # ── 1. Validar ventana de inscripciones (excepto coordinador con autorización) ──
     estado_ventana = get_estado_inscripciones(carrera_id)
     if not estado_ventana['abierto']:
