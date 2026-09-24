@@ -5716,7 +5716,7 @@ def api_profesores_listar():
     # Solo los profesores vinculados a esta carrera
     cur.execute("""
         SELECT p.id, p.nombre, p.apellido, p.dni, p.email, p.celular, p.titulo, p.activo,
-               m.id, m.nombre, m.anio
+               m.id, m.nombre, m.anio, p.genero
         FROM profesores p
         JOIN profesor_carrera pc ON pc.profesor_id = p.id AND pc.carrera_id = %s
         LEFT JOIN materia_profesor mp ON mp.profesor_id = p.id AND mp.anio_lectivo = %s
@@ -5738,6 +5738,7 @@ def api_profesores_listar():
                 'dni_raw': r[3] or '',
                 'email': r[4] or '', 'celular': r[5] or '',
                 'titulo': r[6] or '', 'activo': r[7],
+                'genero': r[11] or '',
                 'materias': []
             }
         if r[8]:  # tiene materia asignada en esta fila
@@ -5759,11 +5760,14 @@ def api_profesores_crear():
     email    = data.get('email', '').strip() or None
     celular  = data.get('celular', '').strip() or None
     titulo   = data.get('titulo', '').strip() or None
+    genero   = leer_genero(data)
 
     if not nombre or not apellido or not dni:
         return jsonify({'error': 'Nombre, apellido y DNI son obligatorios'}), 400
     if not dni.isdigit() or len(dni) < 7:
         return jsonify({'error': 'DNI inválido'}), 400
+    if genero is False:
+        return jsonify({'error': 'Género inválido'}), 400
 
     conn = get_db()
     cur = conn.cursor()
@@ -5781,9 +5785,9 @@ def api_profesores_crear():
                             'nombre': existente[1], 'apellido': existente[2]})
 
         cur.execute("""
-            INSERT INTO profesores (nombre, apellido, dni, email, celular, titulo)
-            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-        """, (nombre, apellido, dni, email, celular, titulo))
+            INSERT INTO profesores (nombre, apellido, dni, email, celular, titulo, genero)
+            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+        """, (nombre, apellido, dni, email, celular, titulo, genero))
         nuevo_id = cur.fetchone()[0]
         cur.execute("INSERT INTO profesor_carrera (profesor_id, carrera_id) VALUES (%s, %s)", (nuevo_id, carrera_id))
         conn.commit()
@@ -5809,11 +5813,14 @@ def api_profesores_editar(pid):
     email    = data.get('email', '').strip() or None
     celular  = data.get('celular', '').strip() or None
     titulo   = data.get('titulo', '').strip() or None
+    genero   = leer_genero(data)
 
     if not nombre or not apellido or not dni:
         return jsonify({'error': 'Nombre, apellido y DNI son obligatorios'}), 400
     if not dni.isdigit() or len(dni) < 7:
         return jsonify({'error': 'DNI inválido'}), 400
+    if genero is False:
+        return jsonify({'error': 'Género inválido'}), 400
 
     conn = get_db()
     cur = conn.cursor()
@@ -5821,10 +5828,10 @@ def api_profesores_editar(pid):
         # Solo se puede editar un profesor vinculado a esta carrera
         cur.execute("""
             UPDATE profesores SET nombre=%s, apellido=%s, dni=%s,
-                email=%s, celular=%s, titulo=%s
+                email=%s, celular=%s, titulo=%s, genero=%s
             WHERE id=%s AND EXISTS (SELECT 1 FROM profesor_carrera pc
                                     WHERE pc.profesor_id = profesores.id AND pc.carrera_id = %s)
-        """, (nombre, apellido, dni, email, celular, titulo, pid, carrera_id))
+        """, (nombre, apellido, dni, email, celular, titulo, genero, pid, carrera_id))
         if cur.rowcount == 0:
             conn.rollback()
             return jsonify({'error': 'Profesor no encontrado en esta carrera'}), 404

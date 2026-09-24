@@ -3506,6 +3506,14 @@
                     <label>Nombre *</label>
                     <input type="text" id="input-prof-nombre" class="input-edit-ficha" placeholder="Nombre">
                 </div>
+                <div class="campo-edit" style="grid-column:1/-1">
+                    <label>Género <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(define si figura como Profesor, Profesora o Docente)</span></label>
+                    <select id="input-prof-genero" class="input-edit-ficha">
+                        <option value="">Sin especificar</option>
+                        <option value="F">Femenino</option>
+                        <option value="M">Masculino</option>
+                    </select>
+                </div>
                 <div class="campo-edit">
                     <label>DNI *</label>
                     <input type="text" id="input-prof-dni" class="input-edit-ficha" placeholder="Con o sin puntos">
@@ -8945,6 +8953,7 @@ async function eliminarPreceptora(id, apellido) {
             document.getElementById('input-prof-celular').value  = p.celular  || '';
             document.getElementById('input-prof-titulo').value   = p.titulo   || '';
             document.getElementById('input-prof-email').value    = p.email    || '';
+            document.getElementById('input-prof-genero').value   = p.genero   || '';
         } else {
             document.getElementById('modal-profesor-titulo').textContent = 'Nuevo profesor';
             document.getElementById('input-prof-apellido').value = '';
@@ -8953,6 +8962,7 @@ async function eliminarPreceptora(id, apellido) {
             document.getElementById('input-prof-celular').value  = '';
             document.getElementById('input-prof-titulo').value   = '';
             document.getElementById('input-prof-email').value    = '';
+            document.getElementById('input-prof-genero').value   = '';
         }
         abrirModal('modal-profesor');
     }
@@ -8968,6 +8978,7 @@ async function eliminarPreceptora(id, apellido) {
             celular:  document.getElementById('input-prof-celular').value.trim(),
             titulo:   document.getElementById('input-prof-titulo').value.trim(),
             email:    document.getElementById('input-prof-email').value.trim(),
+            genero:   document.getElementById('input-prof-genero').value,
         };
 
         if (!payload.apellido || !payload.nombre) {
