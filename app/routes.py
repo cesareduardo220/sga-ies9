@@ -955,6 +955,30 @@ def api_aviso_anio():
                            aviso_anio=_calcular_aviso_anio(rol, session.get('carrera_id')))
 
 
+# Etiqueta visible de cada rol segun el genero de la persona:
+# (masculino, femenino, sin dato). El rol interno no cambia.
+_ETIQUETAS_ROL = {
+    'preceptora':  ('Preceptor',     'Preceptora',     'Preceptoría'),
+    'coordinador': ('Coordinador',   'Coordinadora',   'Coordinación'),
+    'admin':       ('Administrador', 'Administradora', 'Administración'),
+    'profesor':    ('Profesor',      'Profesora',      'Docente'),
+    'sys':         ('Sistema',       'Sistema',        'Sistema'),
+}
+
+
+def etiqueta_rol(rol, genero=None):
+    """'M' da la forma masculina, 'F' la femenina y vacio la neutra."""
+    formas = _ETIQUETAS_ROL.get(rol)
+    if not formas:
+        return rol or ''
+    g = (genero or '').strip().upper()
+    if g == 'M':
+        return formas[0]
+    if g == 'F':
+        return formas[1]
+    return formas[2]
+
+
 @auth.route('/dashboard')
 def dashboard():
     if 'rol' not in session:
@@ -995,11 +1019,20 @@ def dashboard():
 
     aviso_anio = _calcular_aviso_anio(rol, carrera_id, ciclo)
 
+    # Etiqueta del rol para el chip de la cabecera, segun el genero de la persona.
+    # Se consulta en cada carga: un cambio de genero se ve sin volver a iniciar sesion.
+    conn_g = get_db(); cur_g = conn_g.cursor()
+    cur_g.execute("SELECT genero FROM usuarios WHERE id = %s", (session['user_id'],))
+    row_g = cur_g.fetchone()
+    cur_g.close(); conn_g.close()
+    rol_etiqueta = etiqueta_rol(rol, row_g[0] if row_g else None)
+
     return render_template(
         'dashboard.html',
         nombre=session['nombre'],
         apellido=session['apellido'],
         rol=rol,
+        rol_etiqueta=rol_etiqueta,
         carrera_id=carrera_id,
         nombre_carrera=nombre_carrera,
         ciclo_label=ciclo['label'],
