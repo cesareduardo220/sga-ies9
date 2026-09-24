@@ -979,6 +979,15 @@ def etiqueta_rol(rol, genero=None):
     return formas[2]
 
 
+def leer_genero(data):
+    """Genero recibido de un formulario: 'M', 'F' o None si vino vacio.
+    Devuelve False si el valor no es valido (la ruta responde 400)."""
+    g = (data.get('genero') or '').strip().upper()
+    if not g:
+        return None
+    return g if g in ('M', 'F') else False
+
+
 @auth.route('/dashboard')
 def dashboard():
     if 'rol' not in session:
@@ -5501,7 +5510,7 @@ def api_preceptoras_listar():
     cur = conn.cursor()
     cur.execute("""
         SELECT u.id, u.usuario, u.nombre, u.apellido, u.dni, u.email, u.celular,
-               uc.activo, u.debe_cambiar_password
+               uc.activo, u.debe_cambiar_password, u.genero
         FROM usuarios u
         JOIN usuario_carrera uc ON uc.usuario_id = u.id
         WHERE u.rol = 'preceptora' AND uc.carrera_id = %s
@@ -5515,7 +5524,8 @@ def api_preceptoras_listar():
         'dni': formatear_dni(r[4]) if r[4] else '',
         'dni_raw': r[4] or '',
         'email': r[5] or '', 'celular': r[6] or '',
-        'activo': r[7], 'debe_cambiar_password': r[8]
+        'activo': r[7], 'debe_cambiar_password': r[8],
+        'genero': r[9] or ''
     } for r in rows])
 
 
@@ -5529,9 +5539,12 @@ def api_preceptoras_crear():
     dni      = limpiar_dni(data.get('dni', ''))
     email    = data.get('email', '').strip() or None
     celular  = data.get('celular', '').strip() or None
+    genero   = leer_genero(data)
 
     if not nombre or not apellido or not dni:
         return jsonify({'error': 'Nombre, apellido y DNI son obligatorios'}), 400
+    if genero is False:
+        return jsonify({'error': 'Género inválido'}), 400
     if not dni.isdigit() or len(dni) < 7:
         return jsonify({'error': 'DNI inválido'}), 400
 
@@ -5556,10 +5569,10 @@ def api_preceptoras_crear():
         cur.execute("""
             INSERT INTO usuarios
                 (usuario, password_hash, rol, nombre, apellido, dni,
-                 email, celular, carrera_id, debe_cambiar_password)
-            VALUES (%s, %s, 'preceptora', %s, %s, %s, %s, %s, %s, TRUE)
+                 email, celular, carrera_id, debe_cambiar_password, genero)
+            VALUES (%s, %s, 'preceptora', %s, %s, %s, %s, %s, %s, TRUE, %s)
             RETURNING id
-        """, (dni, generate_password_hash(dni), nombre, apellido, dni, email, celular, carrera_id))
+        """, (dni, generate_password_hash(dni), nombre, apellido, dni, email, celular, carrera_id, genero))
         nuevo_id = cur.fetchone()[0]
         cur.execute("INSERT INTO usuario_carrera (usuario_id, carrera_id) VALUES (%s, %s)", (nuevo_id, carrera_id))
         conn.commit()
@@ -5583,17 +5596,20 @@ def api_preceptoras_editar(uid):
     apellido = data.get('apellido', '').strip()
     email    = data.get('email', '').strip() or None
     celular  = data.get('celular', '').strip() or None
+    genero   = leer_genero(data)
 
     if not nombre or not apellido:
         return jsonify({'error': 'Nombre y apellido son obligatorios'}), 400
+    if genero is False:
+        return jsonify({'error': 'Género inválido'}), 400
 
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
         UPDATE usuarios
-        SET nombre = %s, apellido = %s, email = %s, celular = %s
+        SET nombre = %s, apellido = %s, email = %s, celular = %s, genero = %s
         WHERE id = %s AND rol = 'preceptora' AND EXISTS (SELECT 1 FROM usuario_carrera uc WHERE uc.usuario_id = usuarios.id AND uc.carrera_id = %s)
-    """, (nombre, apellido, email, celular, uid, carrera_id))
+    """, (nombre, apellido, email, celular, genero, uid, carrera_id))
     if cur.rowcount == 0:
         conn.rollback(); cur.close(); conn.close()
         return jsonify({'error': 'No se encontró a esa persona en esta carrera'}), 404

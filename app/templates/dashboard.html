@@ -3576,6 +3576,14 @@
                     <input type="text" id="input-prec-nombre" class="input-edit-ficha" placeholder="Nombre">
                 </div>
             </div>
+            <div class="campo-edit">
+                <label>Género <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(define si figura como Preceptor, Preceptora o Preceptoría)</span></label>
+                <select id="input-prec-genero" class="input-edit-ficha">
+                    <option value="">Sin especificar</option>
+                    <option value="F">Femenino</option>
+                    <option value="M">Masculino</option>
+                </select>
+            </div>
             <div class="campo-edit" id="grupo-prec-dni">
                 <label>DNI * <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(será el usuario y contraseña inicial)</span></label>
                 <input type="text" id="input-prec-dni" class="input-edit-ficha" placeholder="Ej: 38909187">
@@ -10608,6 +10616,7 @@ async function eliminarPreceptora(id, apellido) {
             document.getElementById('input-prec-nombre').value   = p.nombre   || '';
             document.getElementById('input-prec-email').value    = p.email    || '';
             document.getElementById('input-prec-celular').value  = p.celular  || '';
+            document.getElementById('input-prec-genero').value   = p.genero   || '';
             // En edición no se puede cambiar el DNI
             document.getElementById('grupo-prec-dni').style.display = 'none';
         } else {
@@ -10617,6 +10626,7 @@ async function eliminarPreceptora(id, apellido) {
             document.getElementById('input-prec-dni').value      = '';
             document.getElementById('input-prec-email').value    = '';
             document.getElementById('input-prec-celular').value  = '';
+            document.getElementById('input-prec-genero').value   = '';
             document.getElementById('grupo-prec-dni').style.display = 'block';
         }
 
@@ -10637,6 +10647,7 @@ async function eliminarPreceptora(id, apellido) {
             nombre:   document.getElementById('input-prec-nombre').value.trim(),
             email:    document.getElementById('input-prec-email').value.trim(),
             celular:  document.getElementById('input-prec-celular').value.trim(),
+            genero:   document.getElementById('input-prec-genero').value,
         };
 
         if (!editandoPreceptoraId) {
