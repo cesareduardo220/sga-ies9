@@ -2244,6 +2244,24 @@
     </div>
 </div>
 
+<div id="modal-insc-quitar" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:520px;">
+        <div class="modal-card-header">
+            <h3>Quitar materias de la inscripción</h3>
+        </div>
+        <div class="modal-card-body">
+            <p id="modal-insc-quitar-texto"></p>
+            <p id="modal-insc-quitar-cero" style="display:none; color:#c00; font-weight:600;">
+                El alumno va a quedar sin materias inscriptas.
+            </p>
+        </div>
+        <div class="modal-card-footer">
+            <button class="modal-btn-cancelar" onclick="inscCerrarModalQuitar()">Cancelar</button>
+            <button class="modal-btn-confirmar" onclick="inscConfirmarQuitar()">Quitar y guardar</button>
+        </div>
+    </div>
+</div>
+
 
         <!-- NOTAS -->
         <div class="seccion" id="sec-notas">
@@ -7407,6 +7425,35 @@ async function eliminarPreceptora(id, apellido) {
             }
         });
 
+        // Materias que estaban inscriptas al abrir la ficha y ya no van en la lista.
+        // Solo agregar guarda directo; si se quita alguna, se pide confirmación.
+        const quitadas = inscMateriasData.filter(m => m.inscripta && !ids.includes(m.id));
+        if (quitadas.length > 0) {
+            inscIdsPendientes = ids;
+            const nombres  = quitadas.map(m => m.nombre);
+            const listaTxt = nombres.length === 1
+                ? nombres[0]
+                : nombres.slice(0, -1).join(', ') + ' y ' + nombres[nombres.length - 1];
+            const q = quitadas.length;
+            let texto = `Vas a quitar ${q} materia${q !== 1 ? 's' : ''}: ${listaTxt}.`;
+            if (ids.length > 0) {
+                texto += ids.length === 1
+                    ? ' Va a quedar 1 inscripta.'
+                    : ` Van a quedar ${ids.length} inscriptas.`;
+            }
+            document.getElementById('modal-insc-quitar-texto').textContent = texto;
+            document.getElementById('modal-insc-quitar-cero').style.display = ids.length === 0 ? 'block' : 'none';
+            abrirModal('modal-insc-quitar');
+            return;
+        }
+
+        await _inscEnviarGuardado(ids);
+    }
+
+    // Envío del guardado de inscripciones (llamado directo o después de confirmar)
+    async function _inscEnviarGuardado(ids) {
+        if (!inscAlumnoActual) return;
+
         const msg = document.getElementById('insc-mensaje');
         msg.textContent = '⏳ Guardando...';
         msg.style.cssText = 'display:block;background:#e8f0fe;color:#1a3a6e';
@@ -7452,6 +7499,23 @@ async function eliminarPreceptora(id, apellido) {
     }
 
     // ── Modal de autorización (solo coordinador) ──
+
+    // Ids a guardar mientras el cartel de "quitar materias" está abierto
+    var inscIdsPendientes = null;
+
+    function inscCerrarModalQuitar() {
+        inscIdsPendientes = null;
+        cerrarModal('modal-insc-quitar');
+    }
+
+    async function inscConfirmarQuitar() {
+        // Se toman y se anulan antes de enviar: un doble clic no guarda dos veces
+        const ids = inscIdsPendientes;
+        inscIdsPendientes = null;
+        cerrarModal('modal-insc-quitar');
+        if (!ids) return;
+        await _inscEnviarGuardado(ids);
+    }
 
     function inscAbrirModalAutorizar() {
         // Limpiar el textarea cada vez que se abre — nunca dejar texto viejo pegado
