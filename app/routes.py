@@ -1647,6 +1647,18 @@ def api_materias_listar():
         'correl_cursada': r[6], 'correl_aprobada': r[7]
     } for r in rows])
 
+def _plan_vigente_id(cur, carrera_id):
+    """Id del plan de estudios activo de la carrera (el mas reciente), o None."""
+    cur.execute("""
+        SELECT id FROM planes_estudio
+        WHERE carrera_id = %s AND activo = TRUE
+        ORDER BY fecha_vigencia DESC
+        LIMIT 1
+    """, (carrera_id,))
+    fila = cur.fetchone()
+    return fila[0] if fila else None
+
+
 @auth.route('/api/plan-vigente', methods=['GET'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_plan_vigente():
@@ -2036,6 +2048,15 @@ def api_confirmar_cambio_plan():
         """, (carrera_id,))
         materias_viejas = {r[1].lower().strip(): r[0] for r in cur.fetchall()}
 
+        # Bloqueado hasta rehacer el cambio de plan: el procedimiento actual
+        # borra las materias del plan anterior y, en cascada, inscripciones,
+        # cursadas, notas y examenes. La primera carga (sin materias) sigue.
+        if materias_viejas:
+            return jsonify({'error': 'El cambio de plan de estudios está deshabilitado '
+                            'temporalmente: el procedimiento actual borraría el historial '
+                            'académico de la carrera. Para corregir el plan vigente usá '
+                            '"Agregar espacio curricular manualmente".'}), 409
+
         # 2. Crear registro del nuevo plan
         cur.execute("""
             INSERT INTO planes_estudio
@@ -2349,8 +2370,8 @@ def api_alumnos_crear():
                 carrera_id, apellido, nombre, dni, tipo_documento, cuil,
                 email, celular, fecha_nacimiento, direccion, localidad, provincia,
                 contacto_emergencia_nombre, contacto_emergencia_telefono,
-                anio_ingreso, legajo, localidad_id, departamento
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                anio_ingreso, legajo, localidad_id, departamento, plan_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             carrera_id, apellido, nombre, dni, tipo_documento, cuil,
@@ -2365,6 +2386,7 @@ def api_alumnos_crear():
             anio_ingreso, legajo,
             data.get('localidad_id') or None,
             (data.get('departamento') or '').strip() or None,
+            _plan_vigente_id(cur, carrera_id),
         ))
         nuevo_id = cur.fetchone()[0]
         conn.commit()
@@ -8179,7 +8201,7 @@ def api_inscripcion_guardar():
             if err:
                 conn.rollback()
                 return jsonify({'error': err}), 400
-            plan_id = None
+            plan_id = _plan_vigente_id(cur, carrera_id)
 
             # Quien ya está cargado se reinscribe, no se da de alta.
             # Quien ya esta cargado en ESTA carrera se reinscribe, no se da de alta.
