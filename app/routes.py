@@ -877,6 +877,7 @@ def configurar_admin():
         celular   = request.form.get('celular', '').strip() or None
         email     = request.form.get('email', '').strip() or None
         domicilio = request.form.get('domicilio', '').strip() or None
+        genero    = leer_genero(request.form)
         nueva     = request.form.get('nueva', '').strip()
         confirmar = request.form.get('confirmar', '').strip()
 
@@ -884,6 +885,8 @@ def configurar_admin():
             error = 'Nombre, apellido y DNI son obligatorios'
         elif not dni.isdigit() or len(dni) < 7:
             error = 'DNI inválido'
+        elif genero is False:
+            error = 'Género inválido'
         else:
             error_validacion = validar_password_fuerte(nueva)
             if error_validacion:
@@ -895,10 +898,10 @@ def configurar_admin():
                     cur.execute("""
                         UPDATE usuarios
                         SET usuario = %s, nombre = %s, apellido = %s, dni = %s,
-                            celular = %s, email = %s, domicilio = %s,
+                            celular = %s, email = %s, domicilio = %s, genero = %s,
                             password_hash = %s, debe_cambiar_password = FALSE
                         WHERE id = %s
-                    """, (dni, nombre, apellido, dni, celular, email, domicilio,
+                    """, (dni, nombre, apellido, dni, celular, email, domicilio, genero,
                           generate_password_hash(nueva), session['user_id']))
                     conn.commit()
                     cur.close(); conn.close()

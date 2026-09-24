@@ -43,12 +43,12 @@
     .paso-desc{ color:var(--texto-gris); font-size:0.85rem; margin-bottom:22px; }
     .campo{ margin-bottom:16px; }
     .campo label{ display:block; font-size:0.78rem; font-weight:700; color:var(--texto-gris); text-transform:uppercase; letter-spacing:0.02em; margin-bottom:6px; }
-    .campo input{
+    .campo input, .campo select{
         width:100%; padding:11px 13px; border:1.5px solid var(--borde); border-radius:9px;
         font-size:0.95rem; font-family:inherit; color:var(--texto-oscuro); background:var(--crema);
         transition:border-color .15s;
     }
-    .campo input:focus{ outline:none; border-color:var(--verde-medio); background:#fff; }
+    .campo input:focus, .campo select:focus{ outline:none; border-color:var(--verde-medio); background:#fff; }
     .fila-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
     .req-lista{ list-style:none; margin:10px 0 4px; display:flex; flex-direction:column; gap:5px; }
     .req-lista li{ font-size:0.8rem; color:var(--texto-gris); display:flex; align-items:center; gap:7px; }
@@ -105,6 +105,14 @@
                     <label>Nombre *</label>
                     <input type="text" name="nombre" id="input-nombre" required>
                 </div>
+            </div>
+            <div class="campo">
+                <label>Género <span style="text-transform:none;font-weight:400">(define si figurás como Administrador, Administradora o Administración)</span></label>
+                <select name="genero">
+                    <option value="">Sin especificar</option>
+                    <option value="F">Femenino</option>
+                    <option value="M">Masculino</option>
+                </select>
             </div>
             <div class="campo">
                 <label>DNI * <span style="text-transform:none;font-weight:400">(será tu usuario)</span></label>
