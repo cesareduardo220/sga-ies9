@@ -3271,6 +3271,14 @@
                 </div>
             </div>
             <div class="campo-edit">
+                <label>Género <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(define si figura como Coordinador, Coordinadora o Coordinación)</span></label>
+                <select id="input-coord-genero" class="input-edit-ficha">
+                    <option value="">Sin especificar</option>
+                    <option value="F">Femenino</option>
+                    <option value="M">Masculino</option>
+                </select>
+            </div>
+            <div class="campo-edit">
                 <label>DNI *</label>
                 <input type="text" id="input-coord-dni" class="input-edit-ficha" placeholder="Sin puntos ni espacios">
             </div>
@@ -5103,6 +5111,7 @@
             dni.value = u.usuario; dni.disabled = true;
             document.getElementById('input-coord-email').value   = u.email   || '';
             document.getElementById('input-coord-celular').value = u.celular || '';
+            document.getElementById('input-coord-genero').value  = u.genero  || '';
             selectCarrera.value = u.carrera_id || '';
         } else {
             document.getElementById('modal-coord-titulo').textContent = 'Nuevo coordinador';
@@ -5111,6 +5120,7 @@
             dni.value = ''; dni.disabled = false;
             document.getElementById('input-coord-email').value   = '';
             document.getElementById('input-coord-celular').value = '';
+            document.getElementById('input-coord-genero').value  = '';
             selectCarrera.value = '';
         }
         document.getElementById('modal-coord-error').style.display = 'none';
@@ -5125,6 +5135,7 @@
             dni:        document.getElementById('input-coord-dni').value.trim(),
             email:      document.getElementById('input-coord-email').value.trim(),
             celular:    document.getElementById('input-coord-celular').value.trim(),
+            genero:     document.getElementById('input-coord-genero').value,
             carrera_id: document.getElementById('input-coord-carrera').value || null,
         };
         const url    = editandoCoordId ? `/api/coordinadores/${editandoCoordId}` : '/api/coordinadores';

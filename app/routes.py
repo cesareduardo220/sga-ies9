@@ -1185,7 +1185,7 @@ def api_coord_listar():
     cur.execute("""
         SELECT u.id, u.usuario, u.nombre, u.apellido, u.dni,
                u.email, u.celular, u.activo, u.debe_cambiar_password,
-               c.nombre AS carrera, u.carrera_id
+               c.nombre AS carrera, u.carrera_id, u.genero
         FROM usuarios u
         LEFT JOIN carreras c ON c.id = u.carrera_id
         WHERE u.rol = 'coordinador'
@@ -1197,7 +1197,8 @@ def api_coord_listar():
     return jsonify([{
         'id': r[0], 'usuario': r[1], 'nombre': r[2], 'apellido': r[3],
         'dni': r[4], 'email': r[5], 'celular': r[6], 'activo': r[7],
-        'debe_cambiar_password': r[8], 'carrera': r[9], 'carrera_id': r[10]
+        'debe_cambiar_password': r[8], 'carrera': r[9], 'carrera_id': r[10],
+        'genero': r[11] or ''
     } for r in rows])
 
 
@@ -1211,25 +1212,30 @@ def api_coord_crear():
     email     = data.get('email', '').strip() or None
     celular   = data.get('celular', '').strip() or None
     carrera_id = data.get('carrera_id') or None
+    genero     = leer_genero(data)
 
     if not nombre or not apellido or not dni:
         return jsonify({'error': 'Nombre, apellido y DNI son obligatorios'}), 400
+    if genero is False:
+        return jsonify({'error': 'Género inválido'}), 400
 
     # El usuario es el DNI, contraseña inicial es el DNI también
     conn = get_db()
     cur = conn.cursor()
     try:
         cur.execute("""
-            INSERT INTO usuarios (usuario, password_hash, rol, nombre, apellido, dni, email, celular, carrera_id, debe_cambiar_password)
-            VALUES (%s, %s, 'coordinador', %s, %s, %s, %s, %s, %s, TRUE)
+            INSERT INTO usuarios (usuario, password_hash, rol, nombre, apellido, dni, email, celular, carrera_id, debe_cambiar_password, genero)
+            VALUES (%s, %s, 'coordinador', %s, %s, %s, %s, %s, %s, TRUE, %s)
             RETURNING id
-        """, (dni, generate_password_hash(dni), nombre, apellido, dni, email, celular, carrera_id))
+        """, (dni, generate_password_hash(dni), nombre, apellido, dni, email, celular, carrera_id, genero))
         nuevo_id = cur.fetchone()[0]
         conn.commit()
         return jsonify({'ok': True, 'id': nuevo_id})
     except Exception as e:
         conn.rollback()
-        return jsonify({'error': 'Ya existe un usuario con ese DNI'}), 409
+        if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+            return jsonify({'error': 'Ya existe un usuario con ese DNI'}), 409
+        return jsonify({'error': str(e)}), 500
     finally:
         cur.close()
         conn.close()
@@ -1244,16 +1250,19 @@ def api_coord_editar(uid):
     email      = data.get('email', '').strip() or None
     celular    = data.get('celular', '').strip() or None
     carrera_id = data.get('carrera_id') or None
+    genero     = leer_genero(data)
 
     if not nombre or not apellido:
         return jsonify({'error': 'Nombre y apellido son obligatorios'}), 400
+    if genero is False:
+        return jsonify({'error': 'Género inválido'}), 400
 
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        UPDATE usuarios SET nombre = %s, apellido = %s, email = %s, celular = %s, carrera_id = %s
+        UPDATE usuarios SET nombre = %s, apellido = %s, email = %s, celular = %s, carrera_id = %s, genero = %s
         WHERE id = %s AND rol = 'coordinador'
-    """, (nombre, apellido, email, celular, carrera_id, uid))
+    """, (nombre, apellido, email, celular, carrera_id, genero, uid))
     conn.commit()
     cur.close()
     conn.close()
