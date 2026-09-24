@@ -1869,7 +1869,7 @@
     <div class="seccion-header">
         <div>
             <h2>Preinscripciones</h2>
-            <div class="sub">Inscripciones cargadas en línea por los alumnos, para revisar y aprobar</div>
+            <div class="sub" id="sub-preinscripciones">Inscripciones cargadas en línea por los alumnos, para revisar y aprobar</div>
         </div>
     </div>
 
@@ -1974,7 +1974,7 @@
     <div class="seccion-header">
         <div>
             <h2>Tokens de inscripción</h2>
-            <div class="sub">Códigos que se envían por correo para que el alumno complete la inscripción en línea</div>
+            <div class="sub" id="sub-tokens">Códigos que se envían por correo para que el alumno complete la inscripción en línea</div>
         </div>
     </div>
 
@@ -2458,7 +2458,7 @@
             <div class="seccion-header">
                 <div>
                     <h2>Subir Plan de Estudios</h2>
-                    <div class="sub">Importá el plan de estudios desde planilla Excel</div>
+                    <div class="sub" id="sub-excel">Importá el plan de estudios desde planilla Excel</div>
                 </div>
             </div>
 
@@ -2935,7 +2935,7 @@
             <div class="seccion-header">
                 <div>
                     <h2>Configuración</h2>
-                    <div class="sub">Parámetros globales del sistema</div>
+                    <div class="sub" id="sub-config">{% if rol == 'coordinador' %}Configuración de la carrera{% else %}Parámetros globales del sistema{% endif %}</div>
                 </div>
             </div>
             <div class="tarjeta-form" id="tarjeta-config-anio-lectivo" style="max-width:480px;">
@@ -8889,7 +8889,13 @@ async function eliminarPreceptora(id, apellido) {
         'sub-cuentas':       ['Gestión de cuentas del administrador del sistema', 'Listado de cuentas del administrador'],
         'sub-carreras':      ['Gestión de carreras de la institución', 'Listado de carreras de la institución'],
         'sub-coordinadores': ['Gestión de coordinadores por carrera', 'Listado de coordinadores por carrera'],
-        'notas-sub': ['Seleccioná un año y una materia para cargar notas', 'Listado de espacios curriculares y estado de notas']
+        'notas-sub': ['Seleccioná un año y una materia para cargar notas', 'Listado de espacios curriculares y estado de notas'],
+        'sub-preinscripciones': ['Inscripciones cargadas en línea por los alumnos, para revisar y aprobar', 'Inscripciones cargadas en línea por los alumnos'],
+        'sub-excel':  ['Importá el plan de estudios desde planilla Excel', 'El plan de estudios se importa desde una computadora'],
+        'sub-tokens': ['Códigos que se envían por correo para que el alumno complete la inscripción en línea', 'Códigos enviados por correo para la inscripción en línea'],
+        'sub-config': ROL === 'coordinador'
+            ? ['Configuración de la carrera', 'Consulta de la configuración de la carrera']
+            : ['Parámetros globales del sistema', 'Consulta de los parámetros globales del sistema']
     };
 
     function actualizarSubtitulosGestion() {
