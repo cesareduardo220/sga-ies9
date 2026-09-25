@@ -1760,6 +1760,55 @@ def _estado_materias_alumno(cur, aid):
     return estado
 
 
+def _reconocidas_por_equivalencia(cur, aid):
+    """Materias del plan actual del alumno que se le reconocen por haber migrado de
+    un plan anterior, segun la tabla de equivalencias y la politica del plan nuevo.
+    {materia_id: {'resultado': 'aprobada'|'regular', 'vence', 'intentos',
+                  'vigente', 'motivo_caida'}}. Vacio si el alumno no migro."""
+    cur.execute("SELECT plan_id FROM alumnos_carrera WHERE id = %s", (aid,))
+    fila = cur.fetchone()
+    if not fila or fila[0] is None:
+        return {}
+    plan_actual = fila[0]
+    cur.execute("""
+        SELECT plan_viejo_id, registrado_en FROM historial_plan_alumno
+        WHERE alumno_id = %s AND plan_nuevo_id = %s AND plan_viejo_id IS NOT NULL
+        ORDER BY registrado_en DESC, id DESC LIMIT 1
+    """, (aid, plan_actual))
+    mig = cur.fetchone()
+    if not mig:
+        return {}
+    plan_viejo, migrado_el = mig
+    cur.execute("SELECT politica_migracion FROM planes_estudio WHERE id = %s", (plan_actual,))
+    politica = (cur.fetchone() or ['equivalencias'])[0]
+    s = _situacion_cierre_alumno(cur, aid, plan_viejo, plan_actual, politica,
+                                 get_ciclo_lectivo()['anio_inicio'])
+    hoy = date.today()
+    reconocidas = {}
+    for m in s['materias']:
+        if m['resultado'] == 'aprobada':
+            reconocidas[m['id']] = {'resultado': 'aprobada', 'vence': None, 'intentos': 0,
+                                    'vigente': True, 'motivo_caida': None}
+        elif m['resultado'] == 'regular':
+            # Intentos heredados + finales desaprobados en la materia nueva desde la migracion
+            cur.execute("""
+                SELECT COUNT(*) FROM examenes
+                WHERE alumno_id = %s AND materia_id = %s AND resultado = 'desaprobado'
+                  AND fecha_mesa >= %s
+            """, (aid, m['id'], migrado_el.date()))
+            intentos = m['intentos'] + cur.fetchone()[0]
+            vence = datetime.strptime(m['vence'], '%d/%m/%Y').date() if m['vence'] else None
+            motivos = []
+            if vence and hoy > vence:
+                motivos.append(f"regularidad vencida el {vence.strftime('%d/%m/%Y')}")
+            if intentos >= 3:
+                motivos.append(f'agotó los 3 intentos ({intentos} rendidos)')
+            reconocidas[m['id']] = {'resultado': 'regular', 'vence': vence, 'intentos': intentos,
+                                    'vigente': not motivos,
+                                    'motivo_caida': ' y '.join(motivos) or None}
+    return reconocidas
+
+
 def _situacion_cierre_alumno(cur, aid, plan_viejo_id, plan_nuevo_id, politica, anio_actual):
     """Que le pasa a un alumno del plan viejo si migra al nuevo, segun la tabla de
     equivalencias. Solo lectura."""
@@ -3959,6 +4008,19 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
         if _motivos:
             regularidad_caida[_mid] = ' y '.join(_motivos)
 
+    # Reconocidas por equivalencia (alumno migrado de un plan anterior): cuentan
+    # como aprobadas o regularizadas en las materias del plan nuevo, con la
+    # regularidad heredada (vencimiento e intentos).
+    reconocidas = _reconocidas_por_equivalencia(cur, aid)
+    for _mid, _rec in reconocidas.items():
+        if _rec['resultado'] == 'aprobada':
+            aprobadas_ok.add(_mid)
+            cursadas_ok.add(_mid)
+        else:
+            cursadas_ok.add(_mid)
+            if not _rec['vigente'] and _mid not in aprobadas_ok:
+                regularidad_caida[_mid] = _rec['motivo_caida']
+
     # Correlatividades de todas las materias
     cur.execute("""
         SELECT materia_id, requiere_materia_id, tipo
@@ -4004,8 +4066,14 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
         puede = True
         bloqueada_por = []
 
+        # Una materia ya aprobada (cursada, final o equivalencia) no se vuelve a cursar
+        if mid in aprobadas_ok and not inscripta:
+            puede = False
+            bloqueada_por.append('Aprobada por equivalencia'
+                                 if reconocidas.get(mid, {}).get('resultado') == 'aprobada'
+                                 else 'Ya aprobada')
         # Primero verificar si el año está habilitado (Opción C)
-        if not anio_habilitado(anio_m) and not inscripta:
+        elif not anio_habilitado(anio_m) and not inscripta:
             puede = False
             anio_prev = anio_m - 1
             bloqueada_por.append(f"Necesitás regularizar al menos una materia de {anio_prev}° año")
@@ -4041,6 +4109,7 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
             'regularidad_vencida': mid in regularidad_caida,
             'motivo_regularidad':  regularidad_caida.get(mid),
             'aprobada': mid in aprobadas_ok,
+            'por_equivalencia': reconocidas.get(mid, {}).get('resultado'),
         })
 
     return resultado
