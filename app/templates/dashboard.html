@@ -3763,7 +3763,7 @@
             <h3 id="modal-plan-titulo">¿Confirmar cambio de plan?</h3>
         </div>
         <div class="modal-card-body">
-            <p id="modal-plan-texto" style="margin-bottom:0;">Esta acción reemplaza el plan de estudios activo de la carrera. Todos los alumnos van a migrar al plan nuevo según la política elegida — <b>no se puede deshacer</b>.</p>
+            <p id="modal-plan-texto" style="margin-bottom:0;">Se carga el plan nuevo y los dos conviven durante la transición: los alumnos que ya cursan siguen con su plan y los ingresantes entran con el nuevo desde su fecha de vigencia. No se borra nada del plan actual — <b>no se puede deshacer</b>.</p>
         </div>
         <div class="modal-card-footer">
             <button class="modal-btn-cancelar" onclick="cerrarModal('modal-confirmar-cambio-plan')">Cancelar</button>
@@ -5452,8 +5452,8 @@ async function eliminarPreceptora(id, apellido) {
         document.getElementById('modal-plan-titulo').textContent =
             _hayPlan ? '¿Confirmar cambio de plan?' : '¿Confirmar carga del plan?';
         document.getElementById('modal-plan-texto').innerHTML = _hayPlan
-            ? 'Esta acción reemplaza el plan de estudios activo de la carrera. Todos los alumnos van a migrar al plan nuevo según la política elegida — <b>no se puede deshacer</b>.'
-            : 'Esta acción carga el plan de estudios de la carrera. Como no hay un plan activo, no se migra ningún alumno — <b>no se puede deshacer</b>.';
+            ? 'Se carga el plan nuevo y los dos conviven durante la transición: los alumnos que ya cursan siguen con su plan y los ingresantes entran con el nuevo desde su fecha de vigencia. No se borra nada del plan actual — <b>no se puede deshacer</b>.'
+            : 'Esta acción carga el plan de estudios de la carrera. Los alumnos que todavía no tienen plan quedan con este — <b>no se puede deshacer</b>.';
         document.getElementById('modal-plan-btn').textContent =
             _hayPlan ? 'Sí, confirmar cambio' : 'Sí, cargar plan';
 
@@ -5484,7 +5484,7 @@ async function eliminarPreceptora(id, apellido) {
             const idVieja   = sel.dataset.idVieja;
             const nomNueva  = sel.value;
             if (nomNueva && nomNueva !== '— sin equivalente —'.toLowerCase()) {
-                equivalencias.push({ id_vieja: parseInt(idVieja), nombre_nueva: nomNueva });
+                equivalencias.push({ id_vieja: parseInt(idVieja) || null, nombre_vieja: nomVieja, nombre_nueva: nomNueva });
             }
         });
 

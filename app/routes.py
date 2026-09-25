@@ -2147,14 +2147,6 @@ def api_confirmar_cambio_plan():
         """, (carrera_id, plan_viejo_id))
         materias_viejas = {r[1].lower().strip(): r[0] for r in cur.fetchall()}
 
-        # Bloqueado hasta terminar la Fase 1: las pantallas que todavia buscan
-        # materias por carrera mezclarian los dos planes. La primera carga sigue.
-        if materias_viejas:
-            return jsonify({'error': 'El cambio de plan de estudios está deshabilitado '
-                            'temporalmente mientras se adapta el sistema para que convivan '
-                            'dos planes. Para corregir el plan vigente usá '
-                            '"Agregar espacio curricular manualmente".'}), 409
-
         # 2. Crear el plan nuevo. El anterior sigue activo durante la transición:
         #    sus alumnos lo conservan hasta que se cierre (al vencer la fecha límite).
         cur.execute("""
@@ -2185,7 +2177,9 @@ def api_confirmar_cambio_plan():
         # 4b. Manuales (definidas por el coordinador)
         ids_viejos = set(materias_viejas.values())
         for eq in equivalencias:
-            id_vieja  = eq.get('id_vieja')
+            # Las similares traen el id; las demas eliminadas, solo el nombre
+            id_vieja  = eq.get('id_vieja') or materias_viejas.get(
+                (eq.get('nombre_vieja') or '').lower().strip())
             nom_nueva = eq.get('nombre_nueva', '').lower().strip()
             if id_vieja in ids_viejos and nom_nueva in nombres_nuevos:
                 cur.execute("""
