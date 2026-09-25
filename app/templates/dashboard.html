@@ -9109,6 +9109,9 @@ async function eliminarPreceptora(id, apellido) {
             return;
         }
 
+        // Con dos planes en transicion, cada materia lleva el nombre de su plan
+        const variosPlanesAsig = new Set(materiasParaAsignar.map(x => x.plan_id)).size > 1;
+
         const anios = {};
         disponibles.forEach(m => {
             if (!anios[m.anio]) anios[m.anio] = [];
@@ -9120,7 +9123,7 @@ async function eliminarPreceptora(id, apellido) {
             anios[anio].forEach(m => {
                 const opt = document.createElement('option');
                 opt.value = m.id;
-                opt.textContent = m.nombre;
+                opt.textContent = (variosPlanesAsig && m.plan_nombre) ? `${m.nombre} — ${m.plan_nombre}` : m.nombre;
                 group.appendChild(opt);
             });
             select.appendChild(group);
@@ -9219,6 +9222,7 @@ async function eliminarPreceptora(id, apellido) {
 
         notasMaterias    = data.anios;
         notasAnioLectivo = data.anio_lectivo;
+        window.notasVariosPlanes = !!data.varios_planes;
 
         // Renderizar tabs de año
         const tabsWrap = document.getElementById('notas-tabs-anio');
@@ -9270,7 +9274,8 @@ async function eliminarPreceptora(id, apellido) {
                     <tbody>
                         ${materias.map(m => `
                             <tr class="fila-alumno" onclick="notasAbrirMateria(${m.id})">
-                                <td><strong>${m.nombre}</strong></td>
+                                <td><strong>${m.nombre}</strong>${(window.notasVariosPlanes && m.plan_nombre)
+                                    ? ` <span style="font-size:0.78rem;color:var(--sga-texto-gris);font-weight:400;">· ${m.plan_nombre}</span>` : ''}</td>
                                 <td style="text-align:center">${m.regimen || '—'}</td>
                                 <td style="text-align:center">${m.inscriptos}</td>
                                 <td style="text-align:center">${m.con_notas}</td>
@@ -10299,7 +10304,9 @@ async function eliminarPreceptora(id, apellido) {
             const res  = await fetch('/api/materias');
             const data = await res.json();
             const sel  = document.getElementById('nueva-mesa-materia');
-            sel.innerHTML = data.map(m => `<option value="${m.id}">${m.nombre} (${m.anio}° año)</option>`).join('');
+            // Con dos planes en transicion, cada materia lleva el nombre de su plan
+            const variosPlanesMesa = new Set(data.map(m => m.plan_id)).size > 1;
+            sel.innerHTML = data.map(m => `<option value="${m.id}">${m.nombre} (${m.anio}° año${(variosPlanesMesa && m.plan_nombre) ? ' · ' + m.plan_nombre : ''})</option>`).join('');
         } catch (err) {
             document.getElementById('nueva-mesa-materia').innerHTML = '<option>Error al cargar materias</option>';
         }

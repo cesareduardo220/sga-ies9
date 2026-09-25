@@ -2318,7 +2318,9 @@ def api_stats_carrera():
     cur.execute("SELECT COUNT(*) FROM alumnos_carrera WHERE carrera_id = %s AND activo = TRUE", (carrera_id,))
     total_alumnos = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM materias WHERE carrera_id = %s AND activa = TRUE", (carrera_id,))
+    cur.execute("""SELECT COUNT(*) FROM materias
+                   WHERE carrera_id = %s AND activa = TRUE AND plan_id IS NOT DISTINCT FROM %s""",
+                (carrera_id, _plan_vigente_id(cur, carrera_id)))
     total_materias = cur.fetchone()[0]
 
     cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
@@ -4375,13 +4377,17 @@ def api_notas_materias():
             m.id, m.nombre, m.anio, m.orden, m.regimen,
             COUNT(DISTINCT i.id) AS inscriptos,
             COUNT(DISTINCT cu.id) AS con_notas,
-            BOOL_OR(cu.cerrada) AS cerrada
+            BOOL_OR(cu.cerrada) AS cerrada,
+            p.nombre AS plan_nombre, m.plan_id
         FROM materias m
+        LEFT JOIN planes_estudio p ON p.id = m.plan_id
         LEFT JOIN inscripciones i ON i.materia_id = m.id AND i.anio_lectivo = %s
         LEFT JOIN cursadas cu ON cu.inscripcion_id = i.id
         WHERE m.carrera_id = %s AND m.activa = TRUE
-        GROUP BY m.id, m.nombre, m.anio, m.orden, m.regimen
-        ORDER BY m.anio, m.orden
+          AND (m.plan_id IS NULL OR p.activo = TRUE)
+        GROUP BY m.id, m.nombre, m.anio, m.orden, m.regimen,
+                 p.nombre, p.fecha_vigencia, m.plan_id
+        ORDER BY m.anio, p.fecha_vigencia DESC NULLS LAST, m.orden
     """, (anio, carrera_id))
 
     rows = cur.fetchall()
@@ -4396,10 +4402,13 @@ def api_notas_materias():
         anios[anio_m].append({
             'id': r[0], 'nombre': r[1], 'anio': r[2], 'orden': r[3],
             'regimen': r[4], 'inscriptos': r[5], 'con_notas': r[6],
-            'cerrada': r[7] or False
+            'cerrada': r[7] or False,
+            'plan_nombre': (r[8] or '').strip()
         })
 
-    return jsonify({'anio_lectivo': anio, 'anios': anios})
+    # Con dos planes en transicion, la pantalla muestra el plan de cada materia
+    varios_planes = len({r[9] for r in rows}) > 1
+    return jsonify({'anio_lectivo': anio, 'anios': anios, 'varios_planes': varios_planes})
 
 
 @auth.route('/api/notas/materia/<int:mid>', methods=['GET'])
