@@ -1668,11 +1668,17 @@ def _cantidad_planes_activos(cur, carrera_id):
 
 
 def _plan_vigente_id(cur, carrera_id):
-    """Id del plan de estudios activo de la carrera (el mas reciente), o None."""
+    """Plan con el que entra hoy un alumno nuevo, o None si la carrera no tiene plan.
+    Entre los planes activos cuya vigencia ya empezo, el mas reciente. Si ninguno
+    empezo todavia (plan recien cargado con vigencia futura), el que empiece primero,
+    para que la carrera nunca quede sin plan para sus altas."""
     cur.execute("""
         SELECT id FROM planes_estudio
         WHERE carrera_id = %s AND activo = TRUE
-        ORDER BY fecha_vigencia DESC
+        ORDER BY (fecha_vigencia <= CURRENT_DATE) DESC,
+                 CASE WHEN fecha_vigencia <= CURRENT_DATE THEN fecha_vigencia END DESC NULLS LAST,
+                 fecha_vigencia ASC,
+                 id DESC
         LIMIT 1
     """, (carrera_id,))
     fila = cur.fetchone()
