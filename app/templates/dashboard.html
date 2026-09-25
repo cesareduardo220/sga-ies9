@@ -1756,6 +1756,54 @@
             <div id="cierre-contenido"></div>
         </div>
 
+        <!-- Cartel de confirmacion de Cerrar plan -->
+        <div id="modal-cierre-confirmar" class="modal-overlay" style="display:none;">
+            <div class="modal-card" style="max-width:520px;">
+                <div class="modal-card-header"><h3 id="cierre-confirmar-titulo">Confirmar</h3></div>
+                <div class="modal-card-body"><p id="cierre-confirmar-texto" style="white-space:pre-line;"></p></div>
+                <div class="modal-card-footer">
+                    <button class="modal-btn-cancelar" onclick="cerrarModal('modal-cierre-confirmar')">Cancelar</button>
+                    <button class="modal-btn-confirmar" id="cierre-confirmar-btn" onclick="cierreEjecutarConfirmacion()">Confirmar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cartel de prorroga -->
+        <div id="modal-cierre-prorroga" class="modal-overlay" style="display:none;">
+            <div class="modal-card" style="max-width:520px;">
+                <div class="modal-card-header"><h3 id="cierre-prorroga-titulo">Prórroga en el plan anterior</h3></div>
+                <div class="modal-card-body">
+                    <p id="cierre-prorroga-alumno" style="font-weight:600;margin:0 0 6px;"></p>
+                    <p style="font-size:0.82rem;color:var(--sga-texto-gris);margin:0 0 12px;">
+                        El alumno sigue en el plan anterior hasta la fecha que indiques. Cuando vence,
+                        vuelve a aparecer en esta pantalla para decidir de nuevo.
+                    </p>
+                    <div class="campo-edit">
+                        <label>Hasta <span style="color:#c00;">*</span></label>
+                        <div style="display:flex;gap:8px;">
+                            <input type="number" id="cierre-prorroga-dia" class="input-edit-ficha" placeholder="Día" min="1" max="31" style="width:70px;text-align:center">
+                            <select id="cierre-prorroga-mes" class="input-edit-ficha"></select>
+                            <input type="number" id="cierre-prorroga-anio" class="input-edit-ficha" placeholder="Año" style="width:90px;text-align:center">
+                        </div>
+                    </div>
+                    <div class="campo-edit">
+                        <label>Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
+                        <textarea id="cierre-prorroga-motivo" class="input-edit-ficha" rows="3" style="font-family:inherit;resize:vertical;"
+                                  placeholder="Ej: Le falta una materia para terminar el plan"></textarea>
+                    </div>
+                    <div class="campo-edit">
+                        <label>Disposición o resolución (opcional)</label>
+                        <input type="text" id="cierre-prorroga-disp" class="input-edit-ficha" maxlength="100" placeholder="Ej: Disp. 12/2026">
+                    </div>
+                    <div id="cierre-prorroga-error" class="form-error" style="display:none"></div>
+                </div>
+                <div class="modal-card-footer">
+                    <button class="modal-btn-cancelar" onclick="cerrarModal('modal-cierre-prorroga')">Cancelar</button>
+                    <button class="modal-btn-confirmar" onclick="cierreGuardarProrroga()">Guardar prórroga</button>
+                </div>
+            </div>
+        </div>
+
 
 <!-- ══════════════════════════════════════════════════════════════
      SECCIÓN INSCRIPCIONES — reemplaza el placeholder en dashboard
@@ -5672,11 +5720,40 @@ async function eliminarPreceptora(id, apellido) {
 
     var materiasPlanSel = null;   // plan elegido en Plan de Estudios (null = el vigente)
 
-    // ── Cerrar plan (consulta) ──────────────────────────────────────────
+    // ── Cerrar plan ─────────────────────────────────────────────────────
     var cierrePlanId = null;
+    var _cierreDatos = null;
+    var _cierreResultado = null;        // resultado de la ultima migracion (se muestra una vez)
+    var _cierreConfirmarAccion = null;  // que hacer al confirmar el cartel
+    var _cierreProrrogaAlumno = null;   // alumno del cartel de prorroga
+
+    const _CIERRE_MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
+                           'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+    function _cierreEsc(s) {
+        return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    }
+
+    function _cierreFecha(txt) {          // "dd/mm/aaaa" -> Date
+        if (!txt) return null;
+        const [dd, mm, aa] = txt.split('/').map(Number);
+        return new Date(aa, mm - 1, dd);
+    }
+
+    function _cierreMensaje(texto, tipo) {
+        const el = document.getElementById('cierre-msg');
+        if (!el) return;
+        if (!texto) { el.style.display = 'none'; return; }
+        el.className = tipo === 'error' ? 'form-error' : '';
+        el.style.cssText = tipo === 'error'
+            ? 'display:block;margin-top:12px;'
+            : 'display:block;margin-top:12px;background:#E5F0F8;color:#2D6FBD;border-radius:10px;padding:10px 14px;font-size:0.85rem;';
+        el.textContent = texto;
+    }
 
     function abrirCierrePlan() {
         cierrePlanId = materiasPlanSel;
+        _cierreResultado = null;
         navegarA('cierre-plan', 'Cerrar plan');
     }
 
@@ -5689,11 +5766,17 @@ async function eliminarPreceptora(id, apellido) {
         if (btn) btn.textContent = abrir ? 'Ocultar detalle' : 'Ver detalle';
     }
 
+    function cierreActualizarBoton() {
+        const n = document.querySelectorAll('.cierre-cb:checked').length;
+        const btn = document.getElementById('cierre-btn-migrar');
+        if (btn) btn.textContent = `Migrar seleccionados (${n})`;
+    }
+
     async function cargarCierrePlan() {
         const cont = document.getElementById('cierre-contenido');
         const sub  = document.getElementById('cierre-sub');
         const tit  = document.getElementById('cierre-titulo');
-        const esc  = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+        const esc  = _cierreEsc;
         if (!cierrePlanId) {
             tit.textContent = 'Cerrar plan';
             sub.textContent = '';
@@ -5709,9 +5792,11 @@ async function eliminarPreceptora(id, apellido) {
             data = { error: 'No se pudo cargar la información del cierre.' };
         }
         if (data.error) {
+            _cierreDatos = null;
             cont.innerHTML = `<div class="form-error" style="display:block">${esc(data.error)}</div>`;
             return;
         }
+        _cierreDatos = data;
 
         const POL = { ninguna: 'sin reconocimiento', equivalencias: 'según la tabla de equivalencias',
                       personalizado: 'personalizado por alumno' };
@@ -5721,13 +5806,29 @@ async function eliminarPreceptora(id, apellido) {
         // Fecha limite y dias que faltan
         let aviso = 'Sin fecha límite cargada en el plan nuevo', avisoFondo = '#F1EFE8', avisoColor = 'var(--sga-texto-gris)';
         if (data.fecha_limite) {
-            const [dd, mm, aa] = data.fecha_limite.split('/').map(Number);
             const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-            const dias = Math.round((new Date(aa, mm - 1, dd) - hoy) / 86400000);
+            const dias = Math.round((_cierreFecha(data.fecha_limite) - hoy) / 86400000);
             aviso = dias >= 0
                 ? `Fecha límite ${data.fecha_limite} · faltan ${dias} día${dias === 1 ? '' : 's'}`
                 : `Fecha límite ${data.fecha_limite} · venció hace ${-dias} día${dias === -1 ? '' : 's'}`;
             if (dias <= 30) { avisoFondo = '#FFF3CD'; avisoColor = '#856404'; }
+        }
+        let avisoMigrar = '';
+        if (!data.se_puede_migrar) {
+            avisoMigrar = `<div style="background:#E5F0F8;color:#2D6FBD;border-radius:10px;padding:10px 14px;font-size:0.85rem;margin-bottom:14px;">
+                El ${esc(data.plan_nuevo.nombre)} rige desde el ${esc(data.plan_nuevo.fecha_vigencia)}: la migración se habilita a partir de esa fecha.
+                Mientras tanto podés revisar la situación de cada alumno y registrar prórrogas.</div>`;
+        }
+
+        // Resultado de la ultima migracion (se muestra una sola vez)
+        let resultado = '';
+        if (_cierreResultado) {
+            const m = _cierreResultado.migrados || [], rz = _cierreResultado.rechazados || [];
+            resultado = `<div style="background:#DCF5E5;color:var(--sga-exito,#1f7a4d);border-radius:10px;padding:10px 14px;font-size:0.85rem;margin-bottom:14px;">
+                <strong>Se migr${m.length === 1 ? 'ó' : 'aron'} ${m.length} alumno${m.length === 1 ? '' : 's'}</strong>${m.length ? ': ' + m.map(x => esc(x.nombre)).join('; ') : ''}.
+                ${rz.length ? `<br><span style="color:#856404;">No se migr${rz.length === 1 ? 'ó' : 'aron'}: ${rz.map(x => `${esc(x.nombre || 'alumno ' + x.id)} (${esc(x.motivo)})`).join('; ')}.</span>` : ''}
+            </div>`;
+            _cierreResultado = null;
         }
 
         const r = data.resumen;
@@ -5736,10 +5837,10 @@ async function eliminarPreceptora(id, apellido) {
             <div style="font-size:1.4rem;font-weight:700;">${valor}</div></div>`;
 
         const ESTADO_VIEJA = c => ({
-            aprobada:     'aprobada',
-            regular:      `regular${c.vence ? ', vence ' + c.vence : ''}${c.intentos ? ', ' + c.intentos + ' intento' + (c.intentos === 1 ? '' : 's') + ' usado' + (c.intentos === 1 ? '' : 's') : ''}`,
-            vencida:      `regular vencida${c.vence ? ' el ' + c.vence : ''}`,
-            libre:        'libre',
+            aprobada: 'aprobada',
+            regular:  `regular${c.vence ? ', vence ' + c.vence : ''}${c.intentos ? ', ' + c.intentos + ' intento' + (c.intentos === 1 ? '' : 's') + ' usado' + (c.intentos === 1 ? '' : 's') : ''}`,
+            vencida:  `regular vencida${c.vence ? ' el ' + c.vence : ''}`,
+            libre:    'libre',
         }[c.estado] || 'sin cursar');
         const BADGE = {
             aprobada: ['Aprobada', '#DCF5E5', 'var(--sga-exito,#1f7a4d)'],
@@ -5748,33 +5849,48 @@ async function eliminarPreceptora(id, apellido) {
         };
         const badge = (txt, fondo, color) =>
             `<span style="background:${fondo};color:${color};border-radius:8px;padding:2px 8px;font-size:0.74rem;font-weight:600;white-space:nowrap;">${txt}</span>`;
+        const botonChico = (txt, accion) =>
+            `<button type="button" class="btn-secundario" style="padding:4px 10px;font-size:0.78rem;" onclick="${accion}">${txt}</button>`;
 
-        const ORDEN = a => a.sugerencia === 'prorroga' ? 0 : a.sugerencia === 'migrar' ? 1 : a.situacion === 'bloqueado' ? 2 : 3;
+        const ORDEN = a => a.sugerencia === 'prorroga' ? 0 : a.sugerencia === 'migrar' ? 1
+                         : a.situacion === 'prorroga' ? 2 : a.situacion === 'bloqueado' ? 3 : 4;
         const alumnos = data.alumnos.slice().sort((x, y) => (ORDEN(x) - ORDEN(y)) || x.apellido.localeCompare(y.apellido));
+        const migrables = alumnos.filter(a => a.situacion === 'migrable');
 
         const filas = alumnos.map(a => {
-            let linea, etiqueta;
+            let linea, etiqueta, acciones = '';
             if (a.situacion === 'egresado') {
                 linea = `Terminó el ${esc(data.plan_viejo.nombre)}: no se migra.`;
                 etiqueta = badge('Egresado', '#DCF5E5', 'var(--sga-exito,#1f7a4d)');
             } else if (a.situacion === 'bloqueado') {
                 linea = `Tiene cursadas sin cerrar: ${a.cursadas_abiertas.map(esc).join(', ')}. No se puede migrar hasta cerrarlas.`;
                 etiqueta = badge('Bloqueado', '#FBEAEA', 'var(--sga-error)');
+                acciones = botonChico('Prórroga', `cierreAbrirProrroga(${a.id})`);
+            } else if (a.situacion === 'prorroga') {
+                const p = a.prorroga;
+                linea = `Con prórroga hasta el ${esc(p.hasta)} · ${esc(p.motivo)}${p.disposicion ? ' · ' + esc(p.disposicion) : ''}`;
+                etiqueta = badge(`Prórroga hasta ${esc(p.hasta)}`, '#FFF3CD', '#856404');
+                acciones = botonChico('Extender', `cierreAbrirProrroga(${a.id})`);
             } else {
                 const total = a.materias.length;
                 const cursar = a.materias.filter(m => m.resultado === 'cursar').length;
                 linea = `Se le reconocen ${a.reconocidas} de ${total}` +
                         (a.regulares ? ` · ${a.regulares} regular${a.regulares === 1 ? '' : 'es'}` : '') +
                         ` · le quedan por cursar ${cursar}`;
+                if (a.prorroga && !a.prorroga.vigente) linea += ` · prórroga vencida el ${esc(a.prorroga.hasta)}`;
                 if (a.sugerencia === 'prorroga') {
                     linea += ` · en el plan anterior le falta${a.pendientes_viejo === 1 ? '' : 'n'} ${a.pendientes_viejo}; en el nuevo le faltarían ${a.pendientes_nuevo}`;
                     etiqueta = badge('Sugerido: prórroga', '#FFF3CD', '#856404');
                 } else {
                     etiqueta = badge('Sugerido: migrar', '#E5F0F8', '#2D6FBD');
                 }
+                acciones = `<label style="display:inline-flex;align-items:center;gap:4px;font-size:0.8rem;cursor:pointer;">
+                        <input type="checkbox" class="cierre-cb" data-id="${a.id}" data-nombre="${esc(a.apellido)}, ${esc(a.nombre)}"
+                               ${a.sugerencia === 'migrar' ? 'checked' : ''} onchange="cierreActualizarBoton()"> Migrar
+                    </label>` + botonChico('Prórroga', `cierreAbrirProrroga(${a.id})`);
             }
             const detalle = a.materias.map(m => {
-                const b = BADGE[m.resultado];
+                const bg = BADGE[m.resultado];
                 const extra = m.resultado === 'regular' && m.vence ? ` <span style="font-size:0.72rem;color:var(--sga-texto-gris);">vence ${m.vence}</span>` : '';
                 const con = m.con.length
                     ? m.con.map(c => `${esc(c.nombre)} <span style="color:var(--sga-texto-gris);">(${esc(ESTADO_VIEJA(c))})</span>`).join('<br>')
@@ -5782,7 +5898,7 @@ async function eliminarPreceptora(id, apellido) {
                 return `<div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.6fr) minmax(0,0.8fr);gap:10px;padding:6px 0;border-top:1px solid var(--sga-borde);font-size:0.8rem;">
                     <div><strong>${esc(m.nombre)}</strong> <span style="color:var(--sga-texto-gris);">(${m.anio}°)</span></div>
                     <div>${con}</div>
-                    <div>${badge(b[0], b[1], b[2])}${extra}</div>
+                    <div>${badge(bg[0], bg[1], bg[2])}${extra}</div>
                 </div>`;
             }).join('');
             return `<div style="padding:12px 16px;border-top:1px solid var(--sga-borde);">
@@ -5791,10 +5907,10 @@ async function eliminarPreceptora(id, apellido) {
                         <div style="font-weight:600;">${esc(a.apellido)}, ${esc(a.nombre)} <span style="font-weight:400;font-size:0.78rem;color:var(--sga-texto-gris);">· DNI ${esc(a.dni)}</span></div>
                         <div style="font-size:0.8rem;color:var(--sga-texto-gris);margin-top:2px;">${linea}</div>
                     </div>
-                    <div style="display:flex;gap:8px;align-items:center;">
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                         ${etiqueta}
-                        <button type="button" class="btn-secundario" id="cierre-btn-det-${a.id}" style="padding:4px 10px;font-size:0.78rem;"
-                                onclick="cierreToggleDetalle(${a.id})">Ver detalle</button>
+                        ${acciones}
+                        ${botonChico('Ver detalle', `cierreToggleDetalle(${a.id})`).replace('<button ', `<button id="cierre-btn-det-${a.id}" `)}
                     </div>
                 </div>
                 <div id="cierre-det-${a.id}" style="display:none;margin-top:8px;padding-left:12px;">
@@ -5806,21 +5922,175 @@ async function eliminarPreceptora(id, apellido) {
             </div>`;
         }).join('');
 
+        const marcados = migrables.filter(a => a.sugerencia === 'migrar').length;
+        const botones = `
+            <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:14px;">
+                ${data.se_puede_cerrar ? `<button type="button" class="btn-secundario" onclick="cierreConfirmarCerrar()">Cerrar el ${esc(data.plan_viejo.nombre)}</button>` : ''}
+                ${migrables.length ? `<button type="button" class="btn-nuevo" id="cierre-btn-migrar" onclick="cierreConfirmarMigrar()">Migrar seleccionados (${marcados})</button>` : ''}
+            </div>`;
+
         cont.innerHTML = `
+            ${resultado}
             <div style="background:${avisoFondo};color:${avisoColor};border-radius:10px;padding:10px 14px;font-size:0.85rem;margin-bottom:14px;">${aviso}</div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;">
+            ${avisoMigrar}
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:14px;">
                 ${tarjeta('Terminaron', r.egresados)}
                 ${tarjeta('Sugeridos para migrar', r.sugeridos_migrar)}
                 ${tarjeta('Sugeridos para prórroga', r.sugeridos_prorroga)}
+                ${tarjeta('Con prórroga', r.con_prorroga)}
                 ${tarjeta('Con cursadas abiertas', r.bloqueados)}
             </div>
             <div class="tarjeta-form" style="padding:0;overflow:hidden;">
                 <div style="padding:12px 16px;font-weight:700;">Alumnos del ${esc(data.plan_viejo.nombre)} (${r.total})</div>
                 ${filas || '<div style="padding:12px 16px;color:var(--sga-texto-gris);">No hay alumnos en este plan.</div>'}
             </div>
-            <p style="font-size:0.8rem;color:var(--sga-texto-gris);margin-top:12px;">
-                Esta pantalla es de consulta: muestra qué le pasaría a cada alumno si migra al ${esc(data.plan_nuevo.nombre)}.
-            </p>`;
+            ${botones}
+            <div id="cierre-msg" style="display:none"></div>`;
+    }
+
+    // ── Confirmaciones ──
+    function _cierreConfirmar(titulo, texto, boton, accion) {
+        document.getElementById('cierre-confirmar-titulo').textContent = titulo;
+        document.getElementById('cierre-confirmar-texto').textContent = texto;
+        document.getElementById('cierre-confirmar-btn').textContent = boton;
+        _cierreConfirmarAccion = accion;
+        abrirModal('modal-cierre-confirmar');
+    }
+
+    function cierreEjecutarConfirmacion() {
+        cerrarModal('modal-cierre-confirmar');
+        const accion = _cierreConfirmarAccion;
+        _cierreConfirmarAccion = null;
+        if (accion) accion();
+    }
+
+    // ── Migrar ──
+    function cierreConfirmarMigrar() {
+        _cierreMensaje('');
+        if (!_cierreDatos) return;
+        if (!_cierreDatos.se_puede_migrar) {
+            _cierreMensaje(`El ${_cierreDatos.plan_nuevo.nombre} rige desde el ${_cierreDatos.plan_nuevo.fecha_vigencia}: todavía no se puede migrar.`, 'error');
+            return;
+        }
+        const elegidos = Array.from(document.querySelectorAll('.cierre-cb:checked'));
+        if (!elegidos.length) {
+            _cierreMensaje('Tildá "Migrar" en los alumnos que querés pasar al plan nuevo.', 'error');
+            return;
+        }
+        const ids = elegidos.map(c => parseInt(c.dataset.id, 10)).filter(Number.isInteger);
+        const nombres = elegidos.map(c => c.dataset.nombre).join('\n');
+        const n = ids.length;
+        _cierreConfirmar(
+            `¿Migrar ${n} alumno${n === 1 ? '' : 's'} al ${_cierreDatos.plan_nuevo.nombre}?`,
+            `${nombres}\n\nPasan al plan nuevo con lo que se les reconoce según la tabla. Queda registrado en el historial de cada uno. No se puede deshacer.`,
+            `Sí, migrar ${n}`,
+            () => cierreEjecutarMigrar(ids));
+    }
+
+    async function cierreEjecutarMigrar(ids) {
+        let data;
+        try {
+            const res = await fetch(`/api/planes/${cierrePlanId}/cierre/migrar`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ alumnos: ids })
+            });
+            data = await res.json();
+        } catch (e) {
+            data = { error: 'No se pudo completar la migración.' };
+        }
+        if (data.error) { _cierreMensaje(data.error, 'error'); return; }
+        _cierreResultado = data;
+        if (typeof mostrarAvisoFlotante === 'function') {
+            mostrarAvisoFlotante(`✅ Se migr${data.migrados.length === 1 ? 'ó' : 'aron'} ${data.migrados.length} alumno${data.migrados.length === 1 ? '' : 's'}`);
+        }
+        cargarCierrePlan();
+    }
+
+    // ── Cerrar el plan ──
+    function cierreConfirmarCerrar() {
+        if (!_cierreDatos) return;
+        const v = _cierreDatos.plan_viejo.nombre;
+        _cierreConfirmar(
+            `¿Cerrar el ${v}?`,
+            `El ${v} pasa a cerrado: deja de aparecer en el selector de planes y en los listados. Los egresados conservan todo su historial. No se puede deshacer.`,
+            `Sí, cerrar el ${v}`,
+            cierreEjecutarCerrar);
+    }
+
+    async function cierreEjecutarCerrar() {
+        let data;
+        try {
+            const res = await fetch(`/api/planes/${cierrePlanId}/cerrar`, { method: 'POST' });
+            data = await res.json();
+        } catch (e) {
+            data = { error: 'No se pudo cerrar el plan.' };
+        }
+        if (data.error) { _cierreMensaje(data.error, 'error'); return; }
+        if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('✅ ' + data.mensaje);
+        cierrePlanId = null;
+        materiasPlanSel = null;
+        navegarA('materias', 'Plan de Estudios');
+    }
+
+    // ── Prorroga ──
+    function cierreAbrirProrroga(aid) {
+        if (!_cierreDatos) return;
+        const a = _cierreDatos.alumnos.find(x => x.id === aid);
+        if (!a) return;
+        _cierreProrrogaAlumno = aid;
+        const extender = a.prorroga && a.prorroga.vigente;
+        document.getElementById('cierre-prorroga-titulo').textContent =
+            extender ? 'Extender la prórroga' : 'Prórroga en el plan anterior';
+        document.getElementById('cierre-prorroga-alumno').textContent =
+            `${a.apellido}, ${a.nombre}` + (extender ? ` · hoy hasta el ${a.prorroga.hasta}` : '');
+
+        // Fecha propuesta: el 31/03 siguiente a la fecha limite (o a la prorroga que se extiende, o a hoy)
+        const base = (extender && _cierreFecha(a.prorroga.hasta)) || _cierreFecha(_cierreDatos.fecha_limite) || new Date();
+        const pasoMarzo = base.getMonth() > 2 || (base.getMonth() === 2 && base.getDate() >= 31);
+        const anio = base.getFullYear() + (pasoMarzo ? 1 : 0);
+        const mes = document.getElementById('cierre-prorroga-mes');
+        mes.innerHTML = _CIERRE_MESES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+        document.getElementById('cierre-prorroga-dia').value = 31;
+        mes.value = '3';
+        document.getElementById('cierre-prorroga-anio').value = anio;
+        document.getElementById('cierre-prorroga-motivo').value = '';
+        document.getElementById('cierre-prorroga-disp').value = '';
+        document.getElementById('cierre-prorroga-error').style.display = 'none';
+        abrirModal('modal-cierre-prorroga');
+    }
+
+    async function cierreGuardarProrroga() {
+        const err = document.getElementById('cierre-prorroga-error');
+        const mostrarError = t => { err.textContent = t; err.style.display = 'block'; };
+        err.style.display = 'none';
+        const dia  = parseInt(document.getElementById('cierre-prorroga-dia').value, 10);
+        const mes  = parseInt(document.getElementById('cierre-prorroga-mes').value, 10);
+        const anio = parseInt(document.getElementById('cierre-prorroga-anio').value, 10);
+        const motivo = document.getElementById('cierre-prorroga-motivo').value.trim();
+        const disposicion = document.getElementById('cierre-prorroga-disp').value.trim();
+        const f = new Date(anio, mes - 1, dia);
+        if (!dia || !mes || !anio || f.getDate() !== dia || f.getMonth() !== mes - 1) {
+            mostrarError('La fecha no es válida.'); return;
+        }
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        if (f <= hoy) { mostrarError('La prórroga tiene que vencer después de hoy.'); return; }
+        if (motivo.length < 5) { mostrarError('El motivo es obligatorio (mínimo 5 caracteres).'); return; }
+
+        const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+        let data;
+        try {
+            const res = await fetch(`/api/planes/${cierrePlanId}/cierre/prorroga`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ alumno_id: _cierreProrrogaAlumno, hasta, motivo, disposicion })
+            });
+            data = await res.json();
+        } catch (e) {
+            data = { error: 'No se pudo guardar la prórroga.' };
+        }
+        if (data.error) { mostrarError(data.error); return; }
+        cerrarModal('modal-cierre-prorroga');
+        if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('✅ ' + data.mensaje);
+        cargarCierrePlan();
     }
 
     function cambiarPlanMaterias(id) {
