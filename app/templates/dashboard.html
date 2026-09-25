@@ -1294,6 +1294,7 @@
 
 <!-- ══ MAIN ══ -->
 <div class="main">
+    {% include '_aviso_plan.html' %}
     {% include '_aviso_anio.html' %}
     <div class="contenido">
 
@@ -4355,6 +4356,23 @@
             console.error('No se pudo actualizar el aviso del año lectivo:', e);
         }
     }
+    // ── Barra de aviso del cambio de plan: se vuelve a pedir después de migrar,
+    //    registrar una prórroga o cerrar el plan. Va arriba de la del año. ──
+    async function actualizarAvisoPlan() {
+        try {
+            const res = await fetch('/api/aviso-plan');
+            if (!res.ok || res.redirected) return;
+            const html = (await res.text()).trim();
+            const actual = document.getElementById('aviso-plan');
+            if (actual) actual.remove();
+            if (html) {
+                const main = document.querySelector('.main');
+                if (main) main.insertAdjacentHTML('afterbegin', html);
+            }
+        } catch (e) {
+            console.error('No se pudo actualizar el aviso del cambio de plan:', e);
+        }
+    }
     (function () {
         const fetchOriginal = window.fetch;
         const RUTAS_AVISO = ['/api/notas/guardar/', '/api/notas/cerrar/', '/api/pendientes-libro-folio', '/api/config/anio-lectivo'];
@@ -4365,6 +4383,9 @@
                 const metodo = ((opciones && opciones.method) || 'GET').toUpperCase();
                 if (metodo === 'POST' && res.ok && RUTAS_AVISO.some(r => url.startsWith(r))) {
                     actualizarAvisoAnio();
+                }
+                if (metodo === 'POST' && res.ok && /^\/api\/planes\/\d+\/(cierre\/|cerrar)/.test(url)) {
+                    actualizarAvisoPlan();
                 }
             } catch (e) { /* el aviso nunca interfiere con la respuesta */ }
             return res;
@@ -5751,8 +5772,9 @@ async function eliminarPreceptora(id, apellido) {
         el.textContent = texto;
     }
 
-    function abrirCierrePlan() {
-        cierrePlanId = materiasPlanSel;
+    function abrirCierrePlan(planId) {
+        // Sin argumento: el plan elegido en Plan de Estudios; desde la barra de aviso, el del aviso
+        cierrePlanId = planId || materiasPlanSel;
         _cierreResultado = null;
         navegarA('cierre-plan', 'Cerrar plan');
     }

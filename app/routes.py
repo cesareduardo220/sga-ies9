@@ -958,6 +958,66 @@ def api_aviso_anio():
                            aviso_anio=_calcular_aviso_anio(rol, session.get('carrera_id')))
 
 
+def _calcular_aviso_plan(rol, carrera_id, ciclo=None):
+    """
+    Aviso de cambio de plan para la coordinacion: desde 30 dias antes de la
+    fecha limite de la transicion (fecha_cierre del plan nuevo) y mientras el
+    plan anterior siga abierto con algo por hacer: alumnos por migrar o
+    prorrogar, o ninguno y el plan ya se puede cerrar. Si solo quedan alumnos
+    con prorroga vigente no avisa hasta que venza. Mismo criterio que la
+    pantalla Cerrar plan (_situacion_cierre_alumno).
+    Devuelve una lista (un aviso por plan) o None.
+    """
+    if rol != 'coordinador' or not carrera_id:
+        return None
+    hoy = date.today()
+    ciclo = ciclo or get_ciclo_lectivo()
+    conn_p = get_db(); cur_p = conn_p.cursor()
+    avisos = []
+    try:
+        cur_p.execute("""SELECT id FROM planes_estudio
+                         WHERE carrera_id = %s AND activo = TRUE
+                         ORDER BY fecha_vigencia, id""", (carrera_id,))
+        for (plan_id,) in cur_p.fetchall():
+            viejo, nuevo, err = _planes_del_cierre(cur_p, plan_id, carrera_id)
+            if err or not nuevo[4]:
+                continue
+            dias = (nuevo[4] - hoy).days
+            if dias > 30:
+                continue
+            cur_p.execute("""SELECT id FROM alumnos_carrera
+                             WHERE carrera_id = %s AND plan_id = %s AND activo = TRUE""",
+                          (carrera_id, plan_id))
+            pendientes = con_prorroga = 0
+            for (aid,) in cur_p.fetchall():
+                s = _situacion_cierre_alumno(cur_p, aid, plan_id, nuevo[0], nuevo[3],
+                                             ciclo['anio_inicio'])
+                if s['situacion'] == 'egresado':
+                    continue
+                # Con prorroga vigente no hay nada que hacer todavia, aunque tenga
+                # cursadas abiertas (ahi su situacion figura 'bloqueado')
+                if s['prorroga'] and s['prorroga']['vigente']:
+                    con_prorroga += 1
+                else:
+                    pendientes += 1
+            if not pendientes and con_prorroga:
+                continue
+            avisos.append({'plan_id': plan_id, 'viejo': viejo[1], 'nuevo': nuevo[1],
+                           'limite': nuevo[4].strftime('%d/%m/%Y'), 'dias': dias,
+                           'pendientes': pendientes})
+    finally:
+        cur_p.close(); conn_p.close()
+    return avisos or None
+
+
+@auth.route('/api/aviso-plan', methods=['GET'])
+@login_requerido(['admin', 'coordinador', 'preceptora'])
+def api_aviso_plan():
+    """Barra de aviso del cambio de plan ya armada (vacia si no hay nada), para refrescarla sin recargar."""
+    return render_template('_aviso_plan.html',
+                           aviso_plan=_calcular_aviso_plan(session.get('rol'), session.get('carrera_id')))
+
+
 # Etiqueta visible de cada rol segun el genero de la persona:
 # (masculino, femenino, sin dato). El rol interno no cambia.
 _ETIQUETAS_ROL = {
@@ -1030,6 +1090,7 @@ def dashboard():
             bloqueado = True
 
     aviso_anio = _calcular_aviso_anio(rol, carrera_id, ciclo)
+    aviso_plan = _calcular_aviso_plan(rol, carrera_id, ciclo)
 
     # Etiqueta del rol para el chip de la cabecera, segun el genero de la persona.
     # Se consulta en cada carga: un cambio de genero se ve sin volver a iniciar sesion.
@@ -1054,6 +1115,7 @@ def dashboard():
         pendientes_libro_folio=pendientes,
         bloqueado=bloqueado,
         aviso_anio=aviso_anio,
+        aviso_plan=aviso_plan,
     )
 
 

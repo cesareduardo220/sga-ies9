@@ -1,0 +1,20 @@
+{% if aviso_plan %}
+<div id="aviso-plan">
+  {% for a in aviso_plan %}
+  {% set vencida = a.dias < 0 %}
+  <div style="padding:10px 18px; background:{{ '#FDECEC' if vencida else '#FFF4E0' }}; border-bottom:1.5px solid {{ '#E5A5A5' if vencida else '#E8C07A' }}; color:{{ '#842029' if vencida else '#7A4B00' }}; font-size:0.86rem; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+    <div style="flex:1; min-width:240px;">
+      <strong>Cambio de plan:</strong>
+      {% if a.dias > 1 %}la transición del {{ a.viejo }} al {{ a.nuevo }} vence el {{ a.limite }} (quedan {{ a.dias }} días).
+      {% elif a.dias == 1 %}la transición del {{ a.viejo }} al {{ a.nuevo }} vence mañana, {{ a.limite }}.
+      {% elif a.dias == 0 %}la transición del {{ a.viejo }} al {{ a.nuevo }} vence hoy.
+      {% else %}la transición del {{ a.viejo }} al {{ a.nuevo }} venció el {{ a.limite }}.{% endif %}
+      {% if a.pendientes > 1 %}Quedan {{ a.pendientes }} alumnos en el {{ a.viejo }} por migrar o prorrogar.
+      {% elif a.pendientes == 1 %}Queda 1 alumno en el {{ a.viejo }} por migrar o prorrogar.
+      {% else %}Ya no quedan alumnos por migrar: se puede cerrar el {{ a.viejo }}.{% endif %}
+    </div>
+    <button class="btn-secundario" onclick="abrirCierrePlan({{ a.plan_id }})">Ir a Cerrar plan</button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
