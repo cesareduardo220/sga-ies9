@@ -1760,6 +1760,17 @@ def _estado_materias_alumno(cur, aid):
     return estado
 
 
+def _migrados_al_plan(cur, carrera_id, plan_id):
+    """Alumnos activos que estan hoy en plan_id porque migraron de un plan anterior."""
+    cur.execute("""
+        SELECT DISTINCT a.id FROM alumnos_carrera a
+        JOIN historial_plan_alumno h ON h.alumno_id = a.id
+        WHERE a.carrera_id = %s AND a.activo = TRUE AND a.plan_id = %s
+          AND h.plan_nuevo_id = %s AND h.plan_viejo_id IS NOT NULL
+    """, (carrera_id, plan_id, plan_id))
+    return [fila[0] for fila in cur.fetchall()]
+
+
 def _reconocidas_por_equivalencia(cur, aid):
     """Materias del plan actual del alumno que se le reconocen por haber migrado de
     un plan anterior, segun la tabla de equivalencias y la politica del plan nuevo.
@@ -7040,6 +7051,13 @@ def api_mesas_detalle(mid):
         ORDER BY a.apellido, a.nombre
     """, (mesa[8], mid))
     inscriptos = cur.fetchall()
+    # Sin cursada en esta materia: puede ser regular por equivalencia (alumno migrado)
+    por_equiv = set()
+    for r in inscriptos:
+        if r[5] is None:
+            _rec = _reconocidas_por_equivalencia(cur, r[1]).get(mesa[8])
+            if _rec and _rec['resultado'] == 'regular':
+                por_equiv.add(r[1])
     cur.close(); conn.close()
 
     return jsonify({
@@ -7051,7 +7069,9 @@ def api_mesas_detalle(mid):
         'inscriptos': [{
             'inscripcion_mesa_id': r[0], 'alumno_id': r[1],
             'apellido': r[2], 'nombre': r[3], 'dni': formatear_dni(r[4]),
-            'condicion_cursada': r[5], 'resultado': r[6],
+            'condicion_cursada': 'regular' if r[1] in por_equiv else r[5],
+            'por_equivalencia': r[1] in por_equiv,
+            'resultado': r[6],
             'nota_escrita': float(r[7]) if r[7] else None,
             'nota_oral': float(r[8]) if r[8] else None,
             'nota_final': float(r[9]) if r[9] else None,
@@ -7101,26 +7121,46 @@ def api_mesas_inscribir(mid):
         ORDER BY cu.cargado_en DESC LIMIT 1
     """, (alumno_id, materia_id_mesa))
     _cur_row = cur.fetchone()
+
+    # Alumno migrado de un plan anterior: lo reconocido por equivalencia
+    _rec = _reconocidas_por_equivalencia(cur, alumno_id)
+    _rec_mat = _rec.get(materia_id_mesa)
+    if _rec_mat and _rec_mat['resultado'] == 'aprobada':
+        cur.close(); conn.close()
+        return jsonify({'error': 'El alumno ya tiene esta materia aprobada por equivalencia.'}), 400
+
     if not _cur_row:
-        cur.close(); conn.close()
-        return jsonify({'error': 'El alumno no tiene una cursada cerrada en esta materia.'}), 400
+        # Sin cursada en esta materia: vale la regularidad por equivalencia
+        if not (_rec_mat and _rec_mat['resultado'] == 'regular'):
+            cur.close(); conn.close()
+            return jsonify({'error': 'El alumno no tiene una cursada cerrada en esta materia.'}), 400
+        if mesa[1] != 'regular':
+            cur.close(); conn.close()
+            return jsonify({'error': 'La regularidad por equivalencia habilita solo mesas de alumnos regulares.'}), 400
+        if _rec_mat['vence'] and mesa[3] > _rec_mat['vence']:
+            cur.close(); conn.close()
+            return jsonify({'error': f'La regularidad del alumno (por equivalencia) venció el '
+                                     f'{_rec_mat["vence"].strftime("%d/%m/%Y")}.'}), 400
+        if _rec_mat['intentos'] >= 3:
+            cur.close(); conn.close()
+            return jsonify({'error': 'El alumno agotó los 3 intentos permitidos.'}), 400
+    else:
+        _cond, _cargado, _vence = _cur_row
+        if _vence and mesa[3] > _vence:
+            cur.close(); conn.close()
+            return jsonify({'error': f'La condición del alumno venció el '
+                                     f'{_vence.strftime("%d/%m/%Y")}.'}), 400
 
-    _cond, _cargado, _vence = _cur_row
-    if _vence and mesa[3] > _vence:
-        cur.close(); conn.close()
-        return jsonify({'error': f'La condición del alumno venció el '
-                                 f'{_vence.strftime("%d/%m/%Y")}.'}), 400
+        cur.execute("""
+            SELECT COUNT(*) FROM examenes
+            WHERE alumno_id = %s AND materia_id = %s AND fecha_mesa >= %s
+        """, (alumno_id, materia_id_mesa, _cargado))
+        if cur.fetchone()[0] >= 3:
+            cur.close(); conn.close()
+            return jsonify({'error': 'El alumno agotó los 3 intentos permitidos.'}), 400
 
     cur.execute("""
-        SELECT COUNT(*) FROM examenes
-        WHERE alumno_id = %s AND materia_id = %s AND fecha_mesa >= %s
-    """, (alumno_id, materia_id_mesa, _cargado))
-    if cur.fetchone()[0] >= 3:
-        cur.close(); conn.close()
-        return jsonify({'error': 'El alumno agotó los 3 intentos permitidos.'}), 400
-
-    cur.execute("""
-        SELECT m.nombre, m.orden FROM correlatividades co
+        SELECT m.nombre, m.orden, m.id FROM correlatividades co
         JOIN materias m ON m.id = co.requiere_materia_id
         WHERE co.materia_id = %s AND co.tipo = 'aprobada'
           AND co.requiere_materia_id NOT IN (
@@ -7135,11 +7175,12 @@ def api_mesas_inscribir(mid):
               ) sub
           )
     """, (materia_id_mesa, alumno_id, alumno_id))
-    _faltantes = cur.fetchall()
+    _faltantes = [f for f in cur.fetchall()
+                  if _rec.get(f[2], {}).get('resultado') != 'aprobada']
     if _faltantes:
         cur.close(); conn.close()
         return jsonify({'error': 'Le falta aprobar: ' +
-                        ', '.join(f'({o}) {n}' for n, o in _faltantes)}), 400
+                        ', '.join(f'({o}) {n}' for n, o, _id in _faltantes)}), 400
 
     try:
         cur.execute("""
@@ -7414,6 +7455,37 @@ def api_mesas_alumnos_disponibles(mid):
     candidatos = cur.fetchall()
 
     # ------------------------------------------------------------
+    # 1b) Migrados de un plan anterior: lo reconocido por equivalencia
+    # ------------------------------------------------------------
+    cur.execute("SELECT plan_id FROM materias WHERE id = %s", (materia_id,))
+    _plan_materia = (cur.fetchone() or [None])[0]
+    reconocidas_de = {}
+    if _plan_materia is not None:
+        for _aid in _migrados_al_plan(cur, carrera_id, _plan_materia):
+            reconocidas_de[_aid] = _reconocidas_por_equivalencia(cur, _aid)
+    # La que ya esta aprobada por equivalencia no se rinde
+    candidatos = [c for c in candidatos
+                  if reconocidas_de.get(c[0], {}).get(materia_id, {}).get('resultado') != 'aprobada']
+    por_equivalencia = set()
+    if tipo == 'regular':
+        ya_candidatos = {c[0] for c in candidatos}
+        cur.execute("SELECT alumno_id FROM inscripciones_mesa WHERE mesa_id = %s", (mid,))
+        en_mesa = {fila[0] for fila in cur.fetchall()}
+        cur.execute("""SELECT alumno_id FROM examenes
+                       WHERE materia_id = %s AND resultado = 'aprobado'""", (materia_id,))
+        ya_aprobaron = {fila[0] for fila in cur.fetchall()}
+        for _aid, _rec in reconocidas_de.items():
+            _r = _rec.get(materia_id)
+            if (not _r or _r['resultado'] != 'regular' or _aid in ya_candidatos
+                    or _aid in en_mesa or _aid in ya_aprobaron):
+                continue
+            cur.execute("SELECT apellido, nombre, dni FROM alumnos_carrera WHERE id = %s", (_aid,))
+            _ap, _no, _dni = cur.fetchone()
+            candidatos.append((_aid, _ap, _no, _dni, 'regular', _r['vence'], _r['intentos']))
+            por_equivalencia.add(_aid)
+        candidatos.sort(key=lambda c: (c[1] or '', c[2] or ''))
+
+    # ------------------------------------------------------------
     # 2) Correlatividades de tipo 'aprobada' que exige esta materia
     # ------------------------------------------------------------
     cur.execute("""
@@ -7445,6 +7517,11 @@ def api_mesas_alumnos_disponibles(mid):
         """, (ids_alumnos, ids_alumnos))
         for alumno_id, mat_id in cur.fetchall():
             aprobadas_por_alumno.setdefault(alumno_id, set()).add(mat_id)
+    # Las aprobadas por equivalencia tambien cuentan para las correlativas
+    for _aid, _rec in reconocidas_de.items():
+        for _mid, _r in _rec.items():
+            if _r['resultado'] == 'aprobada':
+                aprobadas_por_alumno.setdefault(_aid, set()).add(_mid)
 
     cur.close(); conn.close()
 
@@ -7481,7 +7558,8 @@ def api_mesas_alumnos_disponibles(mid):
             'condicion': cond,
             'vence_el': vence_el.strftime('%d/%m/%Y') if vence_el else None,
             'intentos': intentos,
-            'intentos_restantes': max(0, 3 - intentos)
+            'intentos_restantes': max(0, 3 - intentos),
+            'por_equivalencia': aid in por_equivalencia
         }
 
         if motivos:

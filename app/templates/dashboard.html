@@ -10794,7 +10794,8 @@ async function eliminarPreceptora(id, apellido) {
         tbody.innerHTML = m.inscriptos.map((al) => {
             let condBadge;
             if (al.condicion_cursada === 'regular') {
-                condBadge = '<span class="badge-estado" style="background:#E5F0F8;color:#2D6CA8">Regular</span>';
+                condBadge = '<span class="badge-estado" style="background:#E5F0F8;color:#2D6CA8">'
+                          + (al.por_equivalencia ? 'Regular (equivalencia)' : 'Regular') + '</span>';
             } else if (al.condicion_cursada === 'aprobado') {
                 condBadge = '<span class="badge-estado" style="background:#E6F9EE;color:#1A6E3C">Aprobado</span>';
             } else if (al.condicion_cursada === 'promocionado') {
