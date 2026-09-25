@@ -2584,8 +2584,8 @@
 
                     <!-- Equivalencias manuales -->
                     <div class="tarjeta-form" id="panel-equiv-manuales">
-                        <div class="tarjeta-form-titulo">🔁 Equivalencias manuales</div>
-                        <p style="font-size:0.82rem; color:var(--sga-texto-gris); margin:0 0 8px;">Para materias que cambiaron de nombre pero son equivalentes, elegí su equivalente en el plan nuevo.</p>
+                        <div class="tarjeta-form-titulo">🔁 Tabla de equivalencias</div>
+                        <p style="font-size:0.82rem; color:var(--sga-texto-gris); margin:0 0 8px;">Para cada materia del plan nuevo, indicá qué materias del plan anterior tiene que tener aprobadas el alumno para que se le reconozca (si son varias, se necesitan todas). Viene precargada con lo que el sistema detectó por el nombre: revisala con la resolución en la mano. Si una materia cambió de contenido, quitale la equivalencia.</p>
                         <div id="lista-equiv-manuales"></div>
                     </div>
 
@@ -5319,7 +5319,11 @@ async function eliminarPreceptora(id, apellido) {
         html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">';
         html += `<div style="background:#E1F5EE;border-radius:10px;padding:12px">
             <div style="font-weight:700;font-size:0.8rem;color:#0f5132;margin-bottom:8px">✅ Se mantienen</div>
-            ${comp.iguales.map(m => `<div style="font-size:0.78rem;padding:3px 0;border-bottom:1px solid #b9e2cf">${m}</div>`).join('') || '<div style="font-size:0.78rem;color:#666">Ninguna</div>'}
+            ${comp.iguales.map(m => {
+                const c = (comp.cambios_anio || []).find(x => x.nombre === m);
+                const marca = c ? ` <span style="background:#FFF3CD;color:#856404;border-radius:8px;padding:1px 6px;font-size:0.72rem;">${c.anio_viejo}° → ${c.anio_nuevo}°</span>` : '';
+                return `<div style="font-size:0.78rem;padding:3px 0;border-bottom:1px solid #b9e2cf">${m}${marca}</div>`;
+            }).join('') || '<div style="font-size:0.78rem;color:#666">Ninguna</div>'}
         </div>`;
         html += `<div style="background:#E5F0F8;border-radius:10px;padding:12px">
             <div style="font-weight:700;font-size:0.8rem;color:#2D6CA8;margin-bottom:8px">🆕 Nuevas</div>
@@ -5340,37 +5344,91 @@ async function eliminarPreceptora(id, apellido) {
                     <span style="color:#666;margin:0 8px">→</span>
                     <span style="color:#2D6CA8">${s.nueva}</span>
                 </div>`).join('')}
-                <div style="font-size:0.72rem;color:#856404;margin-top:8px">El sistema las incluyó en las equivalencias manuales para que puedas confirmar o rechazar cada una.</div>
+                <div style="font-size:0.72rem;color:#856404;margin-top:8px">Ya vienen cargadas en la tabla de equivalencias: confirmalas o quitalas.</div>
             </div>`;
         }
 
         document.getElementById('cambio-comparacion').innerHTML = html;
 
-        // Panel de equivalencias manuales
-        const eliminadas = comp.eliminadas;
-        const similaresMapa = {};
-        comp.similares.forEach(s => { similaresMapa[s.vieja] = s; });
+        // Tabla de equivalencias: materia nueva (por su orden) -> materias del
+        // plan anterior. Arranca con las sugerencias del analisis.
+        window._equivTabla = {};
+        const sug = (_planNuevoData && _planNuevoData.sugerencias) || {};
+        filasNuevo.forEach(f => { window._equivTabla[f.orden] = (sug[String(f.orden)] || []).slice(); });
+        renderTablaEquiv();
+    }
 
-        const opciones = ['— Sin equivalente —', ...filasNuevo.map(f => f.nombre)].map(
-            n => `<option value="${n.toLowerCase()}">${n}</option>`
-        ).join('');
+    function renderTablaEquiv() {
+        const cont = document.getElementById('lista-equiv-manuales');
+        if (!cont || !_planNuevoData) return;
+        const viejas = _planNuevoData.materias_plan_actual || [];
+        const porId  = {};
+        viejas.forEach(v => { porId[v.id] = v; });
+        const filas  = (_planNuevoData.filas_nuevo || []).slice()
+            .sort((a, b) => (a.anio - b.anio) || (a.orden - b.orden));
+        const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
-        let htmlEquiv = '';
-        eliminadas.forEach(nom => {
-            const sim = similaresMapa[nom];
-            const selDefault = sim ? sim.nueva.toLowerCase() : '';
-            const idVieja = sim ? sim.id_vieja : '';
-            htmlEquiv += `<div class="fila-equivalencia">
-                <span class="vieja" data-id-vieja="${idVieja}">${nom}</span>
-                <span class="flecha">→</span>
-                <select class="select-tabla equiv-select" style="flex:1;" data-nom-vieja="${nom}" data-id-vieja="${idVieja}">
-                    ${opciones.replace(`value="${selDefault}"`, `value="${selDefault}" selected`)}
-                </select>
+        let html = `<div style="display:flex;gap:8px;font-size:0.72rem;font-weight:700;color:var(--sga-texto-gris);text-transform:uppercase;padding:0 0 6px;border-bottom:1px solid var(--sga-borde);">
+            <span style="min-width:220px;">Materia del plan nuevo</span>
+            <span style="flex:1;">Se reconoce con (plan anterior)</span>
+        </div>`;
+        let anioActual = null;
+        filas.forEach(f => {
+            if (f.anio !== anioActual) {
+                anioActual = f.anio;
+                html += `<div style="font-weight:700;font-size:0.76rem;color:var(--sga-verde-medio);margin:14px 0 4px;">${f.anio}° año</div>`;
+            }
+            const ids = window._equivTabla[f.orden] || [];
+            const chips = ids.map(id => {
+                const v = porId[id];
+                if (!v) return '';
+                // Mismo anio: "(1°)". Otro anio: aviso "era de 2° año" (en el plan anterior)
+                const anioTxt = v.anio !== f.anio
+                    ? ` <span style="color:#856404;font-weight:600;">· era de ${v.anio}° año</span>`
+                    : ` <span style="color:var(--sga-texto-gris);">(${v.anio}°)</span>`;
+                return `<span style="display:inline-flex;align-items:center;gap:6px;background:#E5F0F8;border-radius:14px;padding:3px 6px 3px 10px;font-size:0.78rem;margin:2px 4px 2px 0;">
+                    ${esc(v.nombre)}${anioTxt}
+                    <button type="button" onclick="quitarEquiv(${f.orden}, ${v.id})" title="Quitar"
+                            style="border:none;background:none;cursor:pointer;color:var(--sga-error);font-size:1rem;line-height:1;">×</button>
+                </span>`;
+            }).join('');
+            const opciones = viejas.filter(v => !ids.includes(v.id))
+                .map(v => `<option value="${v.id}">${esc(v.nombre)} (${v.anio}° año)</option>`).join('');
+            html += `<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--sga-borde);">
+                <span style="min-width:220px;font-weight:600;font-size:0.85rem;">${esc(f.nombre)}</span>
+                <div style="flex:1;min-width:260px;">
+                    <div>${chips || '<span style="font-size:0.78rem;color:var(--sga-texto-gris);font-style:italic;">Sin equivalente: el alumno la tiene que cursar</span>'}</div>
+                    ${opciones ? `<select class="select-tabla" style="margin-top:6px;max-width:100%;" onchange="agregarEquiv(${f.orden}, this.value)">
+                        <option value="">+ Agregar materia del plan anterior…</option>${opciones}
+                    </select>` : ''}
+                </div>
             </div>`;
         });
 
-        document.getElementById('lista-equiv-manuales').innerHTML =
-            htmlEquiv || '<div style="font-size:0.85rem;color:var(--sga-texto-gris)">No hay materias eliminadas — no se necesitan equivalencias manuales.</div>';
+        // Materias del plan anterior que no reconocen ninguna nueva
+        const usadas = new Set(Object.values(window._equivTabla).flat());
+        const sinUso = viejas.filter(v => !usadas.has(v.id));
+        if (sinUso.length) {
+            html += `<div style="background:#FFF3CD;border-radius:10px;padding:10px 12px;margin-top:14px;font-size:0.78rem;color:#856404;">
+                <strong>Del plan anterior no se reconoce en ninguna:</strong>
+                ${sinUso.map(v => `${esc(v.nombre)} (${v.anio}°)`).join(', ')}.
+                Lo aprobado en ellas no va a contar en el plan nuevo.
+            </div>`;
+        }
+        cont.innerHTML = html;
+    }
+
+    function agregarEquiv(orden, idVieja) {
+        const id = parseInt(idVieja, 10);
+        if (!id) return;
+        const lista = window._equivTabla[orden] || (window._equivTabla[orden] = []);
+        if (!lista.includes(id)) lista.push(id);
+        renderTablaEquiv();
+    }
+
+    function quitarEquiv(orden, idVieja) {
+        window._equivTabla[orden] = (window._equivTabla[orden] || []).filter(x => x !== idVieja);
+        renderTablaEquiv();
     }
 
     function cancelarCambioPlan() {
@@ -5477,16 +5535,10 @@ async function eliminarPreceptora(id, apellido) {
         const cierre  = (cieDia && cieMes && cieAnio) ? `${cieAnio}-${cieMes}-${cieDia}` : null;
         const politica  = document.querySelector('input[name="politica-migracion"]:checked')?.value || 'exactas';
 
-        // Recolectar equivalencias manuales
-        const equivalencias = [];
-        document.querySelectorAll('.equiv-select').forEach(sel => {
-            const nomVieja  = sel.dataset.nomVieja;
-            const idVieja   = sel.dataset.idVieja;
-            const nomNueva  = sel.value;
-            if (nomNueva && nomNueva !== '— sin equivalente —'.toLowerCase()) {
-                equivalencias.push({ id_vieja: parseInt(idVieja) || null, nombre_vieja: nomVieja, nombre_nueva: nomNueva });
-            }
-        });
+        // Tabla de equivalencias: materia nueva (por su orden) -> materias del plan anterior
+        const equivalencias_tabla = Object.entries(window._equivTabla || {})
+            .filter(([, ids]) => ids.length)
+            .map(([orden, ids]) => ({ orden_nueva: parseInt(orden, 10), ids_viejas: ids }));
 
         const msg = document.getElementById('cambio-plan-msg');
         msg.style.display = 'block';
@@ -5503,7 +5555,7 @@ async function eliminarPreceptora(id, apellido) {
                 fecha_vigencia: vigencia,
                 fecha_cierre:   cierre || null,
                 politica,
-                equivalencias,
+                equivalencias_tabla,
                 filas_nuevo: _planNuevoData.filas_nuevo,
             })
         });

@@ -2056,6 +2056,31 @@ def api_importar_plan():
                             'id_vieja': materias_actuales[nom_viejo]['id']
                         })
 
+        # ── Datos para la tabla de equivalencias ──
+        # Sugerencia por materia nueva (clave: su orden): la del plan actual con
+        # el mismo nombre o, si no hay, la similar. El coordinador la revisa.
+        anio_nuevos = {f['nombre'].lower().strip(): f['anio'] for f in filas_nuevo}
+        similar_de = {}
+        for s in similares:
+            similar_de.setdefault(s['nueva'].lower().strip(), s['id_vieja'])
+        sugerencias = {}
+        for f in filas_nuevo:
+            nom = f['nombre'].lower().strip()
+            if nom in materias_actuales:
+                sugerencias[str(f['orden'])] = [materias_actuales[nom]['id']]
+            elif nom in similar_de:
+                sugerencias[str(f['orden'])] = [similar_de[nom]]
+        cambios_anio = [
+            {'nombre': orig_nuevos.get(n, n),
+             'anio_viejo': materias_actuales[n]['anio'],
+             'anio_nuevo': anio_nuevos[n]}
+            for n in iguales if materias_actuales[n]['anio'] != anio_nuevos[n]
+        ]
+        materias_plan_actual = sorted(
+            ({'id': v['id'], 'nombre': v['nombre'], 'anio': v['anio'], 'orden': v['orden']}
+             for v in materias_actuales.values()),
+            key=lambda m: (m['anio'], m['orden']))
+
         return jsonify({
             'ok': True,
             'hay_plan_actual': bool(materias_actuales),
@@ -2064,7 +2089,10 @@ def api_importar_plan():
                 'eliminadas': [orig_viejos.get(n, n) for n in sorted(eliminadas, key=lambda n: materias_actuales.get(n, {}).get('orden', 9999))],
                 'nuevas': [orig_nuevos.get(n, n) for n in sorted(nuevas, key=lambda n: orden_nuevos.get(n, 9999))],
                 'similares':  similares,
+                'cambios_anio': cambios_anio,
             },
+            'materias_plan_actual': materias_plan_actual,
+            'sugerencias': sugerencias,
             'filas_nuevo': filas_nuevo,
             'total_nuevo': len(filas_nuevo),
         })
@@ -2114,7 +2142,8 @@ def api_confirmar_cambio_plan():
     - nombre y resolución del nuevo plan
     - fecha de vigencia y fecha límite de transición
     - política de migración
-    - equivalencias manuales definidas por el coordinador
+    - tabla de equivalencias del coordinador: por cada materia nueva, las
+      materias del plan anterior que la reconocen (varias = se necesitan todas)
     - filas del nuevo plan Excel
     """
     carrera_id = session.get('carrera_id')
@@ -2125,7 +2154,7 @@ def api_confirmar_cambio_plan():
     fecha_vigencia   = data.get('fecha_vigencia')
     fecha_cierre     = data.get('fecha_cierre')
     politica         = data.get('politica', 'exactas')
-    equivalencias    = data.get('equivalencias', [])  # [{id_vieja, nombre_nueva}]
+    equivalencias_tabla = data.get('equivalencias_tabla', [])  # [{orden_nueva, ids_viejas}]
     filas_nuevo      = data.get('filas_nuevo', [])
 
     if not nombre_plan or not fecha_vigencia or not filas_nuevo:
@@ -2163,31 +2192,35 @@ def api_confirmar_cambio_plan():
         nombres_nuevos = {f['nombre'].lower().strip(): orden_a_id[f['orden']]
                          for f in filas_nuevo}
 
-        # 4. Equivalencias contra las materias del plan anterior
-        # 4a. Automáticas (mismo nombre)
-        for nom, id_vieja in materias_viejas.items():
-            if nom in nombres_nuevos:
-                cur.execute("""
-                    INSERT INTO equivalencias_plan
-                        (plan_nuevo_id, materia_nueva_id, materia_vieja_id, automatica)
-                    VALUES (%s, %s, %s, TRUE)
-                    ON CONFLICT DO NOTHING
-                """, (nuevo_plan_id, nombres_nuevos[nom], id_vieja))
-
-        # 4b. Manuales (definidas por el coordinador)
+        # 4. Equivalencias: se guarda exactamente la tabla del coordinador.
+        #    Cada fila: materia nueva <- materia vieja. Varias viejas para una
+        #    misma nueva = se necesitan todas aprobadas. 'automatica' queda solo
+        #    como dato (mismo nombre); todas fueron revisadas por el coordinador.
         ids_viejos = set(materias_viejas.values())
-        for eq in equivalencias:
-            # Las similares traen el id; las demas eliminadas, solo el nombre
-            id_vieja  = eq.get('id_vieja') or materias_viejas.get(
-                (eq.get('nombre_vieja') or '').lower().strip())
-            nom_nueva = eq.get('nombre_nueva', '').lower().strip()
-            if id_vieja in ids_viejos and nom_nueva in nombres_nuevos:
+        nombre_viejo = {v: k for k, v in materias_viejas.items()}
+        nombre_nuevo = {f['orden']: f['nombre'].lower().strip() for f in filas_nuevo}
+        for eq in equivalencias_tabla:
+            try:
+                orden = int(eq.get('orden_nueva'))
+            except (TypeError, ValueError):
+                continue
+            id_nueva = orden_a_id.get(orden)
+            if not id_nueva:
+                continue
+            for id_vieja in (eq.get('ids_viejas') or []):
+                try:
+                    id_vieja = int(id_vieja)
+                except (TypeError, ValueError):
+                    continue
+                if id_vieja not in ids_viejos:
+                    continue
                 cur.execute("""
                     INSERT INTO equivalencias_plan
                         (plan_nuevo_id, materia_nueva_id, materia_vieja_id, automatica)
-                    VALUES (%s, %s, %s, FALSE)
+                    VALUES (%s, %s, %s, %s)
                     ON CONFLICT DO NOTHING
-                """, (nuevo_plan_id, nombres_nuevos[nom_nueva], id_vieja))
+                """, (nuevo_plan_id, id_nueva, id_vieja,
+                      nombre_viejo.get(id_vieja) == nombre_nuevo.get(orden)))
 
         # 5. Nadie migra al confirmar. Solo en la primera carga (la carrera no
         #    tenía plan) los alumnos y preinscripciones sin plan reciben este.
