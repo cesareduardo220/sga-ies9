@@ -1685,6 +1685,16 @@ def _plan_vigente_id(cur, carrera_id):
     return fila[0] if fila else None
 
 
+def _plan_de_alumno(cur, aid):
+    """Plan de estudios de la ficha del alumno (alumnos_carrera.id). Si la ficha
+    no tuviera plan, el vigente de su carrera. None si no hay ninguno."""
+    cur.execute("SELECT plan_id, carrera_id FROM alumnos_carrera WHERE id = %s", (aid,))
+    fila = cur.fetchone()
+    if not fila:
+        return None
+    return fila[0] if fila[0] is not None else _plan_vigente_id(cur, fila[1])
+
+
 @auth.route('/api/plan-vigente', methods=['GET'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_plan_vigente():
@@ -2944,8 +2954,9 @@ def api_historial_descargar_estado(aid):
             ) AS mejor_condicion
         FROM materias m
         WHERE m.carrera_id = %s AND m.activa = TRUE
+          AND m.plan_id IS NOT DISTINCT FROM %s
         ORDER BY m.anio, m.orden
-    """, (aid, carrera_id))
+    """, (aid, carrera_id, _plan_de_alumno(cur, aid)))
     materias = cur.fetchall()
     cur.close()
     conn.close()
@@ -3403,13 +3414,15 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
     La usan el panel de Inscripciones (carrera de la sesión) y la
     reinscripción pública (carrera y ciclo del token). No cierra el cursor.
     """
-    # Todas las materias activas de la carrera
+    # Materias activas del plan del alumno (con dos planes en transicion,
+    # cada alumno ve solo las de su plan)
+    plan_alumno = _plan_de_alumno(cur, aid)
     cur.execute("""
         SELECT id, nombre, anio, orden, regimen, regimen_aprobacion
         FROM materias
-        WHERE carrera_id = %s AND activa = TRUE
+        WHERE carrera_id = %s AND activa = TRUE AND plan_id IS NOT DISTINCT FROM %s
         ORDER BY anio, orden
-    """, (carrera_id,))
+    """, (carrera_id, plan_alumno))
     materias = cur.fetchall()
 
     # Inscripciones actuales del alumno este año
@@ -3712,6 +3725,19 @@ def api_inscripciones_guardar(aid):
     """, (aid, anio))
     actuales = {r[1]: r[0] for r in cur.fetchall()}  # materia_id → inscripcion_id
     ids_actuales = set(actuales.keys())
+
+    # ── 4b. Las materias nuevas tienen que ser del plan del alumno ──
+    ids_a_validar = ids_nuevos - ids_actuales
+    if ids_a_validar:
+        cur.execute("""
+            SELECT id FROM materias
+            WHERE id = ANY(%s) AND carrera_id = %s AND activa = TRUE
+              AND plan_id IS NOT DISTINCT FROM %s
+        """, (list(ids_a_validar), carrera_id, _plan_de_alumno(cur, aid)))
+        if ids_a_validar - {fila[0] for fila in cur.fetchall()}:
+            cur.close(); conn.close()
+            return jsonify({'error': 'Alguna de las materias no corresponde al plan de estudios '
+                                     'del alumno. Recargá la página y volvé a intentar.'}), 400
 
     # ── 5. Bloqueo post-guardado ──
     # Si ya tiene inscripciones en este ciclo lectivo, requiere autorización
@@ -4135,13 +4161,12 @@ def api_inscripciones_alumnos_por_anio(anio_plan):
                       AND cu.condicion IN ('regular', 'promocionado')
                 )
                 OR EXISTS (
-                    SELECT 1 FROM inscripciones i
-                    JOIN examenes ex ON ex.inscripcion_id = i.id
-                    JOIN materias m  ON m.id = i.materia_id
-                    WHERE i.alumno_id = a.id
+                    SELECT 1 FROM examenes ex
+                    JOIN materias m ON m.id = ex.materia_id
+                    WHERE ex.alumno_id = a.id
                       AND m.carrera_id = %s
                       AND m.anio = %s
-                      AND ex.aprobado = TRUE
+                      AND ex.resultado = 'aprobado'
                 )
               )
         """, (carrera_id, carrera_id, anio_plan - 1, carrera_id, anio_plan - 1))
@@ -4162,7 +4187,8 @@ def api_inscripciones_alumnos_por_anio(anio_plan):
     cur.execute("""
         SELECT COUNT(*) FROM materias
         WHERE carrera_id = %s AND anio = %s AND activa = TRUE
-    """, (carrera_id, anio_plan))
+          AND plan_id IS NOT DISTINCT FROM %s
+    """, (carrera_id, anio_plan, _plan_vigente_id(cur, carrera_id)))
     total_materias_anio = cur.fetchone()[0]
 
     cur.close(); conn.close()
@@ -8601,8 +8627,10 @@ def api_preinscripciones_detalle(pid):
             cur.execute("""
                 SELECT nombre, anio FROM materias
                 WHERE carrera_id = %s AND activa = TRUE AND anio = 1
+                  AND plan_id IS NOT DISTINCT FROM COALESCE(
+                      (SELECT plan_id FROM preinscripciones WHERE id = %s), %s)
                 ORDER BY orden
-            """, (carrera_id,))
+            """, (carrera_id, pid, _plan_vigente_id(cur, carrera_id)))
         materias = ([{'nombre': r[0], 'anio': r[1]} for r in cur.fetchall()]
                     if tipo in ('reinscripcion', 'ingresante') else [])
 
@@ -8743,8 +8771,9 @@ def api_preinscripciones_aprobar(pid):
                     INSERT INTO inscripciones (alumno_id, materia_id, anio_lectivo)
                     SELECT %s, m.id, %s FROM materias m
                     WHERE m.carrera_id = %s AND m.activa = TRUE AND m.anio = 1
+                      AND m.plan_id IS NOT DISTINCT FROM %s
                     ON CONFLICT DO NOTHING
-                """, (alumno_id, ciclo, carrera_id))
+                """, (alumno_id, ciclo, carrera_id, _plan_de_alumno(cur, alumno_id)))
                 inscriptas = cur.rowcount
 
         else:  # reinscripción
