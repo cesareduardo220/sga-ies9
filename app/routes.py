@@ -1688,6 +1688,16 @@ def api_plan_vigente():
 # DESCARGAR PLAN DE ESTUDIOS EN PDF
 # ================================================================
 
+def _nombre_archivo(*partes):
+    """Une las partes con '_' y deja solo letras sin tilde, numeros y '_'.
+    Ej: ('plan_estudios', 'H y S', 'Plan 2026') -> 'plan_estudios_H_y_S_Plan_2026'."""
+    import unicodedata
+    texto = '_'.join(str(p) for p in partes if p)
+    texto = unicodedata.normalize('NFKD', texto).encode('ascii', 'ignore').decode('ascii')
+    texto = re.sub(r'[^A-Za-z0-9]+', '_', texto).strip('_')
+    return texto or 'archivo'
+
+
 @auth.route('/api/materias/descargar-pdf')
 @login_requerido(['coordinador', 'preceptora'])
 def api_materias_descargar_pdf():
@@ -1695,12 +1705,14 @@ def api_materias_descargar_pdf():
     conn = get_db()
     cur = conn.cursor()
 
-    cur.execute("SELECT nombre FROM carreras WHERE id = %s", (carrera_id,))
+    cur.execute("""SELECT nombre, COALESCE(NULLIF(TRIM(nombre_corto), ''), nombre)
+                   FROM carreras WHERE id = %s""", (carrera_id,))
     carrera = cur.fetchone()
     if not carrera:
         cur.close(); conn.close()
         return jsonify({'error': 'Carrera no encontrada'}), 404
     nombre_carrera = carrera[0]
+    carrera_archivo = carrera[1]   # nombre corto si esta cargado; si no, el completo
 
     cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
     anio_lectivo = cur.fetchone()[0]
@@ -1852,7 +1864,8 @@ def api_materias_descargar_pdf():
     return send_file(
         buf,
         as_attachment=True,
-        download_name=f"plan_estudios_{anio_lectivo}.pdf",
+        download_name=_nombre_archivo('plan_estudios', carrera_archivo,
+                                      plan_nombre or anio_lectivo) + '.pdf',
         mimetype='application/pdf'
     )
 
