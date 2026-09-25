@@ -1647,6 +1647,26 @@ def api_materias_listar():
         'correl_cursada': r[6], 'correl_aprobada': r[7]
     } for r in rows])
 
+def _plan_actual_id(cur, carrera_id):
+    """Id del plan activo mas reciente de la carrera (el ultimo cargado), o None.
+    Es contra el que se compara un Excel nuevo."""
+    cur.execute("""
+        SELECT id FROM planes_estudio
+        WHERE carrera_id = %s AND activo = TRUE
+        ORDER BY fecha_vigencia DESC, id DESC
+        LIMIT 1
+    """, (carrera_id,))
+    fila = cur.fetchone()
+    return fila[0] if fila else None
+
+
+def _cantidad_planes_activos(cur, carrera_id):
+    """Mas de uno significa que hay un cambio de plan en transicion."""
+    cur.execute("SELECT count(*) FROM planes_estudio WHERE carrera_id = %s AND activo = TRUE",
+                (carrera_id,))
+    return cur.fetchone()[0]
+
+
 def _plan_vigente_id(cur, carrera_id):
     """Id del plan de estudios activo de la carrera (el mas reciente), o None."""
     cur.execute("""
@@ -1944,10 +1964,16 @@ def api_importar_plan():
         # ── Comparar contra el plan actual (si no hay ninguno, queda vacío y
         #    todo cae naturalmente en "nuevas" — incluso la primera carga pasa
         #    siempre por la misma pantalla de revisión y confirmación) ──
+        if _cantidad_planes_activos(cur, carrera_id) > 1:
+            cur.close(); conn.close()
+            return jsonify({'error': 'Hay un cambio de plan en curso en esta carrera: conviven dos planes. '
+                            'Antes de cargar otro, hay que cerrar el plan anterior.'}), 409
+        plan_actual = _plan_actual_id(cur, carrera_id)
         cur.execute("""
             SELECT id, nombre, anio, orden FROM materias
-            WHERE carrera_id = %s ORDER BY anio, orden
-        """, (carrera_id,))
+            WHERE carrera_id = %s AND plan_id IS NOT DISTINCT FROM %s
+            ORDER BY anio, orden
+        """, (carrera_id, plan_actual))
         materias_actuales = {r[1].lower().strip(): {'id': r[0], 'anio': r[2], 'orden': r[3], 'nombre': r[1]}
                             for r in cur.fetchall()}
         cur.close(); conn.close()
@@ -1997,8 +2023,8 @@ def api_importar_plan():
 
 
 def _ejecutar_importacion(cur, carrera_id, filas, plan_id=None):
-    """Ejecuta la importación del plan de estudios."""
-    cur.execute("DELETE FROM materias WHERE carrera_id = %s", (carrera_id,))
+    """Carga las materias y correlatividades de un plan. No borra nada: las
+    materias de otros planes siguen existiendo con su historial."""
     orden_a_id = {}
     for f in filas:
         cur.execute("""
@@ -2031,7 +2057,9 @@ def _ejecutar_importacion(cur, carrera_id, filas, plan_id=None):
 @login_requerido(['coordinador'])
 def api_confirmar_cambio_plan():
     """
-    Confirma el cambio de plan de estudios con:
+    Confirma un plan de estudios nuevo (o la primera carga). No borra ni migra:
+    el plan anterior sigue activo con sus alumnos hasta que se cierre.
+    Recibe:
     - nombre y resolución del nuevo plan
     - fecha de vigencia y fecha límite de transición
     - política de migración
@@ -2055,22 +2083,29 @@ def api_confirmar_cambio_plan():
     conn = get_db()
     cur  = conn.cursor()
     try:
-        # 1. Guardar materias actuales (plan viejo) antes de reemplazar
+        # 0. Un cambio de plan por vez
+        if _cantidad_planes_activos(cur, carrera_id) > 1:
+            return jsonify({'error': 'Hay un cambio de plan en curso en esta carrera: conviven dos planes. '
+                            'Antes de cargar otro, hay que cerrar el plan anterior.'}), 409
+
+        # 1. Materias del plan actual (siguen existiendo: no se borran)
+        plan_viejo_id = _plan_actual_id(cur, carrera_id)
         cur.execute("""
-            SELECT id, nombre FROM materias WHERE carrera_id = %s
-        """, (carrera_id,))
+            SELECT id, nombre FROM materias
+            WHERE carrera_id = %s AND plan_id IS NOT DISTINCT FROM %s
+        """, (carrera_id, plan_viejo_id))
         materias_viejas = {r[1].lower().strip(): r[0] for r in cur.fetchall()}
 
-        # Bloqueado hasta rehacer el cambio de plan: el procedimiento actual
-        # borra las materias del plan anterior y, en cascada, inscripciones,
-        # cursadas, notas y examenes. La primera carga (sin materias) sigue.
+        # Bloqueado hasta terminar la Fase 1: las pantallas que todavia buscan
+        # materias por carrera mezclarian los dos planes. La primera carga sigue.
         if materias_viejas:
             return jsonify({'error': 'El cambio de plan de estudios está deshabilitado '
-                            'temporalmente: el procedimiento actual borraría el historial '
-                            'académico de la carrera. Para corregir el plan vigente usá '
+                            'temporalmente mientras se adapta el sistema para que convivan '
+                            'dos planes. Para corregir el plan vigente usá '
                             '"Agregar espacio curricular manualmente".'}), 409
 
-        # 2. Crear registro del nuevo plan
+        # 2. Crear el plan nuevo. El anterior sigue activo durante la transición:
+        #    sus alumnos lo conservan hasta que se cierre (al vencer la fecha límite).
         cur.execute("""
             INSERT INTO planes_estudio
                 (carrera_id, nombre, resolucion, fecha_vigencia, fecha_cierre,
@@ -2080,57 +2115,53 @@ def api_confirmar_cambio_plan():
               fecha_vigencia, fecha_cierre or None, politica))
         nuevo_plan_id = cur.fetchone()[0]
 
-        # 3. Desactivar plan anterior
-        cur.execute("""
-            UPDATE planes_estudio SET activo = FALSE
-            WHERE carrera_id = %s AND id != %s
-        """, (carrera_id, nuevo_plan_id))
-
-        # 4. Importar nuevo plan
+        # 3. Materias y correlatividades del plan nuevo
         orden_a_id = _ejecutar_importacion(cur, carrera_id, filas_nuevo, nuevo_plan_id)
         nombres_nuevos = {f['nombre'].lower().strip(): orden_a_id[f['orden']]
                          for f in filas_nuevo}
 
-        # 5. Registrar equivalencias
-        # 5a. Automáticas (mismo nombre)
+        # 4. Equivalencias contra las materias del plan anterior
+        # 4a. Automáticas (mismo nombre)
         for nom, id_vieja in materias_viejas.items():
             if nom in nombres_nuevos:
-                id_nueva = nombres_nuevos[nom]
                 cur.execute("""
                     INSERT INTO equivalencias_plan
                         (plan_nuevo_id, materia_nueva_id, materia_vieja_id, automatica)
                     VALUES (%s, %s, %s, TRUE)
                     ON CONFLICT DO NOTHING
-                """, (nuevo_plan_id, id_nueva, id_vieja))
+                """, (nuevo_plan_id, nombres_nuevos[nom], id_vieja))
 
-        # 5b. Manuales (definidas por el coordinador)
+        # 4b. Manuales (definidas por el coordinador)
+        ids_viejos = set(materias_viejas.values())
         for eq in equivalencias:
             id_vieja  = eq.get('id_vieja')
             nom_nueva = eq.get('nombre_nueva', '').lower().strip()
-            if id_vieja and nom_nueva in nombres_nuevos:
-                id_nueva = nombres_nuevos[nom_nueva]
+            if id_vieja in ids_viejos and nom_nueva in nombres_nuevos:
                 cur.execute("""
                     INSERT INTO equivalencias_plan
                         (plan_nuevo_id, materia_nueva_id, materia_vieja_id, automatica)
                     VALUES (%s, %s, %s, FALSE)
                     ON CONFLICT DO NOTHING
-                """, (nuevo_plan_id, id_nueva, id_vieja))
+                """, (nuevo_plan_id, nombres_nuevos[nom_nueva], id_vieja))
 
-        # 6. Migrar alumnos según política
-        cur.execute("""
-            SELECT id FROM alumnos_carrera WHERE carrera_id = %s
-        """, (carrera_id,))
-        alumnos = [r[0] for r in cur.fetchall()]
-
-        for alumno_id in alumnos:
+        # 5. Nadie migra al confirmar. Solo en la primera carga (la carrera no
+        #    tenía plan) los alumnos y preinscripciones sin plan reciben este.
+        if plan_viejo_id is None:
             cur.execute("""
-                UPDATE alumnos_carrera SET plan_id = %s WHERE id = %s
-            """, (nuevo_plan_id, alumno_id))
+                UPDATE alumnos_carrera SET plan_id = %s
+                WHERE carrera_id = %s AND plan_id IS NULL
+                RETURNING id
+            """, (nuevo_plan_id, carrera_id))
+            for (alumno_id,) in cur.fetchall():
+                cur.execute("""
+                    INSERT INTO historial_plan_alumno
+                        (alumno_id, plan_viejo_id, plan_nuevo_id, motivo, registrado_por)
+                    VALUES (%s, NULL, %s, 'ingreso', %s)
+                """, (alumno_id, nuevo_plan_id, session.get('user_id')))
             cur.execute("""
-                INSERT INTO historial_plan_alumno
-                    (alumno_id, plan_nuevo_id, motivo, registrado_por)
-                VALUES (%s, %s, 'automatico', %s)
-            """, (alumno_id, nuevo_plan_id, session.get('user_id')))
+                UPDATE preinscripciones SET plan_id = %s
+                WHERE carrera_id = %s AND plan_id IS NULL AND estado = 'pendiente'
+            """, (nuevo_plan_id, carrera_id))
 
         conn.commit()
         return jsonify({'ok': True, 'plan_id': nuevo_plan_id})
