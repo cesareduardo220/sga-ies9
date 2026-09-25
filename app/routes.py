@@ -3586,8 +3586,8 @@ def api_inscripciones_alumno(aid):
         motivo_bloqueo = f'Inscripciones cerradas: {ventana["motivo"]}.'
     elif tiene_inscripciones_guardadas and not autorizado_hoy:
         motivo_bloqueo = (f'El alumno ya tiene inscripciones guardadas para el ciclo lectivo '
-                          f'{anio}. Solo el coordinador puede autorizar una modificación '
-                          f'registrando el motivo.')
+                          f'{anio}. Para corregirlas, el coordinador tiene que reabrir '
+                          f'la inscripción indicando el motivo.')
     else:
         motivo_bloqueo = ''
 
@@ -3685,8 +3685,8 @@ def api_inscripciones_guardar(aid):
             cur.close(); conn.close()
             return jsonify({
                 'error': 'Este alumno ya tiene inscripciones guardadas para el ciclo lectivo '
-                         f'{anio}. Para modificarlas, el coordinador debe autorizar la '
-                         'reapertura desde su panel registrando un motivo.',
+                         f'{anio}. Para corregirlas, el coordinador tiene que reabrir '
+                         'la inscripción indicando el motivo.',
                 'requiere_autorizacion': True
             }), 403
 
@@ -3950,7 +3950,7 @@ def api_inscripciones_autorizar_reapertura(aid):
     conn.commit()
     cur.close(); conn.close()
 
-    return jsonify({'ok': True, 'mensaje': 'Reapertura autorizada. Ya podés modificar las inscripciones de este alumno (una sola vez).'})
+    return jsonify({'ok': True, 'mensaje': 'Inscripción reabierta. Ya se pueden corregir las materias de este alumno (una sola vez).'})
 
 
 @auth.route('/api/inscripciones/cancelar-autorizacion/<int:aid>', methods=['POST'])
@@ -4001,7 +4001,7 @@ def api_inscripciones_cancelar_autorizacion(aid):
 
     return jsonify({
         'ok': True,
-        'mensaje': 'Modificación cancelada' if afectadas else 'No había autorización vigente',
+        'mensaje': 'Inscripción cerrada sin cambios' if afectadas else 'La inscripción no estaba reabierta',
         'consumidas': len(afectadas)
     })
 

@@ -1819,8 +1819,8 @@
         <!-- Aviso de modo autorizado activo (cuando el coordinador autorizó la modificación) -->
         <div id="insc-aviso-autorizado" style="display:none; padding:14px 18px; border-radius:10px; margin-bottom:18px; font-size:0.9rem;
                 background:#E3F2FD; border:1.5px solid #1976D2; color:#0D47A1;">
-            <strong>ℹ️ Modo edición autorizada activo.</strong><br>
-            Tenés que finalizar con <strong>"💾 Guardar"</strong> o <strong>"✖ Cancelar modificación"</strong>. La autorización es de un solo uso.
+            <strong>ℹ️ Inscripción reabierta para corregir.</strong><br>
+            Terminá con <strong>"💾 Guardar inscripciones"</strong> o <strong>"✖ Cerrar sin cambios"</strong>. Vale una sola vez y solo por hoy.
         </div>
 
         <!-- Encabezado con info del alumno -->
@@ -1834,8 +1834,8 @@
                 </div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button class="btn-secundario" id="insc-btn-autorizar"      style="display:none;" onclick="inscAbrirModalAutorizar()">🔓 Autorizar modificación</button>
-                <button class="btn-secundario" id="insc-btn-cancelar-autoriz" style="display:none;" onclick="inscCancelarAutorizacion()">✖ Cancelar modificación</button>
+                <button class="btn-secundario" id="insc-btn-autorizar"      style="display:none;" onclick="inscAbrirModalAutorizar()">🔓 Reabrir inscripción</button>
+                <button class="btn-secundario" id="insc-btn-cancelar-autoriz" style="display:none;" onclick="inscCancelarAutorizacion()">✖ Cerrar sin cambios</button>
                 <button class="btn-nuevo"      id="insc-btn-guardar"        onclick="guardarInscripciones()">💾 Guardar inscripciones</button>
             </div>
         </div>
@@ -2172,25 +2172,25 @@
 <div id="modal-insc-guardia" class="modal-overlay" style="display:none;">
     <div class="modal-card" style="max-width:520px;">
         <div class="modal-card-header">
-            <h3>⚠️ Modificación autorizada sin finalizar</h3>
+            <h3>⚠️ Inscripción reabierta sin cerrar</h3>
         </div>
         <div class="modal-card-body">
             <p>
-                Tenés una <strong>modificación autorizada activa</strong> para este alumno
-                que todavía no finalizaste.
+                La inscripción de este alumno está <strong>reabierta</strong>
+                y todavía no la cerraste.
             </p>
             <p>
-                Si salís ahora, la autorización quedará abierta y cualquier modificación
-                que se haga al alumno durante el día no quedará registrada con motivo.
-                Es mejor cerrarla explícitamente.
+                Si salís ahora, quedará reabierta durante el día y cualquier cambio
+                que se le haga no quedará registrado con un motivo propio.
+                Es mejor cerrarla ahora.
             </p>
             <p style="color:var(--sga-texto-gris); font-size:0.85rem;">
-                Si volvés al panel podés terminar con <strong>"Guardar"</strong> o <strong>"Cancelar modificación"</strong>.
+                Si volvés al panel podés terminar con <strong>"Guardar inscripciones"</strong> o <strong>"Cerrar sin cambios"</strong>.
             </p>
         </div>
         <div class="modal-card-footer">
             <button class="modal-btn-cancelar"  onclick="inscGuardiaVolverAlPanel()">Volver al panel</button>
-            <button class="modal-btn-confirmar" onclick="inscGuardiaCancelarYSalir()">Cancelar modificación y salir</button>
+            <button class="modal-btn-confirmar" onclick="inscGuardiaCancelarYSalir()">Cerrar sin cambios y salir</button>
         </div>
     </div>
 </div>
@@ -2222,12 +2222,12 @@
 <div id="modal-insc-autorizar" class="modal-overlay" style="display:none;">
     <div class="modal-card" style="max-width:520px;">
         <div class="modal-card-header">
-            <h3>Autorizar modificación de inscripción</h3>
+            <h3>Reabrir la inscripción del alumno</h3>
         </div>
         <div class="modal-card-body">
             <p>
                 Este alumno ya tiene inscripciones guardadas para el año lectivo actual.
-                Para modificarlas, registrá el motivo. Quedará asentado en la auditoría del sistema
+                Para corregirlas, registrá el motivo. Quedará asentado en la auditoría del sistema
                 con tu usuario y la fecha actual.
             </p>
             <div class="campo-edit">
@@ -2239,7 +2239,7 @@
         </div>
         <div class="modal-card-footer">
             <button class="modal-btn-cancelar" onclick="inscCerrarModalAutorizar()">Cancelar</button>
-            <button class="modal-btn-confirmar" onclick="inscConfirmarAutorizar()">Autorizar modificación</button>
+            <button class="modal-btn-confirmar" onclick="inscConfirmarAutorizar()">Reabrir</button>
         </div>
     </div>
 </div>
@@ -7588,7 +7588,7 @@ async function eliminarPreceptora(id, apellido) {
     // ── Cancelar modificación (consumir autorización sin modificar) ──
     async function inscCancelarAutorizacion() {
         if (!inscAlumnoActual) return;
-        if (!confirm('¿Cancelar la modificación autorizada? El alumno volverá a estar bloqueado y la autorización quedará consumida.')) {
+        if (!confirm('¿Cerrar la inscripción sin cambios? Queda como estaba y, para corregirla, habrá que reabrirla de nuevo.')) {
             return;
         }
         await _inscEjecutarCancelarAutorizacion(inscAlumnoActual.id, 'cancelada_por_coordinador');
