@@ -2153,7 +2153,11 @@ def api_confirmar_cambio_plan():
     resolucion       = data.get('resolucion', '').strip()
     fecha_vigencia   = data.get('fecha_vigencia')
     fecha_cierre     = data.get('fecha_cierre')
-    politica         = data.get('politica', 'exactas')
+    politica         = data.get('politica') or 'equivalencias'
+    if politica in ('exactas', 'similares'):      # valores anteriores a la 7.4
+        politica = 'equivalencias'
+    if politica not in ('ninguna', 'equivalencias', 'personalizado'):
+        return jsonify({'error': 'Política de migración inválida'}), 400
     equivalencias_tabla = data.get('equivalencias_tabla', [])  # [{orden_nueva, ids_viejas}]
     filas_nuevo      = data.get('filas_nuevo', [])
 

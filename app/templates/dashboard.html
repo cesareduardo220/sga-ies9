@@ -2557,6 +2557,10 @@
                                     <input type="number" id="nuevo-plan-cierre-anio" class="input-edit-ficha" placeholder="Año" min="2024" max="2099" style="width:75px;text-align:center">
                                 </div>
                                 <div style="font-size:0.74rem; color:var(--sga-texto-gris); margin-top:4px;">Hasta cuándo pueden terminar los alumnos del plan viejo</div>
+                                <label id="grupo-sin-transicion" style="display:none; gap:8px; align-items:flex-start; margin-top:10px; font-size:0.8rem; font-weight:400; text-transform:none; cursor:pointer;">
+                                    <input type="checkbox" id="nuevo-plan-sin-transicion" onchange="toggleSinTransicion(this.checked)" style="margin-top:2px;">
+                                    <span><strong>Sin transición:</strong> el plan nuevo se aplica a todos los alumnos desde la fecha de vigencia. Al vencer, se migra a todos los que no terminaron, según la política.</span>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -2566,19 +2570,15 @@
                         <div class="tarjeta-form-titulo">🔄 Política para alumnos al vencer el plazo</div>
                         <label class="radio-card">
                             <input type="radio" name="politica-migracion" value="ninguna" onchange="seleccionarRadioCard(this)">
-                            <div><div class="radio-card-titulo">Sin reconocimiento</div><div class="radio-card-sub">Migración total al plan nuevo sin reconocer materias del plan viejo</div></div>
+                            <div><div class="radio-card-titulo">Sin reconocimiento</div><div class="radio-card-sub">Los alumnos que migren empiezan el plan nuevo de cero: no se les reconoce nada del plan anterior</div></div>
                         </label>
                         <label class="radio-card seleccionado">
-                            <input type="radio" name="politica-migracion" value="exactas" checked onchange="seleccionarRadioCard(this)">
-                            <div><div class="radio-card-titulo">Reconocer equivalencias exactas</div><div class="radio-card-sub">Solo las materias con nombre idéntico se reconocen automáticamente</div></div>
-                        </label>
-                        <label class="radio-card">
-                            <input type="radio" name="politica-migracion" value="similares" onchange="seleccionarRadioCard(this)">
-                            <div><div class="radio-card-titulo">Exactas + similares</div><div class="radio-card-sub">Las detectadas automáticamente más las que el sistema identificó como similares</div></div>
+                            <input type="radio" name="politica-migracion" value="equivalencias" checked onchange="seleccionarRadioCard(this)">
+                            <div><div class="radio-card-titulo">Reconocer según la tabla de equivalencias</div><div class="radio-card-sub">A cada alumno se le reconoce lo que aprobó, según la tabla de equivalencias de abajo</div></div>
                         </label>
                         <label class="radio-card">
                             <input type="radio" name="politica-migracion" value="personalizado" onchange="seleccionarRadioCard(this)">
-                            <div><div class="radio-card-titulo">Personalizado por alumno</div><div class="radio-card-sub">El coordinador decide qué se reconoce para cada alumno afectado</div></div>
+                            <div><div class="radio-card-titulo">Personalizado por alumno</div><div class="radio-card-sub">Se parte de la tabla de equivalencias y el coordinador ajusta qué se reconoce a cada alumno al migrarlo</div></div>
                         </label>
                     </div>
 
@@ -5297,6 +5297,9 @@ async function eliminarPreceptora(id, apellido) {
         const _esCambio = !!data.hay_plan_actual;
         document.getElementById('panel-politica-migracion').style.display = _esCambio ? 'block' : 'none';
         document.getElementById('panel-equiv-manuales').style.display = _esCambio ? 'block' : 'none';
+        document.getElementById('grupo-sin-transicion').style.display = _esCambio ? 'flex' : 'none';
+        document.getElementById('nuevo-plan-sin-transicion').checked = false;
+        toggleSinTransicion(false);
         document.getElementById('btn-confirmar-plan').innerHTML = _esCambio ? '⚠️ Confirmar cambio de plan' : '✅ Confirmar carga del plan';
         mostrarComparacion(data.comparacion, data.filas_nuevo);
         document.getElementById('panel-agregar-materia-manual').style.display = 'none';
@@ -5356,6 +5359,39 @@ async function eliminarPreceptora(id, apellido) {
         const sug = (_planNuevoData && _planNuevoData.sugerencias) || {};
         filasNuevo.forEach(f => { window._equivTabla[f.orden] = (sug[String(f.orden)] || []).slice(); });
         renderTablaEquiv();
+    }
+
+    // Campos de dia (numero de 1 a 31): con las flechas dan la vuelta. Al enfocar
+    // se amplia el rango a 0-32 para que el navegador deje pasar el paso, y al
+    // cambiar se convierte: 32 viniendo de 31 -> 1; 0 viniendo de 1 -> 31.
+    // Lo que se escribe a mano no se toca (la validacion de cada formulario sigue).
+    function _esCampoDia(el) {
+        return el && el.tagName === 'INPUT' && el.type === 'number' && el.placeholder === 'Día';
+    }
+    document.addEventListener('focusin', e => {
+        const el = e.target;
+        if (!_esCampoDia(el)) return;
+        el.min = '0';
+        el.max = '32';
+        el.dataset.diaPrev = el.value;
+    });
+    document.addEventListener('input', e => {
+        const el = e.target;
+        if (!_esCampoDia(el)) return;
+        const prev = el.dataset.diaPrev;
+        if (el.value === '32' && prev === '31') el.value = '1';
+        else if (el.value === '0' && prev === '1') el.value = '31';
+        el.dataset.diaPrev = el.value;
+    });
+
+    // "Sin transicion": la fecha limite queda igual a la de vigencia
+    function toggleSinTransicion(activa) {
+        ['nuevo-plan-cierre-dia', 'nuevo-plan-cierre-mes', 'nuevo-plan-cierre-anio'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (activa) el.value = '';
+            el.disabled = activa;
+        });
     }
 
     function renderTablaEquiv() {
@@ -5532,8 +5568,10 @@ async function eliminarPreceptora(id, apellido) {
         const cieDia  = document.getElementById('nuevo-plan-cierre-dia').value.padStart(2,'0');
         const cieMes  = document.getElementById('nuevo-plan-cierre-mes').value;
         const cieAnio = document.getElementById('nuevo-plan-cierre-anio').value;
-        const cierre  = (cieDia && cieMes && cieAnio) ? `${cieAnio}-${cieMes}-${cieDia}` : null;
-        const politica  = document.querySelector('input[name="politica-migracion"]:checked')?.value || 'exactas';
+        const sinTransicion = document.getElementById('nuevo-plan-sin-transicion')?.checked;
+        const cierre  = sinTransicion ? vigencia
+                      : ((cieDia && cieMes && cieAnio) ? `${cieAnio}-${cieMes}-${cieDia}` : null);
+        const politica  = document.querySelector('input[name="politica-migracion"]:checked')?.value || 'equivalencias';
 
         // Tabla de equivalencias: materia nueva (por su orden) -> materias del plan anterior
         const equivalencias_tabla = Object.entries(window._equivTabla || {})
