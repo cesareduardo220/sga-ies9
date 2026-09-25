@@ -1624,19 +1624,25 @@ def descargar_plantilla():
 @auth.route('/api/materias', methods=['GET'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_materias_listar():
+    """Materias activas de la carrera, de todos sus planes activos (con dos
+    planes en transicion vienen las de ambos). Cada una trae su plan."""
     carrera_id = session.get('carrera_id')
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
         SELECT m.id, m.nombre, m.anio, m.orden, m.regimen, m.regimen_aprobacion,
                STRING_AGG(CASE WHEN co.tipo = 'cursada' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_cursada,
-               STRING_AGG(CASE WHEN co.tipo = 'aprobada' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_aprobada
+               STRING_AGG(CASE WHEN co.tipo = 'aprobada' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_aprobada,
+               m.plan_id, p.nombre AS plan_nombre
         FROM materias m
+        LEFT JOIN planes_estudio p ON p.id = m.plan_id
         LEFT JOIN correlatividades co ON co.materia_id = m.id
         LEFT JOIN materias r ON r.id = co.requiere_materia_id
         WHERE m.carrera_id = %s AND m.activa = TRUE
-        GROUP BY m.id, m.nombre, m.anio, m.orden, m.regimen, m.regimen_aprobacion
-        ORDER BY m.anio, m.orden
+          AND (m.plan_id IS NULL OR p.activo = TRUE)
+        GROUP BY m.id, m.nombre, m.anio, m.orden, m.regimen, m.regimen_aprobacion,
+                 m.plan_id, p.nombre, p.fecha_vigencia
+        ORDER BY p.fecha_vigencia DESC NULLS LAST, m.anio, m.orden
     """, (carrera_id,))
     rows = cur.fetchall()
     cur.close()
@@ -1644,7 +1650,8 @@ def api_materias_listar():
     return jsonify([{
         'id': r[0], 'nombre': r[1], 'anio': r[2], 'orden': r[3],
         'regimen': r[4], 'regimen_aprobacion': r[5],
-        'correl_cursada': r[6], 'correl_aprobada': r[7]
+        'correl_cursada': r[6], 'correl_aprobada': r[7],
+        'plan_id': r[8], 'plan_nombre': (r[9] or '').strip()
     } for r in rows])
 
 def _plan_actual_id(cur, carrera_id):
@@ -1698,25 +1705,52 @@ def _plan_de_alumno(cur, aid):
 @auth.route('/api/plan-vigente', methods=['GET'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_plan_vigente():
+    """Plan vigente de la carrera y lista de sus planes activos. Con mas de uno
+    hay un cambio de plan en transicion. Estado de cada plan: 'vigente' (con el
+    que entran los alumnos nuevos), 'proximo' (su vigencia todavia no empezo) o
+    'anterior' (en transicion hasta que se cierre)."""
     carrera_id = session.get('carrera_id')
     conn = get_db()
     cur = conn.cursor()
+    vigente_id = _plan_vigente_id(cur, carrera_id)
     cur.execute("""
-        SELECT nombre, resolucion, fecha_vigencia
+        SELECT id, nombre, resolucion, fecha_vigencia, fecha_cierre
         FROM planes_estudio
         WHERE carrera_id = %s AND activo = TRUE
-        ORDER BY fecha_vigencia DESC
-        LIMIT 1
+        ORDER BY fecha_vigencia DESC, id DESC
     """, (carrera_id,))
-    fila = cur.fetchone()
+    filas = cur.fetchall()
     cur.close()
     conn.close()
-    if not fila:
-        return jsonify({})
+
+    hoy = date.today()
+    planes = []
+    for pid, nombre, resolucion, f_vig, f_cierre in filas:
+        if pid == vigente_id:
+            estado = 'vigente'
+        elif f_vig and f_vig > hoy:
+            estado = 'proximo'
+        else:
+            estado = 'anterior'
+        planes.append({
+            'id': pid,
+            'nombre': (nombre or '').strip(),
+            'resolucion': (resolucion or '').strip(),
+            'fecha_vigencia': f_vig.strftime('%d/%m/%Y') if f_vig else '',
+            'fecha_cierre': f_cierre.strftime('%d/%m/%Y') if f_cierre else '',
+            'estado': estado,
+        })
+
+    actual = next((p for p in planes if p['id'] == vigente_id), None)
+    if not actual:
+        return jsonify({'planes': [], 'vigente_id': None})
     return jsonify({
-        'nombre': (fila[0] or '').strip(),
-        'resolucion': (fila[1] or '').strip(),
-        'fecha_vigencia': fila[2].strftime('%d/%m/%Y') if fila[2] else ''
+        'id': actual['id'],
+        'nombre': actual['nombre'],
+        'resolucion': actual['resolucion'],
+        'fecha_vigencia': actual['fecha_vigencia'],
+        'planes': planes,
+        'vigente_id': vigente_id,
     })
 
 
@@ -1753,13 +1787,13 @@ def api_materias_descargar_pdf():
     cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
     anio_lectivo = cur.fetchone()[0]
 
-    cur.execute("""
-        SELECT nombre, resolucion
-        FROM planes_estudio
-        WHERE carrera_id = %s AND activo = TRUE
-        ORDER BY fecha_vigencia DESC
-        LIMIT 1
-    """, (carrera_id,))
+    # Plan pedido (?plan_id=, si es de la carrera y esta activo) o el vigente
+    plan_pdf = request.args.get('plan_id', type=int)
+    cur.execute("SELECT 1 FROM planes_estudio WHERE id = %s AND carrera_id = %s AND activo = TRUE",
+                (plan_pdf, carrera_id))
+    if not plan_pdf or not cur.fetchone():
+        plan_pdf = _plan_vigente_id(cur, carrera_id)
+    cur.execute("SELECT nombre, resolucion FROM planes_estudio WHERE id = %s", (plan_pdf,))
     _plan = cur.fetchone()
     plan_nombre = (_plan[0] or '').strip() if _plan else ''
     plan_resolucion = (_plan[1] or '').strip() if _plan else ''
@@ -1772,9 +1806,10 @@ def api_materias_descargar_pdf():
         LEFT JOIN correlatividades co ON co.materia_id = m.id
         LEFT JOIN materias r ON r.id = co.requiere_materia_id
         WHERE m.carrera_id = %s AND m.activa = TRUE
+          AND m.plan_id IS NOT DISTINCT FROM %s
         GROUP BY m.anio, m.orden, m.nombre, m.regimen, m.regimen_aprobacion
         ORDER BY m.anio, m.orden
-    """, (carrera_id,))
+    """, (carrera_id, plan_pdf))
     materias = cur.fetchall()
     cur.close()
     conn.close()
@@ -2249,17 +2284,20 @@ def api_materia_agregar():
     conn = get_db()
     cur  = conn.cursor()
     try:
+        # Va al ultimo plan cargado, que es contra el que trabaja esta pantalla.
+        # Si la carrera todavia no tiene plan, queda sin plan como antes.
+        plan_id = _plan_actual_id(cur, carrera_id)
         cur.execute("""
-            INSERT INTO materias (carrera_id, nombre, anio, orden, regimen, regimen_aprobacion)
-            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-        """, (carrera_id, nombre, anio, orden, regimen, reg_aprobacion))
+            INSERT INTO materias (carrera_id, nombre, anio, orden, regimen, regimen_aprobacion, plan_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+        """, (carrera_id, nombre, anio, orden, regimen, reg_aprobacion, plan_id))
         nuevo_id = cur.fetchone()[0]
         conn.commit()
         return jsonify({'ok': True, 'id': nuevo_id})
     except Exception as e:
         conn.rollback()
         if 'unique' in str(e).lower():
-            return jsonify({'error': f'Ya existe una materia con orden {orden} en {anio}° año'}), 409
+            return jsonify({'error': f'Ya existe una materia con orden {orden} en {anio}° año de este plan'}), 409
         return jsonify({'error': str(e)}), 500
     finally:
         cur.close()

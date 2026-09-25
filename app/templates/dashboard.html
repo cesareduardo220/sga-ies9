@@ -1718,10 +1718,14 @@
                     <h2>Plan de Estudios</h2>
                     <div class="sub" id="materias-sub">Espacios curriculares de la carrera</div>
                 </div>
-                <a href="/api/materias/descargar-pdf" class="btn-secundario" style="text-decoration:none">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-                    Descargar PDF
-                </a>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <select id="materias-plan-sel" class="input-edit-ficha" style="display:none; width:auto; min-width:240px;"
+                            onchange="cambiarPlanMaterias(this.value)" title="Plan de estudios"></select>
+                    <a id="materias-pdf-link" href="/api/materias/descargar-pdf" class="btn-secundario" style="text-decoration:none">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+                        Descargar PDF
+                    </a>
+                </div>
             </div>
 
             <!-- Sin plan cargado -->
@@ -5562,24 +5566,62 @@ async function eliminarPreceptora(id, apellido) {
 
     // ══ ESPACIOS CURRICULARES ══
 
+    var materiasPlanSel = null;   // plan elegido en Plan de Estudios (null = el vigente)
+
+    function cambiarPlanMaterias(id) {
+        materiasPlanSel = parseInt(id, 10) || null;
+        cargarMaterias();
+    }
+
     async function cargarMaterias() {
         document.getElementById('materias-cargando').style.display = 'block';
         document.getElementById('materias-sin-plan').style.display = 'none';
         document.getElementById('materias-contenido').style.display = 'none';
 
+        // Planes activos: con dos (cambio de plan en transición) aparece el
+        // selector; con uno, la pantalla se ve como siempre.
+        let planes = [], vigenteId = null;
         try {
-            const resPlan  = await fetch('/api/plan-vigente');
-            const plan     = await resPlan.json();
-            const subEl    = document.getElementById('materias-sub');
-            if (subEl && plan && plan.nombre) {
-                const partes = [plan.nombre];
-                if (plan.resolucion) partes.push(plan.resolucion);
-                subEl.textContent = partes.join(' - ');
-            }
-        } catch (e) { /* si falla, queda el subtitulo por defecto */ }
+            const resPlan = await fetch('/api/plan-vigente');
+            const info    = await resPlan.json();
+            planes    = info.planes || [];
+            vigenteId = info.vigente_id || null;
+        } catch (e) { /* sin datos del plan: se muestran todas las materias */ }
 
-        const res  = await fetch('/api/materias');
-        const data = await res.json();
+        if (!planes.some(p => p.id === materiasPlanSel)) materiasPlanSel = vigenteId;
+        const planSel = planes.find(p => p.id === materiasPlanSel);
+
+        const sel = document.getElementById('materias-plan-sel');
+        if (sel) {
+            if (planes.length > 1) {
+                sel.innerHTML = planes.map(p => {
+                    const etq = p.estado === 'vigente' ? 'vigente'
+                              : p.estado === 'proximo' ? `rige desde ${p.fecha_vigencia}`
+                              : (p.fecha_cierre ? `anterior, hasta ${p.fecha_cierre}` : 'anterior');
+                    return `<option value="${p.id}">${p.nombre} (${etq})</option>`;
+                }).join('');
+                sel.value = String(materiasPlanSel);
+                sel.style.display = '';
+            } else {
+                sel.style.display = 'none';
+            }
+        }
+
+        const pdf = document.getElementById('materias-pdf-link');
+        if (pdf) pdf.href = '/api/materias/descargar-pdf' + (materiasPlanSel ? `?plan_id=${materiasPlanSel}` : '');
+
+        const subEl = document.getElementById('materias-sub');
+        if (subEl && planSel) {
+            const partes = [planSel.nombre];
+            if (planSel.resolucion) partes.push(planSel.resolucion);
+            subEl.textContent = partes.join(' - ');
+        }
+
+        const res   = await fetch('/api/materias');
+        const todas = await res.json();
+        const data  = (planes.length > 1 && materiasPlanSel)
+            ? todas.filter(m => m.plan_id === materiasPlanSel)
+            : todas;
 
         document.getElementById('materias-cargando').style.display = 'none';
 
