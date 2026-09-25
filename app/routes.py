@@ -1826,16 +1826,30 @@ def _situacion_cierre_alumno(cur, aid, plan_viejo_id, plan_nuevo_id, politica, a
     egresado = bool(viejas) and all(estado.get(v[0], {}).get('estado') == 'aprobada' for v in viejas)
     pendientes_viejo = sum(1 for v in viejas if estado.get(v[0], {}).get('estado') != 'aprobada')
     pendientes_nuevo = sum(1 for m in materias if m['resultado'] != 'aprobada')
+    # Prorroga: la ultima registrada para este alumno en este plan
+    cur.execute("""
+        SELECT hasta, motivo, disposicion FROM prorrogas_plan
+        WHERE alumno_id = %s AND plan_id = %s
+        ORDER BY registrado_en DESC, id DESC LIMIT 1
+    """, (aid, plan_viejo_id))
+    fila_p = cur.fetchone()
+    prorroga = None
+    if fila_p:
+        prorroga = {'hasta': txt_fecha(fila_p[0]), 'motivo': fila_p[1],
+                    'disposicion': fila_p[2] or '', 'vigente': fila_p[0] >= date.today()}
+
     if egresado:
         situacion, sugerencia = 'egresado', None
     elif abiertas:
         situacion, sugerencia = 'bloqueado', None
+    elif prorroga and prorroga['vigente']:
+        situacion, sugerencia = 'prorroga', None
     else:
         situacion = 'migrable'
         sugerencia = 'prorroga' if pendientes_viejo < pendientes_nuevo else 'migrar'
 
     return {
-        'situacion': situacion, 'sugerencia': sugerencia,
+        'situacion': situacion, 'sugerencia': sugerencia, 'prorroga': prorroga,
         'cursadas_abiertas': abiertas,
         'pendientes_viejo': pendientes_viejo, 'pendientes_nuevo': pendientes_nuevo,
         'reconocidas': sum(1 for m in materias if m['resultado'] == 'aprobada'),
@@ -1893,9 +1907,185 @@ def api_plan_cierre(plan_id):
                 'bloqueados': sum(1 for a in alumnos if a['situacion'] == 'bloqueado'),
                 'sugeridos_migrar': sum(1 for a in alumnos if a['sugerencia'] == 'migrar'),
                 'sugeridos_prorroga': sum(1 for a in alumnos if a['sugerencia'] == 'prorroga'),
+                'con_prorroga': sum(1 for a in alumnos if a['situacion'] == 'prorroga'),
             },
+            # Se migra recien cuando el plan nuevo empezo a regir
+            'se_puede_migrar': nuevo[2] <= date.today(),
+            # El plan se cierra cuando todos los que quedan terminaron
+            'se_puede_cerrar': all(a['situacion'] == 'egresado' for a in alumnos),
             'alumnos': alumnos,
         })
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _planes_del_cierre(cur, plan_id, carrera_id):
+    """(viejo, nuevo, error) para las acciones del cierre. viejo = (id, nombre,
+    fecha_vigencia, activo); nuevo = (id, nombre, fecha_vigencia, politica,
+    fecha_cierre); error = (mensaje, codigo) o None."""
+    cur.execute("""SELECT id, nombre, fecha_vigencia, activo FROM planes_estudio
+                   WHERE id = %s AND carrera_id = %s""", (plan_id, carrera_id))
+    viejo = cur.fetchone()
+    if not viejo:
+        return None, None, ('Plan no encontrado en esta carrera', 404)
+    if not viejo[3]:
+        return viejo, None, ('Ese plan ya está cerrado', 409)
+    cur.execute("""
+        SELECT id, nombre, fecha_vigencia, politica_migracion, fecha_cierre FROM planes_estudio
+        WHERE carrera_id = %s AND activo = TRUE AND id <> %s AND fecha_vigencia > %s
+        ORDER BY fecha_vigencia DESC LIMIT 1
+    """, (carrera_id, plan_id, viejo[2]))
+    nuevo = cur.fetchone()
+    if not nuevo:
+        return viejo, None, ('No hay un plan nuevo cargado para reemplazar a este', 409)
+    return viejo, nuevo, None
+
+
+@auth.route('/api/planes/<int:plan_id>/cierre/migrar', methods=['POST'])
+@login_requerido(['coordinador'])
+def api_plan_cierre_migrar(plan_id):
+    """Pasa al plan nuevo a los alumnos indicados que esten en condiciones.
+    El servidor recalcula la situacion de cada uno: no migra egresados,
+    bloqueados (cursadas abiertas) ni alumnos con prorroga vigente."""
+    carrera_id = session.get('carrera_id')
+    user_id    = session.get('user_id')
+    data = request.get_json() or {}
+    try:
+        ids = [int(x) for x in (data.get('alumnos') or [])]
+    except (TypeError, ValueError):
+        return jsonify({'error': 'La lista de alumnos llegó con valores inválidos'}), 400
+    if not ids:
+        return jsonify({'error': 'No se eligió ningún alumno'}), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        viejo, nuevo, err = _planes_del_cierre(cur, plan_id, carrera_id)
+        if err:
+            return jsonify({'error': err[0]}), err[1]
+        hoy = date.today()
+        if nuevo[2] > hoy:
+            return jsonify({'error': f'El {nuevo[1]} rige desde el {nuevo[2].strftime("%d/%m/%Y")}: '
+                                     'se puede migrar a partir de esa fecha.'}), 409
+        motivo = 'vencimiento' if (nuevo[4] and hoy > nuevo[4]) else 'manual'
+        anio_actual = get_ciclo_lectivo()['anio_inicio']
+        RAZON = {'egresado': 'Terminó el plan', 'bloqueado': 'Tiene cursadas sin cerrar',
+                 'prorroga': 'Tiene prórroga vigente'}
+
+        migrados, rechazados = [], []
+        for aid in ids:
+            cur.execute("""SELECT apellido, nombre FROM alumnos_carrera
+                           WHERE id = %s AND carrera_id = %s AND plan_id = %s AND activo = TRUE""",
+                        (aid, carrera_id, plan_id))
+            fila = cur.fetchone()
+            if not fila:
+                rechazados.append({'id': aid, 'nombre': '', 'motivo': 'No está en este plan'})
+                continue
+            nombre = f'{fila[0]}, {fila[1]}'
+            s = _situacion_cierre_alumno(cur, aid, plan_id, nuevo[0], nuevo[3], anio_actual)
+            if s['situacion'] != 'migrable':
+                rechazados.append({'id': aid, 'nombre': nombre,
+                                   'motivo': RAZON.get(s['situacion'], 'No está en condiciones')})
+                continue
+            cur.execute("UPDATE alumnos_carrera SET plan_id = %s WHERE id = %s", (nuevo[0], aid))
+            cur.execute("""
+                INSERT INTO historial_plan_alumno
+                    (alumno_id, plan_viejo_id, plan_nuevo_id, motivo, registrado_por)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (aid, plan_id, nuevo[0], motivo, user_id))
+            migrados.append({'id': aid, 'nombre': nombre})
+        conn.commit()
+        return jsonify({'ok': True, 'migrados': migrados, 'rechazados': rechazados})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+
+@auth.route('/api/planes/<int:plan_id>/cierre/prorroga', methods=['POST'])
+@login_requerido(['coordinador'])
+def api_plan_cierre_prorroga(plan_id):
+    """Registra (o extiende) la prorroga de un alumno en el plan viejo.
+    Motivo obligatorio; fecha 'hasta' posterior a hoy; disposicion opcional."""
+    carrera_id = session.get('carrera_id')
+    user_id    = session.get('user_id')
+    data = request.get_json() or {}
+    motivo      = (data.get('motivo') or '').strip()
+    disposicion = (data.get('disposicion') or '').strip() or None
+    try:
+        aid   = int(data.get('alumno_id'))
+        hasta = date.fromisoformat(str(data.get('hasta') or ''))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Faltan el alumno o la fecha de la prórroga'}), 400
+    if len(motivo) < 5:
+        return jsonify({'error': 'El motivo es obligatorio (mínimo 5 caracteres)'}), 400
+    if hasta <= date.today():
+        return jsonify({'error': 'La prórroga tiene que vencer después de hoy'}), 400
+    if disposicion and len(disposicion) > 100:
+        return jsonify({'error': 'La disposición no puede superar los 100 caracteres'}), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        viejo, nuevo, err = _planes_del_cierre(cur, plan_id, carrera_id)
+        if err:
+            return jsonify({'error': err[0]}), err[1]
+        cur.execute("""SELECT apellido, nombre FROM alumnos_carrera
+                       WHERE id = %s AND carrera_id = %s AND plan_id = %s AND activo = TRUE""",
+                    (aid, carrera_id, plan_id))
+        fila = cur.fetchone()
+        if not fila:
+            return jsonify({'error': 'El alumno no está en este plan'}), 404
+        s = _situacion_cierre_alumno(cur, aid, plan_id, nuevo[0], nuevo[3],
+                                     get_ciclo_lectivo()['anio_inicio'])
+        if s['situacion'] == 'egresado':
+            return jsonify({'error': 'El alumno ya terminó el plan: no necesita prórroga'}), 409
+        cur.execute("""
+            INSERT INTO prorrogas_plan (alumno_id, plan_id, hasta, motivo, disposicion, registrado_por)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (aid, plan_id, hasta, motivo, disposicion, user_id))
+        conn.commit()
+        return jsonify({'ok': True, 'mensaje': f'Prórroga registrada para {fila[0]}, {fila[1]} '
+                                              f'hasta el {hasta.strftime("%d/%m/%Y")}.'})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+
+@auth.route('/api/planes/<int:plan_id>/cerrar', methods=['POST'])
+@login_requerido(['coordinador'])
+def api_plan_cerrar(plan_id):
+    """Cierra el plan viejo (activo = FALSE) cuando todos los alumnos que quedan
+    en el terminaron. Su historial queda intacto."""
+    carrera_id = session.get('carrera_id')
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        viejo, nuevo, err = _planes_del_cierre(cur, plan_id, carrera_id)
+        if err:
+            return jsonify({'error': err[0]}), err[1]
+        anio_actual = get_ciclo_lectivo()['anio_inicio']
+        cur.execute("""SELECT id FROM alumnos_carrera
+                       WHERE carrera_id = %s AND plan_id = %s AND activo = TRUE""",
+                    (carrera_id, plan_id))
+        pendientes = sum(
+            1 for (aid,) in cur.fetchall()
+            if _situacion_cierre_alumno(cur, aid, plan_id, nuevo[0], nuevo[3], anio_actual)['situacion'] != 'egresado')
+        if pendientes:
+            return jsonify({'error': f'Todavía hay {pendientes} alumno{"s" if pendientes != 1 else ""} '
+                                     f'sin terminar en el {viejo[1]}: migralos o esperá a que terminen.'}), 409
+        cur.execute("UPDATE planes_estudio SET activo = FALSE WHERE id = %s", (plan_id,))
+        conn.commit()
+        return jsonify({'ok': True, 'mensaje': f'El {viejo[1]} quedó cerrado.'})
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         cur.close()
         conn.close()
