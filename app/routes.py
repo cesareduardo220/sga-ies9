@@ -3452,34 +3452,44 @@ def api_historial_descargar_estado(aid):
     cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
     anio_actual = cur.fetchone()[0]
 
-    # Todas las materias del plan con el mejor estado del alumno
+    # Materias del plan del alumno. El estado sale del mismo criterio que el resto
+    # del sistema (aprobada = promocionada o final aprobado; regular vigente o
+    # vencida) mas lo reconocido por equivalencia si migro de un plan anterior.
     cur.execute("""
-        SELECT
-            m.id, m.nombre, m.anio, m.orden, m.regimen,
-            (
-                SELECT cu.condicion
-                FROM inscripciones i2
-                JOIN cursadas cu ON cu.inscripcion_id = i2.id
-                WHERE i2.alumno_id = %s AND i2.materia_id = m.id
-                  AND cu.condicion IS NOT NULL
-                ORDER BY
-                    CASE cu.condicion
-                        WHEN 'promocionado' THEN 1
-                        WHEN 'regular'      THEN 2
-                        WHEN 'libre'        THEN 3
-                        ELSE 4
-                    END,
-                    i2.anio_lectivo DESC
-                LIMIT 1
-            ) AS mejor_condicion
+        SELECT m.id, m.nombre, m.anio, m.orden, m.regimen
         FROM materias m
         WHERE m.carrera_id = %s AND m.activa = TRUE
           AND m.plan_id IS NOT DISTINCT FROM %s
         ORDER BY m.anio, m.orden
-    """, (aid, carrera_id, _plan_de_alumno(cur, aid)))
+    """, (carrera_id, _plan_de_alumno(cur, aid)))
     materias = cur.fetchall()
+    propio = _estado_materias_alumno(cur, aid)
+    reconocidas = _reconocidas_por_equivalencia(cur, aid)
+    # Inscriptas en el anio lectivo actual que todavia no tienen condicion
+    cur.execute("""
+        SELECT DISTINCT i.materia_id
+        FROM inscripciones i
+        LEFT JOIN cursadas cu ON cu.inscripcion_id = i.id
+        WHERE i.alumno_id = %s AND i.anio_lectivo = %s AND cu.condicion IS NULL
+    """, (aid, int(anio_actual)))
+    cursando = {fila[0] for fila in cur.fetchall()}
     cur.close()
     conn.close()
+
+    def estado_pdf(mid):
+        propia = propio.get(mid, {}).get('estado')
+        rec = reconocidas.get(mid)
+        if propia == 'aprobada':
+            return 'aprobada'
+        if rec and rec['resultado'] == 'aprobada':
+            return 'aprobada_eq'
+        if mid in cursando:
+            return 'cursando'
+        if propia in ('regular', 'vencida', 'libre'):
+            return propia  # una cursada propia manda sobre la regularidad heredada
+        if rec:
+            return 'regular_eq' if rec['vigente'] else 'vencida_eq'
+        return 'sin_cursar'
 
     VERDE      = colors.HexColor('#1a4731')
     GRIS_BORDE = colors.HexColor('#CCCCCC')
@@ -3539,9 +3549,21 @@ def api_historial_descargar_estado(aid):
             por_anio[a] = []
         por_anio[a].append(m)
 
-    cond_label = {'promocionado': '✔ Aprobada', 'regular': '~ Regular (adeuda final)',
-                  'libre': '✘ Libre (adeuda)', None: '— Sin cursar'}
-    cond_col   = {'promocionado': C_PROMO, 'regular': C_REG, 'libre': C_LIBRE, None: C_PEND}
+    C_CURSA   = colors.HexColor('#8a5a00')
+    est_label = {
+        'aprobada':    '✔ Aprobada',
+        'aprobada_eq': '✔ Aprobada por equivalencia',
+        'cursando':    f'● Cursando {anio_actual}',
+        'regular':     '~ Regular (adeuda final)',
+        'regular_eq':  '~ Regular por equivalencia (adeuda final)',
+        'vencida':     '✘ Regularidad vencida',
+        'vencida_eq':  '✘ Regularidad vencida (equivalencia)',
+        'libre':       '✘ Libre (adeuda)',
+        'sin_cursar':  '— Sin cursar',
+    }
+    est_col = {'aprobada': C_PROMO, 'aprobada_eq': C_PROMO, 'cursando': C_CURSA,
+               'regular': C_REG, 'regular_eq': C_REG, 'vencida': C_LIBRE,
+               'vencida_eq': C_LIBRE, 'libre': C_LIBRE, 'sin_cursar': C_PEND}
 
     for anio_plan in sorted(por_anio.keys()):
         mats = por_anio[anio_plan]
@@ -3552,13 +3574,14 @@ def api_historial_descargar_estado(aid):
         enc = [Paragraph(t, st_head) for t in ['Espacio Curricular', 'Régimen', 'Estado']]
         filas = [enc]
         for i, m in enumerate(mats):
-            mid, mat, anio_m, orden, reg, cond = m
-            st_est = ParagraphStyle('e', parent=st_num, textColor=cond_col.get(cond, C_PEND),
-                                    fontName='Helvetica-Bold' if cond == 'promocionado' else 'Helvetica')
+            mid, mat, anio_m, orden, reg = m
+            est = estado_pdf(mid)
+            st_est = ParagraphStyle('e', parent=st_num, textColor=est_col[est],
+                                    fontName='Helvetica-Bold' if est in ('aprobada', 'aprobada_eq') else 'Helvetica')
             filas.append([
                 Paragraph(mat, st_cel),
                 Paragraph(reg or '—', st_num),
-                Paragraph(cond_label.get(cond, '— Sin cursar'), st_est),
+                Paragraph(est_label[est], st_est),
             ])
 
         tabla = Table(filas, colWidths=[8*cm, 3*cm, 6.5*cm])
@@ -3579,8 +3602,20 @@ def api_historial_descargar_estado(aid):
         elementos.append(tabla)
 
     elementos.append(Spacer(1, 0.4*cm))
+    # Leyenda: solo los estados que aparecen en este alumno
+    usados = {estado_pdf(m[0]) for m in materias}
+    leyenda = [
+        (('aprobada',),    '✔ Aprobada = Promocionó o aprobó el final'),
+        (('aprobada_eq',), '✔ Aprobada por equivalencia = Reconocida por lo aprobado en el plan anterior'),
+        (('cursando',),    f'● Cursando = Inscripta en el año lectivo {anio_actual}'),
+        (('regular',),     '~ Regular = Adeuda examen final'),
+        (('regular_eq',),  '~ Regular por equivalencia = Conserva la regularidad del plan anterior; rinde el final de esta materia'),
+        (('vencida', 'vencida_eq'), '✘ Regularidad vencida = Pasaron 2 años o agotó los 3 intentos'),
+        (('libre',),       '✘ Libre = Debe recursar'),
+        (('sin_cursar',),  '— Sin cursar = No inscripta aún'),
+    ]
     elementos.append(Paragraph(
-        '✔ Aprobada = Promocionó o aprobó el final   |   ~ Regular = Adeuda examen final   |   ✘ Libre = Debe recursar   |   — Sin cursar = No inscripta aún',
+        '   |   '.join(t for claves, t in leyenda if usados & set(claves)),
         st_ley))
 
     doc.build(elementos)
