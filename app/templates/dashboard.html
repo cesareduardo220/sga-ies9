@@ -1721,6 +1721,8 @@
                 <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                     <select id="materias-plan-sel" class="input-edit-ficha" style="display:none; width:auto; min-width:240px;"
                             onchange="cambiarPlanMaterias(this.value)" title="Plan de estudios"></select>
+                    <button type="button" id="materias-btn-cierre" class="btn-secundario" style="display:none"
+                            onclick="abrirCierrePlan()" title="Ver qué pasa con los alumnos de este plan al cerrarlo">Cerrar plan</button>
                     <a id="materias-pdf-link" href="/api/materias/descargar-pdf" class="btn-secundario" style="text-decoration:none">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
                         Descargar PDF
@@ -1741,6 +1743,17 @@
 
             <!-- Cargando -->
             <div id="materias-cargando" class="cargando">Cargando...</div>
+        </div>
+
+        <!-- CERRAR PLAN (se llega desde Plan de Estudios) -->
+        <div class="seccion" id="sec-cierre-plan">
+            <div class="seccion-header">
+                <div>
+                    <h2 id="cierre-titulo">Cerrar plan</h2>
+                    <div class="sub" id="cierre-sub"></div>
+                </div>
+            </div>
+            <div id="cierre-contenido"></div>
         </div>
 
 
@@ -4363,6 +4376,7 @@
         if (id === 'coordinadores') cargarCoordinadores();
         if (id === 'config')        cargarAnioLectivo();
         if (id === 'materias') cargarMaterias();
+        if (id === 'cierre-plan') cargarCierrePlan();
         if (id === 'alumnos') cargarAlumnos();
         if (id === 'inscripciones') cargarInscripciones();
         if (id === 'preinscripciones') cargarPreinscripciones();
@@ -5658,6 +5672,157 @@ async function eliminarPreceptora(id, apellido) {
 
     var materiasPlanSel = null;   // plan elegido en Plan de Estudios (null = el vigente)
 
+    // ── Cerrar plan (consulta) ──────────────────────────────────────────
+    var cierrePlanId = null;
+
+    function abrirCierrePlan() {
+        cierrePlanId = materiasPlanSel;
+        navegarA('cierre-plan', 'Cerrar plan');
+    }
+
+    function cierreToggleDetalle(id) {
+        const det = document.getElementById('cierre-det-' + id);
+        const btn = document.getElementById('cierre-btn-det-' + id);
+        if (!det) return;
+        const abrir = det.style.display === 'none';
+        det.style.display = abrir ? 'block' : 'none';
+        if (btn) btn.textContent = abrir ? 'Ocultar detalle' : 'Ver detalle';
+    }
+
+    async function cargarCierrePlan() {
+        const cont = document.getElementById('cierre-contenido');
+        const sub  = document.getElementById('cierre-sub');
+        const tit  = document.getElementById('cierre-titulo');
+        const esc  = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+        if (!cierrePlanId) {
+            tit.textContent = 'Cerrar plan';
+            sub.textContent = '';
+            cont.innerHTML = '<div class="empty-state">Elegí el plan a cerrar desde Plan de Estudios.</div>';
+            return;
+        }
+        cont.innerHTML = '<div class="cargando">Cargando...</div>';
+        let data;
+        try {
+            const res = await fetch(`/api/planes/${cierrePlanId}/cierre`);
+            data = await res.json();
+        } catch (e) {
+            data = { error: 'No se pudo cargar la información del cierre.' };
+        }
+        if (data.error) {
+            cont.innerHTML = `<div class="form-error" style="display:block">${esc(data.error)}</div>`;
+            return;
+        }
+
+        const POL = { ninguna: 'sin reconocimiento', equivalencias: 'según la tabla de equivalencias',
+                      personalizado: 'personalizado por alumno' };
+        tit.textContent = `Cerrar ${data.plan_viejo.nombre}`;
+        sub.textContent = `${data.plan_viejo.nombre} → ${data.plan_nuevo.nombre} (rige desde ${data.plan_nuevo.fecha_vigencia}) · ${POL[data.politica] || data.politica}`;
+
+        // Fecha limite y dias que faltan
+        let aviso = 'Sin fecha límite cargada en el plan nuevo', avisoFondo = '#F1EFE8', avisoColor = 'var(--sga-texto-gris)';
+        if (data.fecha_limite) {
+            const [dd, mm, aa] = data.fecha_limite.split('/').map(Number);
+            const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+            const dias = Math.round((new Date(aa, mm - 1, dd) - hoy) / 86400000);
+            aviso = dias >= 0
+                ? `Fecha límite ${data.fecha_limite} · faltan ${dias} día${dias === 1 ? '' : 's'}`
+                : `Fecha límite ${data.fecha_limite} · venció hace ${-dias} día${dias === -1 ? '' : 's'}`;
+            if (dias <= 30) { avisoFondo = '#FFF3CD'; avisoColor = '#856404'; }
+        }
+
+        const r = data.resumen;
+        const tarjeta = (titulo, valor) => `<div style="background:var(--sga-crema-2,#F5F3EE);border-radius:10px;padding:12px 14px;">
+            <div style="font-size:0.78rem;color:var(--sga-texto-gris);">${titulo}</div>
+            <div style="font-size:1.4rem;font-weight:700;">${valor}</div></div>`;
+
+        const ESTADO_VIEJA = c => ({
+            aprobada:     'aprobada',
+            regular:      `regular${c.vence ? ', vence ' + c.vence : ''}${c.intentos ? ', ' + c.intentos + ' intento' + (c.intentos === 1 ? '' : 's') + ' usado' + (c.intentos === 1 ? '' : 's') : ''}`,
+            vencida:      `regular vencida${c.vence ? ' el ' + c.vence : ''}`,
+            libre:        'libre',
+        }[c.estado] || 'sin cursar');
+        const BADGE = {
+            aprobada: ['Aprobada', '#DCF5E5', 'var(--sga-exito,#1f7a4d)'],
+            regular:  ['Regular',  '#E5F0F8', '#2D6FBD'],
+            cursar:   ['A cursar', '#F1EFE8', 'var(--sga-texto-gris)'],
+        };
+        const badge = (txt, fondo, color) =>
+            `<span style="background:${fondo};color:${color};border-radius:8px;padding:2px 8px;font-size:0.74rem;font-weight:600;white-space:nowrap;">${txt}</span>`;
+
+        const ORDEN = a => a.sugerencia === 'prorroga' ? 0 : a.sugerencia === 'migrar' ? 1 : a.situacion === 'bloqueado' ? 2 : 3;
+        const alumnos = data.alumnos.slice().sort((x, y) => (ORDEN(x) - ORDEN(y)) || x.apellido.localeCompare(y.apellido));
+
+        const filas = alumnos.map(a => {
+            let linea, etiqueta;
+            if (a.situacion === 'egresado') {
+                linea = `Terminó el ${esc(data.plan_viejo.nombre)}: no se migra.`;
+                etiqueta = badge('Egresado', '#DCF5E5', 'var(--sga-exito,#1f7a4d)');
+            } else if (a.situacion === 'bloqueado') {
+                linea = `Tiene cursadas sin cerrar: ${a.cursadas_abiertas.map(esc).join(', ')}. No se puede migrar hasta cerrarlas.`;
+                etiqueta = badge('Bloqueado', '#FBEAEA', 'var(--sga-error)');
+            } else {
+                const total = a.materias.length;
+                const cursar = a.materias.filter(m => m.resultado === 'cursar').length;
+                linea = `Se le reconocen ${a.reconocidas} de ${total}` +
+                        (a.regulares ? ` · ${a.regulares} regular${a.regulares === 1 ? '' : 'es'}` : '') +
+                        ` · le quedan por cursar ${cursar}`;
+                if (a.sugerencia === 'prorroga') {
+                    linea += ` · en el plan anterior le falta${a.pendientes_viejo === 1 ? '' : 'n'} ${a.pendientes_viejo}; en el nuevo le faltarían ${a.pendientes_nuevo}`;
+                    etiqueta = badge('Sugerido: prórroga', '#FFF3CD', '#856404');
+                } else {
+                    etiqueta = badge('Sugerido: migrar', '#E5F0F8', '#2D6FBD');
+                }
+            }
+            const detalle = a.materias.map(m => {
+                const b = BADGE[m.resultado];
+                const extra = m.resultado === 'regular' && m.vence ? ` <span style="font-size:0.72rem;color:var(--sga-texto-gris);">vence ${m.vence}</span>` : '';
+                const con = m.con.length
+                    ? m.con.map(c => `${esc(c.nombre)} <span style="color:var(--sga-texto-gris);">(${esc(ESTADO_VIEJA(c))})</span>`).join('<br>')
+                    : '<span style="color:var(--sga-texto-gris);font-style:italic;">sin equivalente</span>';
+                return `<div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.6fr) minmax(0,0.8fr);gap:10px;padding:6px 0;border-top:1px solid var(--sga-borde);font-size:0.8rem;">
+                    <div><strong>${esc(m.nombre)}</strong> <span style="color:var(--sga-texto-gris);">(${m.anio}°)</span></div>
+                    <div>${con}</div>
+                    <div>${badge(b[0], b[1], b[2])}${extra}</div>
+                </div>`;
+            }).join('');
+            return `<div style="padding:12px 16px;border-top:1px solid var(--sga-borde);">
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:240px;">
+                        <div style="font-weight:600;">${esc(a.apellido)}, ${esc(a.nombre)} <span style="font-weight:400;font-size:0.78rem;color:var(--sga-texto-gris);">· DNI ${esc(a.dni)}</span></div>
+                        <div style="font-size:0.8rem;color:var(--sga-texto-gris);margin-top:2px;">${linea}</div>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        ${etiqueta}
+                        <button type="button" class="btn-secundario" id="cierre-btn-det-${a.id}" style="padding:4px 10px;font-size:0.78rem;"
+                                onclick="cierreToggleDetalle(${a.id})">Ver detalle</button>
+                    </div>
+                </div>
+                <div id="cierre-det-${a.id}" style="display:none;margin-top:8px;padding-left:12px;">
+                    <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.6fr) minmax(0,0.8fr);gap:10px;font-size:0.72rem;font-weight:700;color:var(--sga-texto-gris);text-transform:uppercase;padding-bottom:4px;">
+                        <div>Plan nuevo</div><div>Se reconoce con (plan anterior)</div><div>Queda como</div>
+                    </div>
+                    ${detalle}
+                </div>
+            </div>`;
+        }).join('');
+
+        cont.innerHTML = `
+            <div style="background:${avisoFondo};color:${avisoColor};border-radius:10px;padding:10px 14px;font-size:0.85rem;margin-bottom:14px;">${aviso}</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;">
+                ${tarjeta('Terminaron', r.egresados)}
+                ${tarjeta('Sugeridos para migrar', r.sugeridos_migrar)}
+                ${tarjeta('Sugeridos para prórroga', r.sugeridos_prorroga)}
+                ${tarjeta('Con cursadas abiertas', r.bloqueados)}
+            </div>
+            <div class="tarjeta-form" style="padding:0;overflow:hidden;">
+                <div style="padding:12px 16px;font-weight:700;">Alumnos del ${esc(data.plan_viejo.nombre)} (${r.total})</div>
+                ${filas || '<div style="padding:12px 16px;color:var(--sga-texto-gris);">No hay alumnos en este plan.</div>'}
+            </div>
+            <p style="font-size:0.8rem;color:var(--sga-texto-gris);margin-top:12px;">
+                Esta pantalla es de consulta: muestra qué le pasaría a cada alumno si migra al ${esc(data.plan_nuevo.nombre)}.
+            </p>`;
+    }
+
     function cambiarPlanMaterias(id) {
         materiasPlanSel = parseInt(id, 10) || null;
         cargarMaterias();
@@ -5695,6 +5860,13 @@ async function eliminarPreceptora(id, apellido) {
             } else {
                 sel.style.display = 'none';
             }
+        }
+
+        // "Cerrar plan": coordinador, con un plan mas nuevo que reemplaza al elegido
+        const btnCierre = document.getElementById('materias-btn-cierre');
+        if (btnCierre) {
+            const hayMasNuevo = planes.length > 1 && planes[0] && materiasPlanSel !== planes[0].id;
+            btnCierre.style.display = (ROL === 'coordinador' && hayMasNuevo) ? '' : 'none';
         }
 
         const pdf = document.getElementById('materias-pdf-link');
