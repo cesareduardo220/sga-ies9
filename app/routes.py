@@ -1702,6 +1702,205 @@ def _plan_de_alumno(cur, aid):
     return fila[0] if fila[0] is not None else _plan_vigente_id(cur, fila[1])
 
 
+def _estado_materias_alumno(cur, aid):
+    """Situacion de cada materia cursada o rendida por el alumno (todo su historial),
+    con el mismo criterio que _evaluar_materias_alumno:
+      aprobada = cursada promocionada o examen final aprobado
+      regular  = ultima cursada regular/promocionada, vigente 2 anios desde que se
+                 cargo y hasta 3 finales desaprobados; si no, 'vencida'.
+    Devuelve {materia_id: {'estado', 'vence', 'intentos'}}."""
+    cur.execute("""
+        SELECT DISTINCT materia_id FROM (
+            SELECT i.materia_id
+            FROM inscripciones i
+            JOIN cursadas cu ON cu.inscripcion_id = i.id
+            WHERE i.alumno_id = %s AND cu.condicion = 'promocionado'
+            UNION
+            SELECT materia_id FROM examenes
+            WHERE alumno_id = %s AND resultado = 'aprobado'
+        ) sub
+    """, (aid, aid))
+    estado = {fila[0]: {'estado': 'aprobada', 'vence': None, 'intentos': 0}
+              for fila in cur.fetchall()}
+
+    cur.execute("""
+        WITH ultima AS (
+            SELECT DISTINCT ON (i.materia_id)
+                   i.materia_id, cu.cargado_en,
+                   (cu.cargado_en + INTERVAL '2 years')::date AS vence_el
+            FROM inscripciones i
+            JOIN cursadas cu ON cu.inscripcion_id = i.id
+            WHERE i.alumno_id = %s AND cu.condicion IN ('regular', 'promocionado')
+            ORDER BY i.materia_id, cu.cargado_en DESC
+        )
+        SELECT u.materia_id, u.vence_el,
+               (SELECT COUNT(*) FROM examenes e
+                 WHERE e.alumno_id = %s AND e.materia_id = u.materia_id
+                   AND e.resultado = 'desaprobado'
+                   AND e.fecha_mesa >= u.cargado_en::date) AS intentos
+        FROM ultima u
+    """, (aid, aid))
+    hoy = date.today()
+    for mid, vence, intentos in cur.fetchall():
+        if mid in estado:
+            continue
+        vencida = (vence is not None and hoy > vence) or intentos >= 3
+        estado[mid] = {'estado': 'vencida' if vencida else 'regular',
+                       'vence': vence, 'intentos': intentos}
+
+    # Cursadas que quedaron libres o ausentes (para mostrarlas como tales)
+    cur.execute("""
+        SELECT DISTINCT i.materia_id
+        FROM inscripciones i
+        JOIN cursadas cu ON cu.inscripcion_id = i.id
+        WHERE i.alumno_id = %s AND cu.condicion IN ('libre', 'ausente')
+    """, (aid,))
+    for (mid,) in cur.fetchall():
+        estado.setdefault(mid, {'estado': 'libre', 'vence': None, 'intentos': 0})
+    return estado
+
+
+def _situacion_cierre_alumno(cur, aid, plan_viejo_id, plan_nuevo_id, politica, anio_actual):
+    """Que le pasa a un alumno del plan viejo si migra al nuevo, segun la tabla de
+    equivalencias. Solo lectura."""
+    estado = _estado_materias_alumno(cur, aid)
+
+    cur.execute("""SELECT id, nombre, anio FROM materias
+                   WHERE plan_id = %s AND activa = TRUE ORDER BY anio, orden""", (plan_viejo_id,))
+    viejas = cur.fetchall()
+    nombre_vieja = {v[0]: (v[1], v[2]) for v in viejas}
+    cur.execute("""SELECT id, nombre, anio FROM materias
+                   WHERE plan_id = %s AND activa = TRUE ORDER BY anio, orden""", (plan_nuevo_id,))
+    nuevas = cur.fetchall()
+
+    grupos = {}
+    if politica != 'ninguna':
+        cur.execute("""SELECT id, materia_nueva_id, materia_vieja_id
+                       FROM equivalencias_plan WHERE plan_nuevo_id = %s""", (plan_nuevo_id,))
+        for eq_id, id_nueva, id_vieja in cur.fetchall():
+            grupos.setdefault(id_nueva, []).append((eq_id, id_vieja))
+    # Excepciones del coordinador (politica personalizada)
+    cur.execute("""SELECT equivalencia_id FROM reconocimientos_alumno
+                   WHERE alumno_id = %s AND reconocida = FALSE""", (aid,))
+    excluidas = {fila[0] for fila in cur.fetchall()}
+
+    # Cursadas abiertas del plan viejo en el anio lectivo actual
+    cur.execute("""
+        SELECT m.nombre FROM inscripciones i
+        JOIN materias m ON m.id = i.materia_id
+        LEFT JOIN cursadas cu ON cu.inscripcion_id = i.id
+        WHERE i.alumno_id = %s AND m.plan_id = %s AND i.anio_lectivo = %s
+          AND (cu.id IS NULL OR cu.cerrada = FALSE)
+        ORDER BY m.anio, m.orden
+    """, (aid, plan_viejo_id, anio_actual))
+    abiertas = [fila[0] for fila in cur.fetchall()]
+
+    def txt_fecha(f):
+        return f.strftime('%d/%m/%Y') if f else None
+
+    materias = []
+    for id_nueva, nombre, anio in nuevas:
+        filas = grupos.get(id_nueva, [])
+        excluida = any(eq_id in excluidas for eq_id, _ in filas)
+        con = []
+        for _, id_vieja in filas:
+            e = estado.get(id_vieja, {'estado': 'sin cursar', 'vence': None, 'intentos': 0})
+            nom_v, anio_v = nombre_vieja.get(id_vieja, ('?', None))
+            con.append({'id': id_vieja, 'nombre': nom_v, 'anio': anio_v,
+                        'estado': e['estado'], 'vence': txt_fecha(e['vence']),
+                        'intentos': e['intentos']})
+        resultado, vence, intentos = 'cursar', None, 0
+        if filas and not excluida:
+            estados = [c['estado'] for c in con]
+            if all(s == 'aprobada' for s in estados):
+                resultado = 'aprobada'
+            elif all(s in ('aprobada', 'regular') for s in estados):
+                resultado = 'regular'
+                regs = [estado[id_v] for _, id_v in filas if estado[id_v]['estado'] == 'regular']
+                vence = min(x['vence'] for x in regs if x['vence']) if any(x['vence'] for x in regs) else None
+                intentos = max(x['intentos'] for x in regs)
+        materias.append({'id': id_nueva, 'nombre': nombre, 'anio': anio,
+                         'resultado': resultado, 'excluida': excluida,
+                         'vence': txt_fecha(vence), 'intentos': intentos, 'con': con})
+
+    egresado = bool(viejas) and all(estado.get(v[0], {}).get('estado') == 'aprobada' for v in viejas)
+    pendientes_viejo = sum(1 for v in viejas if estado.get(v[0], {}).get('estado') != 'aprobada')
+    pendientes_nuevo = sum(1 for m in materias if m['resultado'] != 'aprobada')
+    if egresado:
+        situacion, sugerencia = 'egresado', None
+    elif abiertas:
+        situacion, sugerencia = 'bloqueado', None
+    else:
+        situacion = 'migrable'
+        sugerencia = 'prorroga' if pendientes_viejo < pendientes_nuevo else 'migrar'
+
+    return {
+        'situacion': situacion, 'sugerencia': sugerencia,
+        'cursadas_abiertas': abiertas,
+        'pendientes_viejo': pendientes_viejo, 'pendientes_nuevo': pendientes_nuevo,
+        'reconocidas': sum(1 for m in materias if m['resultado'] == 'aprobada'),
+        'regulares': sum(1 for m in materias if m['resultado'] == 'regular'),
+        'materias': materias,
+    }
+
+
+@auth.route('/api/planes/<int:plan_id>/cierre', methods=['GET'])
+@login_requerido(['coordinador'])
+def api_plan_cierre(plan_id):
+    """Situacion de cada alumno del plan viejo frente al plan nuevo. Solo lectura."""
+    carrera_id = session.get('carrera_id')
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""SELECT id, nombre, fecha_vigencia, fecha_cierre, activo
+                       FROM planes_estudio WHERE id = %s AND carrera_id = %s""",
+                    (plan_id, carrera_id))
+        viejo = cur.fetchone()
+        if not viejo:
+            return jsonify({'error': 'Plan no encontrado en esta carrera'}), 404
+        if not viejo[4]:
+            return jsonify({'error': 'Ese plan ya está cerrado'}), 409
+        cur.execute("""
+            SELECT id, nombre, fecha_vigencia, politica_migracion, fecha_cierre FROM planes_estudio
+            WHERE carrera_id = %s AND activo = TRUE AND id <> %s AND fecha_vigencia > %s
+            ORDER BY fecha_vigencia DESC LIMIT 1
+        """, (carrera_id, plan_id, viejo[2]))
+        nuevo = cur.fetchone()
+        if not nuevo:
+            return jsonify({'error': 'No hay un plan nuevo cargado para reemplazar a este'}), 409
+
+        anio_actual = get_ciclo_lectivo()['anio_inicio']
+        cur.execute("""SELECT id, apellido, nombre, dni FROM alumnos_carrera
+                       WHERE carrera_id = %s AND plan_id = %s AND activo = TRUE
+                       ORDER BY apellido, nombre""", (carrera_id, plan_id))
+        alumnos = []
+        for aid, apellido, nombre, dni in cur.fetchall():
+            s = _situacion_cierre_alumno(cur, aid, plan_id, nuevo[0], nuevo[3], anio_actual)
+            s.update({'id': aid, 'apellido': apellido, 'nombre': nombre, 'dni': dni})
+            alumnos.append(s)
+
+        def f(x):
+            return x.strftime('%d/%m/%Y') if x else None
+        return jsonify({
+            'plan_viejo': {'id': viejo[0], 'nombre': viejo[1]},
+            'plan_nuevo': {'id': nuevo[0], 'nombre': nuevo[1], 'fecha_vigencia': f(nuevo[2])},
+            # La fecha limite de la transicion se carga con el plan nuevo
+            'fecha_limite': f(nuevo[4]),
+            'politica': nuevo[3],
+            'resumen': {
+                'total': len(alumnos),
+                'egresados': sum(1 for a in alumnos if a['situacion'] == 'egresado'),
+                'bloqueados': sum(1 for a in alumnos if a['situacion'] == 'bloqueado'),
+                'sugeridos_migrar': sum(1 for a in alumnos if a['sugerencia'] == 'migrar'),
+                'sugeridos_prorroga': sum(1 for a in alumnos if a['sugerencia'] == 'prorroga'),
+            },
+            'alumnos': alumnos,
+        })
+    finally:
+        cur.close()
+        conn.close()
+
+
 @auth.route('/api/plan-vigente', methods=['GET'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_plan_vigente():
