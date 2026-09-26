@@ -5541,7 +5541,8 @@ async function eliminarPreceptora(id, apellido) {
         mostrarComparacion(data.comparacion, data.filas_nuevo);
         document.getElementById('panel-agregar-materia-manual').style.display = 'none';
         document.getElementById('panel-cambio-plan').style.display = 'block';
-        document.getElementById('panel-cambio-plan').scrollIntoView({ behavior: 'smooth' });
+        // Al aplicar sugerencias de escritura no se salta arriba: el coordinador sigue donde estaba
+        if (!correcciones) document.getElementById('panel-cambio-plan').scrollIntoView({ behavior: 'smooth' });
     }
 
     function mostrarComparacion(comp, filasNuevo) {
@@ -5602,6 +5603,11 @@ async function eliminarPreceptora(id, apellido) {
                 Examen libre: ${rl.con_marca
                     ? `lo admiten ${rl.admiten} de ${rl.total} espacios (los marcados con (*))`
                     : 'lo admiten todos los espacios (ninguno tiene (*))'}.</div>`;
+        }
+        const aplicadas = Object.values(window._correccionesPlan || {});
+        if (aplicadas.length) {
+            html += `<div style="background:#E6F4EA;color:#1a6e3c;border-radius:10px;padding:8px 12px;margin-top:8px;font-size:0.8rem;">
+                ✅ Correcciones de escritura aplicadas (${aplicadas.length}): ${aplicadas.map(escT).join(', ')}</div>`;
         }
         const sugE = (_planNuevoData && _planNuevoData.sugerencias_escritura) || [];
         if (sugE.length) {
