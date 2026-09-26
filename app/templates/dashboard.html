@@ -6144,7 +6144,7 @@ async function eliminarPreceptora(id, apellido) {
                 sel.innerHTML = planes.map(p => {
                     const etq = p.estado === 'vigente' ? 'vigente'
                               : p.estado === 'proximo' ? `rige desde ${p.fecha_vigencia}`
-                              : (p.fecha_cierre ? `anterior, hasta ${p.fecha_cierre}` : 'anterior');
+                              : (p.fecha_limite ? `anterior, hasta ${p.fecha_limite}` : 'anterior');
                     return `<option value="${p.id}">${p.nombre} (${etq})</option>`;
                 }).join('');
                 sel.value = String(materiasPlanSel);

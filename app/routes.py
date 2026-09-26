@@ -2235,6 +2235,9 @@ def api_plan_vigente():
     conn.close()
 
     hoy = date.today()
+    # El plan que reemplaza a otro es el mas nuevo de los activos (mismo criterio
+    # que _planes_del_cierre): su fecha_cierre es la fecha limite de la transicion.
+    mas_nuevo = filas[0] if filas else None
     planes = []
     for pid, nombre, resolucion, f_vig, f_cierre in filas:
         if pid == vigente_id:
@@ -2243,12 +2246,16 @@ def api_plan_vigente():
             estado = 'proximo'
         else:
             estado = 'anterior'
+        limite = None
+        if mas_nuevo and pid != mas_nuevo[0] and f_vig and mas_nuevo[3] > f_vig:
+            limite = mas_nuevo[4]
         planes.append({
             'id': pid,
             'nombre': (nombre or '').strip(),
             'resolucion': (resolucion or '').strip(),
             'fecha_vigencia': f_vig.strftime('%d/%m/%Y') if f_vig else '',
             'fecha_cierre': f_cierre.strftime('%d/%m/%Y') if f_cierre else '',
+            'fecha_limite': limite.strftime('%d/%m/%Y') if limite else '',
             'estado': estado,
         })
 
