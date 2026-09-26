@@ -5459,6 +5459,22 @@ async function eliminarPreceptora(id, apellido) {
             </div>`;
         }
 
+        // Correlatividades: cuántas se leyeron y lo que conviene revisar
+        const escT = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+        const rc = (_planNuevoData && _planNuevoData.resumen_correlativas) || null;
+        const avisosC = (_planNuevoData && _planNuevoData.avisos_correlativas) || [];
+        if (rc) {
+            html += `<div style="font-size:0.8rem;color:var(--sga-texto-gris);margin:10px 0 4px;">
+                Correlatividades leídas: ${rc.cursada} regularizadas para cursar · ${rc.aprobada_cursar} aprobadas para cursar · ${rc.aprobada} aprobadas para rendir.</div>`;
+        }
+        if (avisosC.length) {
+            html += `<div style="background:#FBEAEA;border-radius:10px;padding:12px;margin-top:8px;">
+                <div style="font-weight:700;font-size:0.8rem;color:var(--sga-error);margin-bottom:8px">⚠️ Revisá estas correlatividades</div>
+                ${avisosC.map(a => `<div style="font-size:0.78rem;padding:3px 0;border-bottom:1px solid #e6c3c3">(${a.orden}) ${escT(a.nombre)} — ${escT(a.texto)}</div>`).join('')}
+                <div style="font-size:0.72rem;color:var(--sga-error);margin-top:8px">Lo que no se entiende o no existe no se carga. Si hay un error, corregí el Excel y volvé a cargarlo.</div>
+            </div>`;
+        }
+
         document.getElementById('cambio-comparacion').innerHTML = html;
 
         // Tabla de equivalencias: materia nueva (por su orden) -> materias del

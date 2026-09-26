@@ -1642,6 +1642,7 @@ def descargar_plantilla():
         "Espacios Curriculares",
         "Régimen",
         "Correlatividades - Regularizadas para cursar",
+        "Correlatividades - Aprobadas para cursar",
         "Correlatividades - Aprobadas para rendir",
         "Régimen de Aprobación",
     ]
@@ -1658,14 +1659,33 @@ def descargar_plantilla():
         celda.alignment = alin
 
     # Anchos de columna
-    anchos = [8, 8, 35, 15, 38, 38, 22]
+    anchos = [8, 8, 35, 15, 30, 30, 30, 26]
     for i, ancho in enumerate(anchos, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = ancho
 
     ws.row_dimensions[1].height = 40
 
     # Fila de ejemplo
-    ws.append([1, 1, "Matemática", "Cuatrimestral", "", "", "Promocional"])
+    ws.append([1, 1, "Matemática", "Cuatrimestral", "", "", "", "Promocional"])
+
+    # Las columnas de correlativas van como texto: si no, Excel convierte
+    # "4-6" en una fecha (4 de junio)
+    for fila in range(2, 301):
+        for col in (5, 6, 7):
+            ws.cell(row=fila, column=col).number_format = '@'
+
+    # Hoja de ayuda (la importación lee siempre la primera hoja)
+    ayuda = wb.create_sheet('Cómo completar')
+    for linea in (
+        'Una fila por espacio curricular, con el Año y el Orden tal como figuran en la resolución. El orden no se puede repetir.',
+        'Correlatividades: los números de orden separados por guion, por ejemplo 4-6 o 11-12-13.',
+        'Para pedir un año completo, escribí el año: "1° Año", o combinado: "1° Año - 2° Año - 21". Se cargan todas las materias de ese año.',
+        'Dejá la celda vacía (o con -----) si no tiene correlativas.',
+        '"Aprobadas para cursar" es de los Profesorados: materias que tienen que estar aprobadas, no solo regularizadas, para poder cursar.',
+        'Régimen de Aprobación: como figura en la resolución (Promoción / Examen Final, Prom./Ex. Final, Examen Final o Promoción).',
+    ):
+        ayuda.append([linea])
+    ayuda.column_dimensions['A'].width = 130
 
     buf = BytesIO()
     wb.save(buf)
@@ -2566,7 +2586,7 @@ def api_importar_plan():
     primera_fila = next(ws.iter_rows(min_row=1, max_row=1), [])
     header_vals = [str(c.value).strip().lower() if c.value else '' for c in primera_fila]
     tiene_anio   = any('año' in v or 'anio' in v for v in header_vals)
-    tiene_nombre = any(p in v for v in header_vals for p in ['espacio', 'curricular', 'nombre', 'materia'])
+    tiene_nombre = any(p in v for v in header_vals for p in ['espacio', 'curricular', 'nombre', 'materia', 'unidad'])
 
     if not (tiene_anio and tiene_nombre):
         return jsonify({
@@ -2576,13 +2596,16 @@ def api_importar_plan():
         }), 400
 
     try:
-        filas_nuevo = []
+        # Cada dato se ubica por el nombre de su columna: los Excel de la
+        # plantilla vieja (7 columnas) y los de la nueva sirven igual.
+        cols = _columnas_plan(header_vals)
+        filas_nuevo, avisos_lectura = [], []
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not any(row):
                 continue
-            anio, orden, nombre, regimen, correl_cursada, correl_aprobada, regimen_aprobacion = (
-                row[0], row[1], row[2], row[3], row[4], row[5], row[6]
-            )
+            anio, orden, nombre = (_celda_plan(row, cols, c) for c in ('anio', 'orden', 'nombre'))
+            regimen = _celda_plan(row, cols, 'regimen')
+            regimen_aprobacion = _celda_plan(row, cols, 'regimen_aprobacion')
             if not nombre or not anio or not orden:
                 continue
             try:
@@ -2592,18 +2615,33 @@ def api_importar_plan():
                 # Fila con datos que no coinciden con el formato esperado — se ignora
                 # en vez de hacer fallar toda la importación por una fila suelta.
                 continue
-            filas_nuevo.append({
+            fila = {
                 'anio': anio_int,
                 'orden': orden_int,
                 'nombre': str(nombre).strip(),
                 'regimen': str(regimen).strip() if regimen else None,
                 'regimen_aprobacion': str(regimen_aprobacion).strip() if regimen_aprobacion else None,
-                'correl_cursada': str(correl_cursada).strip() if correl_cursada else '',
-                'correl_aprobada': str(correl_aprobada).strip() if correl_aprobada else '',
-            })
+            }
+            for campo, _tipo, etiqueta in _CAMPOS_CORRELATIVAS:
+                texto, aviso = _texto_correlativa(_celda_plan(row, cols, campo))
+                fila[campo] = texto
+                if aviso:
+                    avisos_lectura.append({'orden': orden_int, 'nombre': fila['nombre'],
+                                           'texto': f'{etiqueta}: {aviso}'})
+            filas_nuevo.append(fila)
 
         if not filas_nuevo:
             return jsonify({'error': 'El archivo no tiene datos válidos para importar.'}), 400
+
+        # Cada espacio necesita un orden propio: las correlativas se refieren a él
+        vistos = {}
+        for f in filas_nuevo:
+            if f['orden'] in vistos:
+                return jsonify({'error': f"El orden {f['orden']} está repetido ({vistos[f['orden']]} y "
+                                         f"{f['nombre']}): cada espacio curricular tiene que tener un "
+                                         f"número de orden distinto. Corregí el Excel y volvé a cargarlo."}), 400
+            vistos[f['orden']] = f['nombre']
+        avisos_correl, resumen_correl = _revisar_correlativas_plan(filas_nuevo)
 
         conn = get_db()
         cur  = conn.cursor()
@@ -2691,10 +2729,131 @@ def api_importar_plan():
             'sugerencias': sugerencias,
             'filas_nuevo': filas_nuevo,
             'total_nuevo': len(filas_nuevo),
+            'avisos_correlativas': avisos_lectura + avisos_correl,
+            'resumen_correlativas': resumen_correl,
         })
 
     except Exception as e:
         return jsonify({'error': f'Error al procesar el archivo: {str(e)}'}), 500
+
+
+# Columnas de correlativas del plan: (campo en la fila, tipo en la base, etiqueta)
+_CAMPOS_CORRELATIVAS = (
+    ('correl_cursada',         'cursada',         'Regularizadas para cursar'),
+    ('correl_aprobada_cursar', 'aprobada_cursar', 'Aprobadas para cursar'),
+    ('correl_aprobada',        'aprobada',        'Aprobadas para rendir'),
+)
+
+
+def _columnas_plan(encabezados):
+    """Ubica cada dato del plan por el nombre de la columna. Si no reconoce los
+    encabezados basicos, usa el orden de la plantilla vieja (7 columnas)."""
+    import unicodedata
+    cols = {}
+    for i, v in enumerate(encabezados):
+        h = ''.join(c for c in unicodedata.normalize('NFD', str(v or '').lower())
+                    if unicodedata.category(c) != 'Mn').strip()
+        if not h:
+            continue
+        if 'regularizada' in h:
+            clave = 'correl_cursada'
+        elif 'aprobada' in h and 'cursar' in h:
+            clave = 'correl_aprobada_cursar'
+        elif 'aprobada' in h:
+            clave = 'correl_aprobada'
+        elif 'aprobacion' in h or 'acreditacion' in h:
+            clave = 'regimen_aprobacion'
+        elif 'regimen' in h:
+            clave = 'regimen'
+        elif 'orden' in h:
+            clave = 'orden'
+        elif h in ('ano', 'anio') or h.startswith('ano ') or h.startswith('anio'):
+            clave = 'anio'
+        elif any(p in h for p in ('espacio', 'curricular', 'nombre', 'materia', 'unidad')):
+            clave = 'nombre'
+        else:
+            continue
+        cols.setdefault(clave, i)
+    if not all(c in cols for c in ('anio', 'orden', 'nombre')):
+        cols = {'anio': 0, 'orden': 1, 'nombre': 2, 'regimen': 3,
+                'correl_cursada': 4, 'correl_aprobada': 5, 'regimen_aprobacion': 6}
+    return cols
+
+
+def _celda_plan(row, cols, clave):
+    i = cols.get(clave)
+    return row[i] if i is not None and i < len(row) else None
+
+
+def _texto_correlativa(valor):
+    """Una celda de correlativas como texto. Si la celda no era de texto, Excel
+    pudo convertir "4-6" en una fecha: se devuelve "4-6" con un aviso."""
+    if valor is None:
+        return '', None
+    if isinstance(valor, date):
+        t = f'{valor.day}-{valor.month}'
+        return t, f'Excel la convirtió en una fecha; se tomó como «{t}», revisalo'
+    if isinstance(valor, float) and valor.is_integer():
+        return str(int(valor)), None
+    return str(valor).strip(), None
+
+
+def _ordenes_del_plan(filas):
+    ordenes_por_anio, anio_de = {}, {}
+    for f in filas:
+        ordenes_por_anio.setdefault(int(f['anio']), []).append(int(f['orden']))
+        anio_de[int(f['orden'])] = int(f['anio'])
+    return ordenes_por_anio, anio_de
+
+
+def _leer_correlativas(texto, fila, ordenes_por_anio, anio_de):
+    """Lee una celda de correlativas: "4-11-14", "1° Año - 2° Año - 21-29",
+    "-----". Devuelve (ordenes, avisos). Un año completo se expande en todas las
+    materias de ese año. Lo que no se entiende o no existe no se carga y queda
+    como aviso; un orden de un año posterior se carga pero se avisa."""
+    texto = str(texto or '')
+    propio = int(fila['orden'])
+    ordenes, avisos, anios = set(), [], set()
+
+    def tomar_anio(m):
+        anios.add(int(m.group(1)))
+        return ' '
+    resto = re.sub(r'(\d+)\s*[°º]\s*(?:a[ñn]os?)?', tomar_anio, texto, flags=re.I)
+    resto = re.sub(r'(\d+)\s*(?:er|ro|do|to)?\s*a[ñn]os?\b', tomar_anio, resto, flags=re.I)
+    for a in sorted(anios):
+        if a in ordenes_por_anio:
+            ordenes.update(o for o in ordenes_por_anio[a] if o != propio)
+        else:
+            avisos.append(f'no hay materias de {a}° año')
+    for num in re.findall(r'\d+', resto):
+        n = int(num)
+        if n not in anio_de:
+            avisos.append(f'no existe el orden {n}')
+        elif n == propio:
+            avisos.append('la materia no puede ser correlativa de sí misma')
+        else:
+            ordenes.add(n)
+    sobra = re.sub(r'\d+|a[ñn]os?|\by\b|\bningun[ao]?\b|\bno tiene\b|\bsin correlativas?\b|\bno\b|[\s\-–—,;./_]+',
+                   '', resto, flags=re.I)
+    if sobra:
+        avisos.append(f'no se entiende «{texto.strip()}»')
+    for n in sorted(ordenes):
+        if anio_de[n] > int(fila['anio']):
+            avisos.append(f'el orden {n} es de un año posterior ({anio_de[n]}°)')
+    return sorted(ordenes), avisos
+
+
+def _revisar_correlativas_plan(filas):
+    """Avisos de las correlativas de todo el plan, para la revisión antes de
+    confirmar, y cuántas se leyeron de cada tipo."""
+    ordenes_por_anio, anio_de = _ordenes_del_plan(filas)
+    avisos, resumen = [], {tipo: 0 for _c, tipo, _e in _CAMPOS_CORRELATIVAS}
+    for f in filas:
+        for campo, tipo, etiqueta in _CAMPOS_CORRELATIVAS:
+            ordenes, avs = _leer_correlativas(f.get(campo) or '', f, ordenes_por_anio, anio_de)
+            resumen[tipo] += len(ordenes)
+            avisos += [{'orden': f['orden'], 'nombre': f['nombre'], 'texto': f'{etiqueta}: {a}'} for a in avs]
+    return avisos, resumen
 
 
 def _ejecutar_importacion(cur, carrera_id, filas, plan_id=None):
@@ -2709,22 +2868,18 @@ def _ejecutar_importacion(cur, carrera_id, filas, plan_id=None):
               f['regimen'], f['regimen_aprobacion'], plan_id))
         orden_a_id[f['orden']] = cur.fetchone()[0]
 
+    # Correlativas: las tres columnas, con la misma lectura que la revisión
+    # ("1° Año" se expande; lo que no se entiende no se carga)
+    ordenes_por_anio, anio_de = _ordenes_del_plan(filas)
     for f in filas:
         materia_id = orden_a_id[f['orden']]
-        for num in f['correl_cursada'].split('-'):
-            num = num.strip()
-            if num.isdigit() and int(num) in orden_a_id:
+        for campo, tipo, _etiqueta in _CAMPOS_CORRELATIVAS:
+            ordenes, _avisos = _leer_correlativas(f.get(campo) or '', f, ordenes_por_anio, anio_de)
+            for num in ordenes:
                 cur.execute("""
                     INSERT INTO correlatividades (materia_id, requiere_materia_id, tipo)
-                    VALUES (%s, %s, 'cursada') ON CONFLICT DO NOTHING
-                """, (materia_id, orden_a_id[int(num)]))
-        for num in f['correl_aprobada'].split('-'):
-            num = num.strip()
-            if num.isdigit() and int(num) in orden_a_id:
-                cur.execute("""
-                    INSERT INTO correlatividades (materia_id, requiere_materia_id, tipo)
-                    VALUES (%s, %s, 'aprobada') ON CONFLICT DO NOTHING
-                """, (materia_id, orden_a_id[int(num)]))
+                    VALUES (%s, %s, %s) ON CONFLICT DO NOTHING
+                """, (materia_id, orden_a_id[num], tipo))
     return orden_a_id
 
 
@@ -5100,7 +5255,8 @@ def admite_promocion(regimen_aprobacion):
     """
     if not regimen_aprobacion:
         return True
-    return 'promoc' in str(regimen_aprobacion).lower()
+    # "promoc" (Promoción, Promocional) o la abreviatura de los Profesorados ("Prom./Ex.Final")
+    return re.search(r'promoc|\bprom\b', str(regimen_aprobacion).lower()) is not None
 
 
 def admite_examen_final(regimen_aprobacion):
