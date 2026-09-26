@@ -7996,6 +7996,8 @@ async function eliminarPreceptora(id, apellido) {
                             ${m.regimen_aprobacion ? `<div style="font-size:0.78rem; color:var(--sga-texto-gris);">${m.regimen_aprobacion}</div>` : ''}
                             ${bloq ? ((m.aprobada && !m.inscripta)
                                 ? `<div style="font-size:0.78rem; color:var(--sga-exito); margin-top:2px;">✓ ${m.bloqueada_por.join(' · ')}</div>`
+                                : m.regular_vigente
+                                ? `<div style="font-size:0.78rem; color:#2D6FBD; margin-top:2px;">${m.bloqueada_por.join(' · ')}</div>`
                                 : `<div style="font-size:0.78rem; color:var(--sga-error); margin-top:2px;">⚠ ${m.bloqueada_por.join(' · ')}</div>`) : ''}
                             ${(!bloq && m.por_equivalencia === 'regular' && !m.regularidad_vencida) ? `<div style="font-size:0.78rem; color:#2D6FBD; margin-top:2px;">Regular por equivalencia: rinde el final sin volver a cursar</div>` : ''}
                             ${!bloq && m.bloqueada_por.length > 0 ? `<div style="font-size:0.78rem; color:var(--sga-exito);">✅ Correlatividades cumplidas</div>` : ''}

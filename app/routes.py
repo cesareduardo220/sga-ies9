@@ -4178,7 +4178,9 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
         FROM ultima u
     """, (aid, anio, aid))
     regularidad_caida = {}
+    vence_regular = {}   # vencimiento de la regularidad propia (ciclos anteriores)
     for _mid, _vence, _intentos in cur.fetchall():
+        vence_regular[_mid] = _vence
         _motivos = []
         if _vence and date.today() > _vence:
             _motivos.append(f"regularidad vencida el {_vence.strftime('%d/%m/%Y')}")
@@ -4241,6 +4243,8 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
     for m in materias:
         mid, nombre, anio_m, orden, regimen, reg_aprobacion = m
         inscripta = mid in inscriptas
+        regular_vigente = (mid in cursadas_ok and mid not in aprobadas_ok
+                           and mid not in regularidad_caida)
 
         puede = True
         bloqueada_por = []
@@ -4251,6 +4255,17 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
             bloqueada_por.append('Aprobada por equivalencia'
                                  if reconocidas.get(mid, {}).get('resultado') == 'aprobada'
                                  else 'Ya aprobada')
+        # Con la regularidad vigente (propia o por equivalencia) tampoco: rinde el final
+        elif regular_vigente and not inscripta:
+            puede = False
+            _rec = reconocidas.get(mid, {})
+            if mid not in vence_regular and _rec.get('resultado') == 'regular':
+                _etiqueta, _vence = 'Regular por equivalencia', _rec.get('vence')
+            else:
+                _etiqueta, _vence = 'Regular', vence_regular.get(mid)
+            bloqueada_por.append(_etiqueta
+                                 + (f" hasta el {_vence.strftime('%d/%m/%Y')}" if _vence else '')
+                                 + ': rinde el final sin volver a cursar')
         # Primero verificar si el año está habilitado (Opción C)
         elif not anio_habilitado(anio_m) and not inscripta:
             puede = False
@@ -4289,6 +4304,7 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
             'motivo_regularidad':  regularidad_caida.get(mid),
             'aprobada': mid in aprobadas_ok,
             'por_equivalencia': reconocidas.get(mid, {}).get('resultado'),
+            'regular_vigente': regular_vigente,
         })
 
     return resultado
@@ -4446,6 +4462,18 @@ def api_inscripciones_guardar(aid):
             cur.close(); conn.close()
             return jsonify({'error': 'Alguna de las materias no corresponde al plan de estudios '
                                      'del alumno. Recargá la página y volvé a intentar.'}), 400
+
+    # ── 4c. Las materias nuevas tienen que estar habilitadas para el alumno ──
+    # Misma evaluacion que la pantalla (aprobadas, regulares vigentes, año no
+    # habilitado, correlativas): no alcanza con la casilla deshabilitada.
+    if ids_a_validar:
+        no_habilitadas = [f"{m['nombre']} ({' · '.join(m['bloqueada_por'])})"
+                          for m in _evaluar_materias_alumno(cur, aid, carrera_id, anio)
+                          if m['id'] in ids_a_validar and not m['puede_inscribirse']]
+        if no_habilitadas:
+            cur.close(); conn.close()
+            return jsonify({'error': 'No se puede inscribir en: ' + '; '.join(no_habilitadas)
+                                     + '. Recargá la página y volvé a intentar.'}), 400
 
     # ── 5. Bloqueo post-guardado ──
     # Si ya tiene inscripciones en este ciclo lectivo, requiere autorización
