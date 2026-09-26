@@ -5471,14 +5471,43 @@ async function eliminarPreceptora(id, apellido) {
     // Variable para guardar los datos del nuevo plan mientras se confirma
     var _planNuevoData = null;
 
-    async function importarPlan() {
+    // ── Sugerencias de escritura de la revisión: el sistema propone, el coordinador decide ──
+    function marcarSugerenciasEscritura() {
+        document.querySelectorAll('.sug-escritura').forEach(c => { c.checked = true; });
+    }
+    async function aplicarSugerenciasEscritura() {
+        const marcadas = [...document.querySelectorAll('.sug-escritura:checked')];
+        if (!marcadas.length) {
+            mostrarMensaje('plan-mensaje', 'Marcá al menos una sugerencia para aplicar.', 'error');
+            return;
+        }
+        const nuevas = Object.fromEntries(marcadas.map(c => [c.dataset.orden, c.dataset.sugerencia]));
+        // La tabla de equivalencias que ya se haya tocado se conserva: va por
+        // orden, que no cambia al corregir un nombre
+        const equivPrevia = window._equivTabla ? JSON.parse(JSON.stringify(window._equivTabla)) : null;
+        const antes = _planNuevoData;
+        await importarPlan({ ...(window._correccionesPlan || {}), ...nuevas });
+        if (_planNuevoData === antes) return;   // el nuevo análisis falló: ya mostró el error
+        if (equivPrevia && _planNuevoData.hay_plan_actual && typeof renderTablaEquiv === 'function') {
+            window._equivTabla = equivPrevia;
+            renderTablaEquiv();
+        }
+        const n = marcadas.length;
+        mostrarMensaje('plan-mensaje', `✏️ ${n === 1 ? 'Se aplicó 1 corrección' : `Se aplicaron ${n} correcciones`} de escritura. Revisá el contenido antes de confirmar.`, 'info');
+    }
+
+    async function importarPlan(correcciones) {
         const input = document.getElementById('input-plan-excel');
         if (!input.files[0]) {
             mostrarMensaje('plan-mensaje', 'Seleccioná un archivo primero.', 'error');
             return;
         }
+        // Correcciones de escritura aceptadas en la revisión (orden -> nombre).
+        // Desde el botón "Analizar plan" se arranca de cero.
+        window._correccionesPlan = correcciones || {};
         const formData = new FormData();
         formData.append('archivo', input.files[0]);
+        formData.append('correcciones', JSON.stringify(window._correccionesPlan));
         mostrarMensaje('plan-mensaje', '⏳ Analizando plan...', 'info');
 
         const res  = await fetch('/api/importar-plan', { method: 'POST', body: formData });
@@ -5573,6 +5602,21 @@ async function eliminarPreceptora(id, apellido) {
                 Examen libre: ${rl.con_marca
                     ? `lo admiten ${rl.admiten} de ${rl.total} espacios (los marcados con (*))`
                     : 'lo admiten todos los espacios (ninguno tiene (*))'}.</div>`;
+        }
+        const sugE = (_planNuevoData && _planNuevoData.sugerencias_escritura) || [];
+        if (sugE.length) {
+            html += `<div style="background:#EEF4FB;border-radius:10px;padding:12px;margin-top:8px;">
+                <div style="font-weight:700;font-size:0.8rem;color:#2D6FBD;margin-bottom:4px">✏️ Sugerencias de escritura (${sugE.length})</div>
+                <div style="font-size:0.75rem;color:var(--sga-texto-gris);margin-bottom:8px">Nombres que parecen mal escritos. El sistema propone; marcá las que quieras aplicar. El Excel no se modifica.</div>
+                ${sugE.map(s => `<label style="display:flex;gap:8px;align-items:flex-start;font-size:0.8rem;padding:4px 0;border-bottom:1px solid #d6e3f3;cursor:pointer">
+                    <input type="checkbox" class="sug-escritura" data-orden="${s.orden}" data-sugerencia="${escT(s.sugerencia)}" style="width:auto;margin-top:2px">
+                    <span>(${s.orden}) <s style="color:var(--sga-texto-gris)">${escT(s.nombre)}</s> → <strong>${escT(s.sugerencia)}</strong><span style="color:var(--sga-texto-gris)"> · ${escT(s.motivo)}</span></span>
+                </label>`).join('')}
+                <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+                    <button type="button" class="btn-secundario" style="padding:4px 10px;font-size:0.75rem" onclick="marcarSugerenciasEscritura()">Marcar todas</button>
+                    <button type="button" class="btn-nuevo" style="padding:4px 12px;font-size:0.75rem" onclick="aplicarSugerenciasEscritura()">Aplicar las marcadas</button>
+                </div>
+            </div>`;
         }
         if (avisosC.length) {
             html += `<div style="background:#FBEAEA;border-radius:10px;padding:12px;margin-top:8px;">

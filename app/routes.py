@@ -2679,6 +2679,23 @@ def api_importar_plan():
             f['admite_libre'] = tiene or not con_marca
         resumen_libre = {'con_marca': con_marca, 'total': len(filas_nuevo),
                          'admiten': sum(1 for f in filas_nuevo if f['admite_libre'])}
+        # Correcciones de escritura que el coordinador aceptó en la revisión
+        # (orden -> nombre): se aplican antes de comparar con el plan actual
+        try:
+            correcciones = json.loads(request.form.get('correcciones') or '{}')
+        except ValueError:
+            correcciones = {}
+        for f in filas_nuevo:
+            corregido = str(correcciones.get(str(f['orden'])) or '').strip()
+            if corregido:
+                f['nombre'] = corregido[:150]
+        # Nombres que parecen mal escritos: el sistema propone, el coordinador decide
+        sugerencias_escritura = []
+        for f in filas_nuevo:
+            sug = _sugerir_escritura(f['nombre'])
+            if sug:
+                sugerencias_escritura.append({'orden': f['orden'], 'nombre': f['nombre'],
+                                              'sugerencia': sug[0], 'motivo': sug[1]})
         avisos_correl, resumen_correl = _revisar_correlativas_plan(filas_nuevo)
 
         conn = get_db()
@@ -2770,6 +2787,7 @@ def api_importar_plan():
             'avisos_correlativas': avisos_lectura + avisos_correl,
             'resumen_correlativas': resumen_correl,
             'resumen_libre': resumen_libre,
+            'sugerencias_escritura': sugerencias_escritura,
         })
 
     except Exception as e:
@@ -2783,6 +2801,105 @@ _CAMPOS_CORRELATIVAS = (
     ('correl_aprobada',        'aprobada',        'Aprobadas para rendir'),
 )
 
+
+# Sugerencias de escritura para los nombres de las materias (revision del Excel).
+# El sistema propone y el coordinador decide: siglas y numeros romanos hacen que
+# ninguna regla acierte siempre, y un nombre mal escrito se propaga a actas,
+# analiticos y constancias.
+_SIGLAS_MATERIAS = {'EDI', 'TIC', 'TICS', 'UDI', 'ESI', 'UCDI'}
+_CONECTORES = {'a', 'al', 'con', 'de', 'del', 'e', 'el', 'en', 'la', 'las', 'lo', 'los',
+               'o', 'para', 'por', 'su', 'sus', 'u', 'y'}
+_ROMANO = re.compile(r'^(?:i{1,3}|iv|v|vi{1,3}|ix|x)$', re.I)
+_TILDES = {
+    'academica': 'académica', 'administracion': 'administración', 'alfabetizacion': 'alfabetización',
+    'analisis': 'análisis', 'analitica': 'analítica', 'anatomia': 'anatomía', 'basica': 'básica',
+    'basicas': 'básicas', 'bioetica': 'bioética', 'biologia': 'biología', 'biologica': 'biológica',
+    'comunicacion': 'comunicación', 'didactica': 'didáctica', 'economia': 'economía',
+    'educacion': 'educación', 'electrica': 'eléctrica', 'electronica': 'electrónica',
+    'enfermeria': 'enfermería', 'epidemiologia': 'epidemiología', 'epistemologia': 'epistemología',
+    'ergonomia': 'ergonomía', 'estadistica': 'estadística', 'estadisticas': 'estadísticas',
+    'etica': 'ética', 'evaluacion': 'evaluación', 'expresion': 'expresión',
+    'farmacologia': 'farmacología', 'filosofia': 'filosofía', 'fisica': 'física',
+    'fisiologia': 'fisiología', 'formacion': 'formación', 'geografia': 'geografía',
+    'gestion': 'gestión', 'informacion': 'información', 'informatica': 'informática',
+    'ingles': 'inglés', 'inorganica': 'inorgánica', 'integracion': 'integración',
+    'investigacion': 'investigación', 'legislacion': 'legislación', 'logica': 'lógica',
+    'matematica': 'matemática', 'matematicas': 'matemáticas', 'mecanica': 'mecánica',
+    'metodologia': 'metodología', 'microbiologia': 'microbiología', 'musica': 'música',
+    'nutricion': 'nutrición', 'organica': 'orgánica', 'organizacion': 'organización',
+    'orientacion': 'orientación', 'pedagogia': 'pedagogía', 'pedagogica': 'pedagógica',
+    'planificacion': 'planificación', 'politica': 'política', 'politicas': 'políticas',
+    'practica': 'práctica', 'practicas': 'prácticas', 'produccion': 'producción',
+    'programacion': 'programación', 'psicologia': 'psicología', 'quimica': 'química',
+    'semiotico': 'semiótico', 'sociologia': 'sociología', 'tecnica': 'técnica',
+    'tecnico': 'técnico', 'tecnologia': 'tecnología', 'tecnologias': 'tecnologías',
+}
+
+
+def _sugerir_escritura(nombre):
+    """(sugerencia, motivo) si el nombre de una materia parece mal escrito, o None.
+    Detecta: todo en minuscula o en MAYUSCULA (sin tocar siglas ni numeros
+    romanos), primera letra en minuscula, numeros romanos o siglas en
+    minuscula, espacios de mas y tildes que faltan en palabras comunes."""
+    texto = re.sub(r'\s+', ' ', nombre or '').strip()
+    letras = [c for c in texto if c.isalpha()]
+    if not letras:
+        return None
+    palabras = texto.split(' ')
+    nucleos = [re.sub(r'\W', '', p) for p in palabras]
+    todo_minus = all(c.islower() for c in letras)
+    todo_mayus = (all(c.isupper() for c in letras) and
+                  any(len(n) >= 4 and n.upper() not in _SIGLAS_MATERIAS for n in nucleos))
+    motivos = set()
+
+    def partes(p):
+        m = re.match(r'^(\W*)(.*?)(\W*)$', p)
+        return m.group(1), m.group(2), m.group(3)
+
+    nuevas = []
+    for i, p in enumerate(palabras):
+        pre, nucleo, pos = partes(p)
+        n = nucleo
+        if nucleo:
+            if _ROMANO.match(nucleo) and (i > 0 or len(palabras) == 1):
+                n = nucleo.upper()
+                if n != nucleo and not todo_minus:
+                    motivos.add('romano')
+            elif nucleo.upper() in _SIGLAS_MATERIAS:
+                if todo_minus or todo_mayus or nucleo.islower():
+                    n = nucleo.upper()
+                    if n != nucleo and not todo_minus:
+                        motivos.add('sigla')
+            elif todo_minus or todo_mayus:
+                n = (nucleo.lower() if i > 0 and nucleo.lower() in _CONECTORES
+                     else nucleo[:1].upper() + nucleo[1:].lower())
+            con_tilde = _TILDES.get(n.lower())
+            if con_tilde:
+                if n.isupper() and len(n) > 1:
+                    con_tilde = con_tilde.upper()
+                elif n[:1].isupper():
+                    con_tilde = con_tilde[:1].upper() + con_tilde[1:]
+                n = con_tilde
+                motivos.add('tilde')
+        nuevas.append(pre + n + pos)
+    pre, nucleo, pos = partes(nuevas[0])
+    if nucleo[:1].islower():
+        nuevas[0] = pre + nucleo[:1].upper() + nucleo[1:] + pos
+        if not todo_minus:
+            motivos.add('inicio')
+    sugerencia = ' '.join(nuevas)
+    if sugerencia == (nombre or ''):
+        return None
+    detalle = []
+    if texto != (nombre or '').strip() or (nombre or '') != (nombre or '').strip():
+        detalle.append('espacios de más')
+    if todo_minus:
+        detalle.append('toda en minúscula')
+    elif todo_mayus:
+        detalle.append('toda en mayúscula')
+    detalle += [t for c, t in (('inicio', 'empieza en minúscula'), ('romano', 'número romano en minúscula'),
+                               ('sigla', 'sigla en minúscula'), ('tilde', 'falta la tilde')) if c in motivos]
+    return sugerencia, ', '.join(detalle)
 
 def _columnas_plan(encabezados):
     """Ubica cada dato del plan por el nombre de la columna. Si no reconoce los
