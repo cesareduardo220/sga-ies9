@@ -6314,6 +6314,8 @@ async function eliminarPreceptora(id, apellido) {
         contenedor.innerHTML = '';
         // "Aprobadas para cursar" (Profesorados): la columna aparece solo si el plan la usa
         const conApCursar = data.some(m => m.correl_aprobada_cursar);
+        // Examen libre: la marca (*) aparece solo si el plan tiene materias que no lo admiten
+        const conMarcaLibre = data.some(m => m.admite_libre === false);
 
         Object.keys(porAnio).sort().forEach(anio => {
             const materias = porAnio[anio];
@@ -6339,7 +6341,7 @@ async function eliminarPreceptora(id, apellido) {
                     ${materias.map(m => `
                         <tr>
                             <td style="color:var(--sga-texto-gris);text-align:center">${m.orden}</td>
-                            <td><strong>${m.nombre}</strong></td>
+                            <td><strong>${m.nombre}</strong>${conMarcaLibre && m.admite_libre ? ' <span style="color:var(--sga-texto-gris)" title="Admite examen libre">(*)</span>' : ''}</td>
                             <td>${m.regimen || '—'}</td>
                             <td>${m.regimen_aprobacion || '—'}</td>
                             <td style="font-size:0.8rem;color:var(--sga-texto-gris)">${m.correl_cursada || '—'}</td>
@@ -6352,6 +6354,10 @@ async function eliminarPreceptora(id, apellido) {
             </div>`;
         });
 
+        if (conMarcaLibre) {
+            contenedor.innerHTML += `<div style="font-size:0.8rem;color:var(--sga-texto-gris);margin:-12px 0 16px;">
+                (*) Admite alumnos en condición de libre. Las demás no se rinden en condición de libre: quien queda libre las recursa.</div>`;
+        }
         document.getElementById('materias-contenido').style.display = 'block';
     }
 

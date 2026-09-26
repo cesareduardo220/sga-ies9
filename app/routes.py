@@ -1715,7 +1715,8 @@ def api_materias_listar():
                STRING_AGG(CASE WHEN co.tipo = 'cursada' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_cursada,
                STRING_AGG(CASE WHEN co.tipo = 'aprobada' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_aprobada,
                m.plan_id, p.nombre AS plan_nombre,
-               STRING_AGG(CASE WHEN co.tipo = 'aprobada_cursar' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_aprobada_cursar
+               STRING_AGG(CASE WHEN co.tipo = 'aprobada_cursar' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_aprobada_cursar,
+               m.admite_libre
         FROM materias m
         LEFT JOIN planes_estudio p ON p.id = m.plan_id
         LEFT JOIN correlatividades co ON co.materia_id = m.id
@@ -1723,7 +1724,7 @@ def api_materias_listar():
         WHERE m.carrera_id = %s AND m.activa = TRUE
           AND (m.plan_id IS NULL OR p.activo = TRUE)
         GROUP BY m.id, m.nombre, m.anio, m.orden, m.regimen, m.regimen_aprobacion,
-                 m.plan_id, p.nombre, p.fecha_vigencia
+                 m.plan_id, p.nombre, p.fecha_vigencia, m.admite_libre
         ORDER BY p.fecha_vigencia DESC NULLS LAST, m.anio, m.orden
     """, (carrera_id,))
     rows = cur.fetchall()
@@ -1735,6 +1736,7 @@ def api_materias_listar():
         'correl_cursada': r[6], 'correl_aprobada': r[7],
         'plan_id': r[8], 'plan_nombre': (r[9] or '').strip(),
         'correl_aprobada_cursar': r[10],
+        'admite_libre': r[11],
     } for r in rows])
 
 def _plan_actual_id(cur, carrera_id):
@@ -2420,13 +2422,14 @@ def api_materias_descargar_pdf():
         SELECT m.anio, m.orden, m.nombre, m.regimen, m.regimen_aprobacion,
                STRING_AGG(CASE WHEN co.tipo = 'cursada' THEN r.orden::text END, ', ' ORDER BY r.orden) AS correl_cursada,
                STRING_AGG(CASE WHEN co.tipo = 'aprobada' THEN r.orden::text END, ', ' ORDER BY r.orden) AS correl_aprobada,
-               STRING_AGG(CASE WHEN co.tipo = 'aprobada_cursar' THEN r.orden::text END, ', ' ORDER BY r.orden) AS correl_aprobada_cursar
+               STRING_AGG(CASE WHEN co.tipo = 'aprobada_cursar' THEN r.orden::text END, ', ' ORDER BY r.orden) AS correl_aprobada_cursar,
+               m.admite_libre
         FROM materias m
         LEFT JOIN correlatividades co ON co.materia_id = m.id
         LEFT JOIN materias r ON r.id = co.requiere_materia_id
         WHERE m.carrera_id = %s AND m.activa = TRUE
           AND m.plan_id IS NOT DISTINCT FROM %s
-        GROUP BY m.anio, m.orden, m.nombre, m.regimen, m.regimen_aprobacion
+        GROUP BY m.anio, m.orden, m.nombre, m.regimen, m.regimen_aprobacion, m.admite_libre
         ORDER BY m.anio, m.orden
     """, (carrera_id, plan_pdf))
     materias = cur.fetchall()
@@ -2503,6 +2506,8 @@ def api_materias_descargar_pdf():
     ]
     # "Aprobadas para cursar" (Profesorados): la columna aparece solo si el plan la usa
     con_ap_cursar = any(m[7] for m in materias)
+    # Examen libre: la marca (*) aparece solo si el plan tiene materias que no lo admiten
+    con_marca_libre = any(m[8] is False for m in materias)
     if con_ap_cursar:
         encabezados.insert(6, Paragraph('<b>Correl. Aprobadas para cursar</b>', estilo_celda_centro))
     filas = [encabezados]
@@ -2516,11 +2521,11 @@ def api_materias_descargar_pdf():
     }
 
     for m in materias:
-        anio, orden, nombre, regimen, reg_aprobacion, correl_c, correl_a, correl_ac = m
+        anio, orden, nombre, regimen, reg_aprobacion, correl_c, correl_a, correl_ac, admite_libre = m
         fila = [
             Paragraph(str(anio), estilo_celda_centro),
             Paragraph(str(orden), estilo_celda_centro),
-            Paragraph(nombre or '', estilo_celda),
+            Paragraph((nombre or '') + (' (*)' if con_marca_libre and admite_libre else ''), estilo_celda),
             Paragraph(regimen or '', estilo_celda_centro),
             Paragraph(reg_aprobacion or '', estilo_celda_centro),
             Paragraph(correl_c or '—', estilo_celda_centro),
@@ -2555,6 +2560,11 @@ def api_materias_descargar_pdf():
 
     tabla.setStyle(estilo_tabla)
     elementos.append(tabla)
+    if con_marca_libre:
+        elementos.append(Spacer(1, 0.25*cm))
+        elementos.append(Paragraph('(*) Admite alumnos en condición de libre. Las demás unidades curriculares '
+                                   'no se rinden en condición de libre: quien queda libre las recursa.',
+                                   estilo_celda))
 
     doc.build(elementos)
     buf.seek(0)
