@@ -3832,6 +3832,9 @@ def api_constancia_alumno(aid):
         WHERE i.alumno_id = %s AND m.carrera_id = %s
           AND i.anio_lectivo = %s
           AND cu.condicion IN ('aprobado', 'promocionado')
+          -- Una promocion provisoria todavia puede caerse: no habilita un
+          -- documento oficial (misma condicion que /constancia-validar)
+          AND NOT COALESCE(cu.promocion_provisoria, FALSE)
     """, (aid, carrera_id, anio_actual))
     cant_aprobadas = cur.fetchone()[0]
 
