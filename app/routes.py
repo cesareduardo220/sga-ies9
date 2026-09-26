@@ -4351,20 +4351,26 @@ def _evaluar_materias_alumno(cur, aid, carrera_id, anio):
         else:
             # Si el año está habilitado, verificar correlatividades específicas.
             #
-            # IMPORTANTE — las dos columnas del plan de estudios (Res. 3003-E)
-            # son requisitos de MOMENTOS DISTINTOS:
-            #   tipo 'cursada'  = "Regularizadas para cursar"  → bloquea INSCRIBIRSE
-            #   tipo 'aprobada' = "Aprobadas para rendir"      → bloquea la MESA DE EXAMEN
+            # IMPORTANTE — las columnas del plan de estudios son requisitos de
+            # MOMENTOS DISTINTOS:
+            #   tipo 'cursada'         = "Regularizadas para cursar"  → bloquea INSCRIBIRSE
+            #   tipo 'aprobada_cursar' = "Aprobadas para cursar"      → bloquea INSCRIBIRSE
+            #                            (Profesorados: no alcanza con regularizarla)
+            #   tipo 'aprobada'        = "Aprobadas para rendir"      → bloquea la MESA DE EXAMEN
             #
-            # Por eso acá solo se controlan las de tipo 'cursada'. Las de tipo
-            # 'aprobada' se verifican al inscribir a mesa, no al inscribir a
-            # la cursada. Exigirlas acá impedía que un alumno cursara una
-            # materia adeudando finales, que es un caso normal del régimen.
+            # Por eso acá solo se controlan las de tipo 'cursada' y
+            # 'aprobada_cursar'. Las de tipo 'aprobada' se verifican al
+            # inscribir a mesa, no al inscribir a la cursada. Exigirlas acá
+            # impedía que un alumno cursara una materia adeudando finales, que
+            # es un caso normal del régimen.
             for req_id, tipo in correl_map.get(mid, []):
                 req_nombre = materia_nombres.get(req_id, f'Materia {req_id}')
                 if tipo == 'cursada' and req_id not in cursadas_ok:
                     puede = False
                     bloqueada_por.append(f"Regularizar: {req_nombre}")
+                elif tipo == 'aprobada_cursar' and req_id not in aprobadas_ok:
+                    puede = False
+                    bloqueada_por.append(f"Aprobar: {req_nombre}")
 
         resultado.append({
             'id': mid,
