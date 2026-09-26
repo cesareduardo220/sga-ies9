@@ -1830,6 +1830,64 @@
             </div>
         </div>
 
+        <!-- Cartel para editar un espacio curricular (solo sin inscripciones) -->
+        <div id="modal-editar-materia" class="modal-overlay" style="display:none;">
+            <div class="modal-card" style="max-width:620px;">
+                <div class="modal-card-header"><h3>Editar espacio curricular</h3></div>
+                <div class="modal-card-body">
+                    <p style="font-size:0.82rem;color:var(--sga-texto-gris);margin:0 0 12px;">
+                        Se puede editar porque todavía no tiene inscripciones, exámenes ni mesas.
+                    </p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                        <div class="campo-edit" style="grid-column:1/-1">
+                            <label>Nombre *</label>
+                            <input type="text" id="edit-materia-nombre" class="input-edit-ficha">
+                        </div>
+                        <div class="campo-edit">
+                            <label>Año *</label>
+                            <select id="edit-materia-anio" class="input-edit-ficha">
+                                <option value="1">1°</option><option value="2">2°</option><option value="3">3°</option>
+                                <option value="4">4°</option><option value="5">5°</option><option value="6">6°</option>
+                            </select>
+                        </div>
+                        <div class="campo-edit">
+                            <label>Orden *</label>
+                            <input type="number" id="edit-materia-orden" class="input-edit-ficha" min="1">
+                        </div>
+                        <div class="campo-edit">
+                            <label>Régimen</label>
+                            <select id="edit-materia-regimen" class="input-edit-ficha"></select>
+                        </div>
+                        <div class="campo-edit">
+                            <label>Régimen de aprobación</label>
+                            <select id="edit-materia-reg-aprobacion" class="input-edit-ficha"></select>
+                        </div>
+                        <div class="campo-edit">
+                            <label>Regularizadas para cursar</label>
+                            <input type="text" id="edit-materia-correl-cursada" class="input-edit-ficha" placeholder="Ej: 4-6">
+                        </div>
+                        <div class="campo-edit">
+                            <label>Aprobadas para cursar</label>
+                            <input type="text" id="edit-materia-correl-aprobada-cursar" class="input-edit-ficha" placeholder="Profesorados. Ej: 27">
+                        </div>
+                        <div class="campo-edit">
+                            <label>Aprobadas para rendir</label>
+                            <input type="text" id="edit-materia-correl-aprobada" class="input-edit-ficha" placeholder="Ej: 4-6 o 1° Año">
+                        </div>
+                        <div class="campo-edit" style="display:flex;align-items:center;gap:8px;">
+                            <input type="checkbox" id="edit-materia-admite-libre" style="width:auto">
+                            <label for="edit-materia-admite-libre" style="margin:0">Admite examen libre (*)</label>
+                        </div>
+                    </div>
+                    <div id="edit-materia-error" class="form-error" style="display:none"></div>
+                </div>
+                <div class="modal-card-footer">
+                    <button class="modal-btn-cancelar" onclick="cerrarModal('modal-editar-materia')">Cancelar</button>
+                    <button class="modal-btn-confirmar" onclick="guardarEdicionMateria()">Guardar cambios</button>
+                </div>
+            </div>
+        </div>
+
 
 <!-- ══════════════════════════════════════════════════════════════
      SECCIÓN INSCRIPCIONES — reemplaza el placeholder en dashboard
@@ -2715,6 +2773,8 @@
                             <select id="nueva-materia-regimen" class="input-edit-ficha">
                                 <option value="">-- Sin especificar --</option>
                                 <option value="Anual">Anual</option>
+                                <option value="1° C">1° C (primer cuatrimestre)</option>
+                                <option value="2° C">2° C (segundo cuatrimestre)</option>
                                 <option value="Cuatrimestral">Cuatrimestral</option>
                             </select>
                         </div>
@@ -2722,11 +2782,32 @@
                             <label>Régimen de Aprobación</label>
                             <select id="nueva-materia-reg-aprobacion" class="input-edit-ficha">
                                 <option value="">-- Sin especificar --</option>
-                                <option value="Promoción Directa">Promoción Directa</option>
-                                <option value="Con Examen Final">Con Examen Final</option>
+                                <option value="Promoción / Examen Final">Promoción / Examen Final</option>
+                                <option value="Examen Final">Examen Final</option>
+                                <option value="Promoción">Promoción</option>
                             </select>
                         </div>
+                        <div class="campo-edit">
+                            <label>Correlativas: regularizadas para cursar</label>
+                            <input type="text" id="nueva-materia-correl-cursada" class="input-edit-ficha" placeholder="Ej: 4-6">
+                        </div>
+                        <div class="campo-edit">
+                            <label>Correlativas: aprobadas para cursar</label>
+                            <input type="text" id="nueva-materia-correl-aprobada-cursar" class="input-edit-ficha" placeholder="Profesorados. Ej: 27">
+                        </div>
+                        <div class="campo-edit">
+                            <label>Correlativas: aprobadas para rendir</label>
+                            <input type="text" id="nueva-materia-correl-aprobada" class="input-edit-ficha" placeholder="Ej: 4-6 o 1° Año">
+                        </div>
+                        <div class="campo-edit" style="display:flex;align-items:center;gap:8px;">
+                            <input type="checkbox" id="nueva-materia-admite-libre" checked style="width:auto">
+                            <label for="nueva-materia-admite-libre" style="margin:0">Admite examen libre (*)</label>
+                        </div>
+                        <div style="grid-column:1/-1;font-size:0.78rem;color:var(--sga-texto-gris);margin-top:-6px;">
+                            Correlativas: los números de orden separados por guion, o un año completo ("1° Año"). Vacío si no tiene.
+                        </div>
                     </div>
+
                     <div id="nueva-materia-msg" style="display:none;font-size:0.85rem;padding:10px 14px;border-radius:8px;margin:12px 0"></div>
                     <button class="btn-nuevo" onclick="agregarMateriaManual()">➕ Agregar espacio curricular</button>
                 </div>
@@ -5747,12 +5828,10 @@ async function eliminarPreceptora(id, apellido) {
 
 
     async function agregarMateriaManual() {
-        const nombre  = document.getElementById('nueva-materia-nombre').value.trim();
-        const anio    = document.getElementById('nueva-materia-anio').value;
-        const orden   = document.getElementById('nueva-materia-orden').value;
-        const regimen = document.getElementById('nueva-materia-regimen').value;
-        const regApro = document.getElementById('nueva-materia-reg-aprobacion').value;
-        const msgEl   = document.getElementById('nueva-materia-msg');
+        const valor  = id => document.getElementById(id).value.trim();
+        const nombre = valor('nueva-materia-nombre');
+        const anio   = valor('nueva-materia-anio');
+        const orden  = valor('nueva-materia-orden');
 
         if (!nombre || !anio || !orden) {
             mostrarMensaje('nueva-materia-msg', '⚠️ Nombre, año y orden son obligatorios.', 'error');
@@ -5766,22 +5845,26 @@ async function eliminarPreceptora(id, apellido) {
                 nombre,
                 anio: parseInt(anio),
                 orden: parseInt(orden),
-                regimen,
-                regimen_aprobacion: regApro
+                regimen: valor('nueva-materia-regimen'),
+                regimen_aprobacion: valor('nueva-materia-reg-aprobacion'),
+                correl_cursada: valor('nueva-materia-correl-cursada'),
+                correl_aprobada_cursar: valor('nueva-materia-correl-aprobada-cursar'),
+                correl_aprobada: valor('nueva-materia-correl-aprobada'),
+                admite_libre: document.getElementById('nueva-materia-admite-libre').checked,
             })
         });
         const data = await res.json();
 
         if (data.ok) {
             mostrarMensaje('nueva-materia-msg', `✅ "${nombre}" agregado correctamente.`, 'exito');
-            document.getElementById('nueva-materia-nombre').value = '';
-            document.getElementById('nueva-materia-anio').value   = '';
-            document.getElementById('nueva-materia-orden').value  = '';
-            document.getElementById('nueva-materia-regimen').value = '';
-            document.getElementById('nueva-materia-reg-aprobacion').value = '';
+            ['nueva-materia-nombre', 'nueva-materia-anio', 'nueva-materia-orden', 'nueva-materia-regimen',
+             'nueva-materia-reg-aprobacion', 'nueva-materia-correl-cursada',
+             'nueva-materia-correl-aprobada-cursar', 'nueva-materia-correl-aprobada']
+                .forEach(id => { document.getElementById(id).value = ''; });
+            document.getElementById('nueva-materia-admite-libre').checked = true;
             cargarMaterias();
         } else {
-            mostrarMensaje('nueva-materia-msg', '❌ ' + (data.error || 'Error al agregar.'), 'error');
+            mostrarMensaje('nueva-materia-msg', '❌ ' + (data.error || 'Error al agregar.'), 'error', 12000);
         }
     }
 
@@ -6316,6 +6399,9 @@ async function eliminarPreceptora(id, apellido) {
         const conApCursar = data.some(m => m.correl_aprobada_cursar);
         // Examen libre: la marca (*) aparece solo si el plan tiene materias que no lo admiten
         const conMarcaLibre = data.some(m => m.admite_libre === false);
+        // Editar (coordinador): solo materias sin inscripciones, exámenes, mesas ni preinscripciones
+        const puedeEditarPlan = ROL === 'coordinador';
+        window._materiasPlan = Object.fromEntries(data.map(m => [m.id, m]));
 
         Object.keys(porAnio).sort().forEach(anio => {
             const materias = porAnio[anio];
@@ -6336,6 +6422,7 @@ async function eliminarPreceptora(id, apellido) {
                         <th>Regularizadas<br><span style="font-weight:400;font-size:11px">para cursar</span></th>
                         ${conApCursar ? '<th>Aprobadas<br><span style="font-weight:400;font-size:11px">para cursar</span></th>' : ''}
                         <th>Aprobadas<br><span style="font-weight:400;font-size:11px">para rendir</span></th>
+                        ${puedeEditarPlan ? '<th></th>' : ''}
                     </tr></thead>
                     <tbody>
                     ${materias.map(m => `
@@ -6347,6 +6434,9 @@ async function eliminarPreceptora(id, apellido) {
                             <td style="font-size:0.8rem;color:var(--sga-texto-gris)">${m.correl_cursada || '—'}</td>
                             ${conApCursar ? `<td style="font-size:0.8rem;color:var(--sga-texto-gris)">${m.correl_aprobada_cursar || '—'}</td>` : ''}
                             <td style="font-size:0.8rem;color:var(--sga-texto-gris)">${m.correl_aprobada || '—'}</td>
+                            ${puedeEditarPlan ? `<td style="text-align:right;white-space:nowrap">${m.editable
+                                ? `<button type="button" class="btn-secundario" style="padding:3px 10px;font-size:0.75rem" onclick="abrirEditarMateria(${m.id})">Editar</button>`
+                                : '<span title="Tiene inscripciones, exámenes o mesas: se corrige cargando un plan nuevo" style="color:var(--sga-texto-gris);font-size:0.8rem;cursor:help">🔒</span>'}</td>` : ''}
                         </tr>
                     `).join('')}
                     </tbody>
@@ -6359,6 +6449,74 @@ async function eliminarPreceptora(id, apellido) {
                 (*) Admite alumnos en condición de libre. Las demás no se rinden en condición de libre: quien queda libre las recursa.</div>`;
         }
         document.getElementById('materias-contenido').style.display = 'block';
+    }
+
+    // ── Editar un espacio curricular (solo sin inscripciones, exámenes ni mesas) ──
+    var _materiaEditando = null;
+    function _opcionesSelect(sel, valores, actual) {
+        const lista = valores.slice();
+        if (actual && !lista.includes(actual)) lista.push(actual);
+        const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+        sel.innerHTML = '<option value="">-- Sin especificar --</option>' +
+            lista.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+        sel.value = actual || '';
+    }
+    function abrirEditarMateria(id) {
+        const m = (window._materiasPlan || {})[id];
+        if (!m) return;
+        _materiaEditando = id;
+        document.getElementById('edit-materia-nombre').value = m.nombre;
+        document.getElementById('edit-materia-anio').value = String(m.anio);
+        document.getElementById('edit-materia-orden').value = m.orden;
+        _opcionesSelect(document.getElementById('edit-materia-regimen'),
+                        ['Anual', '1° C', '2° C', 'Cuatrimestral'], m.regimen);
+        _opcionesSelect(document.getElementById('edit-materia-reg-aprobacion'),
+                        ['Promoción / Examen Final', 'Examen Final', 'Promoción'], m.regimen_aprobacion);
+        document.getElementById('edit-materia-correl-cursada').value = m.correl_cursada || '';
+        document.getElementById('edit-materia-correl-aprobada-cursar').value = m.correl_aprobada_cursar || '';
+        document.getElementById('edit-materia-correl-aprobada').value = m.correl_aprobada || '';
+        document.getElementById('edit-materia-admite-libre').checked = m.admite_libre !== false;
+        document.getElementById('edit-materia-error').style.display = 'none';
+        abrirModal('modal-editar-materia');
+    }
+    async function guardarEdicionMateria() {
+        const err = document.getElementById('edit-materia-error');
+        err.style.display = 'none';
+        const valor = id => document.getElementById(id).value.trim();
+        const cuerpo = {
+            nombre: valor('edit-materia-nombre'),
+            anio: parseInt(valor('edit-materia-anio')),
+            orden: parseInt(valor('edit-materia-orden')),
+            regimen: valor('edit-materia-regimen'),
+            regimen_aprobacion: valor('edit-materia-reg-aprobacion'),
+            correl_cursada: valor('edit-materia-correl-cursada'),
+            correl_aprobada_cursar: valor('edit-materia-correl-aprobada-cursar'),
+            correl_aprobada: valor('edit-materia-correl-aprobada'),
+            admite_libre: document.getElementById('edit-materia-admite-libre').checked,
+        };
+        if (!cuerpo.nombre || !cuerpo.anio || !cuerpo.orden) {
+            err.textContent = 'Nombre, año y orden son obligatorios.';
+            err.style.display = 'block';
+            return;
+        }
+        let data;
+        try {
+            const res = await fetch(`/api/materias/${_materiaEditando}/editar`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(cuerpo)
+            });
+            data = await res.json();
+        } catch (e) {
+            data = { error: 'No se pudo guardar el cambio.' };
+        }
+        if (data.error) {
+            err.textContent = data.error;
+            err.style.display = 'block';
+            return;
+        }
+        cerrarModal('modal-editar-materia');
+        if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('✅ Espacio curricular actualizado.');
+        cargarMaterias();
     }
 
     // ══ CONFIGURACIÓN ══

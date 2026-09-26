@@ -1716,7 +1716,11 @@ def api_materias_listar():
                STRING_AGG(CASE WHEN co.tipo = 'aprobada' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_aprobada,
                m.plan_id, p.nombre AS plan_nombre,
                STRING_AGG(CASE WHEN co.tipo = 'aprobada_cursar' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_aprobada_cursar,
-               m.admite_libre
+               m.admite_libre,
+               (NOT EXISTS (SELECT 1 FROM inscripciones x WHERE x.materia_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM examenes x WHERE x.materia_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM mesas_examen x WHERE x.materia_id = m.id)
+                AND NOT EXISTS (SELECT 1 FROM preinscripcion_materias x WHERE x.materia_id = m.id)) AS editable
         FROM materias m
         LEFT JOIN planes_estudio p ON p.id = m.plan_id
         LEFT JOIN correlatividades co ON co.materia_id = m.id
@@ -1737,6 +1741,7 @@ def api_materias_listar():
         'plan_id': r[8], 'plan_nombre': (r[9] or '').strip(),
         'correl_aprobada_cursar': r[10],
         'admite_libre': r[11],
+        'editable': r[12],
     } for r in rows])
 
 def _plan_actual_id(cur, carrera_id):
@@ -3073,31 +3078,90 @@ def api_plan_actual():
 # API — AGREGAR MATERIA MANUAL
 # ================================================================
 
+def _datos_materia(data):
+    """Datos del formulario de una materia (alta manual o edicion), validados.
+    Devuelve (datos, error)."""
+    nombre = (data.get('nombre') or '').strip()
+    if not nombre:
+        return None, 'El nombre es obligatorio'
+    try:
+        anio  = int(data.get('anio'))
+        orden = int(data.get('orden'))
+        if not (1 <= anio <= 6) or orden < 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        return None, 'Año (1-6) y orden (≥1) son obligatorios y deben ser números válidos'
+    datos = {
+        'nombre': nombre, 'anio': anio, 'orden': orden,
+        'regimen': (data.get('regimen') or '').strip() or None,
+        'regimen_aprobacion': (data.get('regimen_aprobacion') or '').strip() or None,
+        'admite_libre': data.get('admite_libre') is not False,
+    }
+    for campo, _tipo, _etiqueta in _CAMPOS_CORRELATIVAS:
+        datos[campo] = str(data.get(campo) or '').strip()
+    return datos, None
+
+
+def _orden_ocupado(cur, carrera_id, plan_id, orden, excepto_id=None):
+    """Materia del plan que ya usa ese numero de orden, o None. El orden no se
+    repite en el plan: las correlativas se refieren a el."""
+    cur.execute("""SELECT nombre, anio FROM materias
+                   WHERE carrera_id = %s AND plan_id IS NOT DISTINCT FROM %s AND activa = TRUE
+                     AND orden = %s AND id <> %s""",
+                (carrera_id, plan_id, orden, excepto_id or 0))
+    fila = cur.fetchone()
+    return f'{fila[0]} ({fila[1]}° año)' if fila else None
+
+
+def _movimientos_materia(cur, materia_id):
+    """Lo que ya registra la materia. Con algo de esto no se edita: cambiarla
+    alteraria la historia academica."""
+    cur.execute("""
+        SELECT (SELECT count(*) FROM inscripciones WHERE materia_id = %(m)s),
+               (SELECT count(*) FROM examenes WHERE materia_id = %(m)s),
+               (SELECT count(*) FROM mesas_examen WHERE materia_id = %(m)s),
+               (SELECT count(*) FROM preinscripcion_materias WHERE materia_id = %(m)s)
+    """, {'m': materia_id})
+    cantidades = cur.fetchone()
+    nombres = (('inscripción', 'inscripciones'), ('examen', 'exámenes'),
+               ('mesa', 'mesas'), ('preinscripción', 'preinscripciones'))
+    return [f'{n} {uno if n == 1 else varios}'
+            for n, (uno, varios) in zip(cantidades, nombres) if n]
+
+
+def _guardar_correlativas_materia(cur, materia_id, carrera_id, plan_id, datos):
+    """Reemplaza las correlativas de una materia a partir del texto de cada
+    columna, como en el Excel ("4-6", "1° Año"). Si algo no existe o no se
+    entiende no guarda nada y devuelve los avisos."""
+    cur.execute("""SELECT id, anio, orden FROM materias
+                   WHERE carrera_id = %s AND plan_id IS NOT DISTINCT FROM %s AND activa = TRUE""",
+                (carrera_id, plan_id))
+    filas = [{'id': i, 'anio': a, 'orden': o} for i, a, o in cur.fetchall()]
+    ordenes_por_anio, anio_de = _ordenes_del_plan(filas)
+    id_de = {f['orden']: f['id'] for f in filas}
+    nuevas, avisos = [], []
+    for campo, tipo, etiqueta in _CAMPOS_CORRELATIVAS:
+        ordenes, avs = _leer_correlativas(datos.get(campo) or '', datos, ordenes_por_anio, anio_de)
+        avisos += [f'{etiqueta}: {a}' for a in avs]
+        nuevas += [(id_de[o], tipo) for o in ordenes]
+    if avisos:
+        return avisos
+    cur.execute("DELETE FROM correlatividades WHERE materia_id = %s", (materia_id,))
+    for requiere_id, tipo in nuevas:
+        cur.execute("""INSERT INTO correlatividades (materia_id, requiere_materia_id, tipo)
+                       VALUES (%s, %s, %s) ON CONFLICT DO NOTHING""", (materia_id, requiere_id, tipo))
+    return []
+
+
 @auth.route('/api/materias/agregar', methods=['POST'])
 @login_requerido(['coordinador'])
 def api_materia_agregar():
     carrera_id = session.get('carrera_id')
     if not carrera_id:
         return jsonify({'error': 'No tenés una carrera asignada'}), 400
-
-    data           = request.get_json()
-    nombre         = data.get('nombre', '').strip()
-    anio           = data.get('anio')
-    orden          = data.get('orden')
-    regimen        = data.get('regimen', '').strip() or None
-    reg_aprobacion = data.get('regimen_aprobacion', '').strip() or None
-
-    if not nombre:
-        return jsonify({'error': 'El nombre es obligatorio'}), 400
-    try:
-        anio  = int(anio)
-        orden = int(orden)
-        if not (1 <= anio <= 6):
-            raise ValueError
-        if orden < 1:
-            raise ValueError
-    except (TypeError, ValueError):
-        return jsonify({'error': 'Año (1-6) y orden (≥1) son obligatorios y deben ser números válidos'}), 400
+    datos, error = _datos_materia(request.get_json() or {})
+    if error:
+        return jsonify({'error': error}), 400
 
     conn = get_db()
     cur  = conn.cursor()
@@ -3105,17 +3169,81 @@ def api_materia_agregar():
         # Va al ultimo plan cargado, que es contra el que trabaja esta pantalla.
         # Si la carrera todavia no tiene plan, queda sin plan como antes.
         plan_id = _plan_actual_id(cur, carrera_id)
+        ocupado = _orden_ocupado(cur, carrera_id, plan_id, datos['orden'])
+        if ocupado:
+            return jsonify({'error': f"El orden {datos['orden']} ya lo tiene {ocupado}: en el plan "
+                                     f"cada espacio curricular lleva un orden distinto"}), 409
         cur.execute("""
-            INSERT INTO materias (carrera_id, nombre, anio, orden, regimen, regimen_aprobacion, plan_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
-        """, (carrera_id, nombre, anio, orden, regimen, reg_aprobacion, plan_id))
+            INSERT INTO materias (carrera_id, nombre, anio, orden, regimen, regimen_aprobacion, plan_id,
+                                  admite_libre)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+        """, (carrera_id, datos['nombre'], datos['anio'], datos['orden'], datos['regimen'],
+              datos['regimen_aprobacion'], plan_id, datos['admite_libre']))
         nuevo_id = cur.fetchone()[0]
+        avisos = _guardar_correlativas_materia(cur, nuevo_id, carrera_id, plan_id, datos)
+        if avisos:
+            conn.rollback()
+            return jsonify({'error': 'Revisá las correlatividades: ' + '; '.join(avisos)}), 400
         conn.commit()
         return jsonify({'ok': True, 'id': nuevo_id})
     except Exception as e:
         conn.rollback()
         if 'unique' in str(e).lower():
-            return jsonify({'error': f'Ya existe una materia con orden {orden} en {anio}° año de este plan'}), 409
+            return jsonify({'error': f"Ya existe una materia con orden {datos['orden']} en "
+                                     f"{datos['anio']}° año de este plan"}), 409
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@auth.route('/api/materias/<int:mid>/editar', methods=['POST'])
+@login_requerido(['coordinador'])
+def api_materia_editar(mid):
+    """Corrige una materia de un plan activo: nombre, año, orden, regimen,
+    regimen de aprobacion, correlativas y examen libre. Solo si todavia no
+    tiene inscripciones, examenes, mesas ni preinscripciones: con historia
+    academica, el cambio va en un plan nuevo."""
+    carrera_id = session.get('carrera_id')
+    datos, error = _datos_materia(request.get_json() or {})
+    if error:
+        return jsonify({'error': error}), 400
+
+    conn = get_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute("""SELECT m.plan_id FROM materias m
+                       LEFT JOIN planes_estudio p ON p.id = m.plan_id
+                       WHERE m.id = %s AND m.carrera_id = %s AND m.activa = TRUE
+                         AND (m.plan_id IS NULL OR p.activo = TRUE)""", (mid, carrera_id))
+        fila = cur.fetchone()
+        if not fila:
+            return jsonify({'error': 'Materia no encontrada'}), 404
+        plan_id = fila[0]
+        movimientos = _movimientos_materia(cur, mid)
+        if movimientos:
+            return jsonify({'error': f"No se puede editar: la materia ya tiene {', '.join(movimientos)}. "
+                                     f"Con historia académica, el cambio va en un plan nuevo."}), 409
+        ocupado = _orden_ocupado(cur, carrera_id, plan_id, datos['orden'], mid)
+        if ocupado:
+            return jsonify({'error': f"El orden {datos['orden']} ya lo tiene {ocupado}: en el plan "
+                                     f"cada espacio curricular lleva un orden distinto"}), 409
+        cur.execute("""UPDATE materias SET nombre = %s, anio = %s, orden = %s, regimen = %s,
+                              regimen_aprobacion = %s, admite_libre = %s
+                       WHERE id = %s""",
+                    (datos['nombre'], datos['anio'], datos['orden'], datos['regimen'],
+                     datos['regimen_aprobacion'], datos['admite_libre'], mid))
+        avisos = _guardar_correlativas_materia(cur, mid, carrera_id, plan_id, datos)
+        if avisos:
+            conn.rollback()
+            return jsonify({'error': 'Revisá las correlatividades: ' + '; '.join(avisos)}), 400
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        conn.rollback()
+        if 'unique' in str(e).lower():
+            return jsonify({'error': f"Ya existe una materia con orden {datos['orden']} en "
+                                     f"{datos['anio']}° año de este plan"}), 409
         return jsonify({'error': str(e)}), 500
     finally:
         cur.close()
