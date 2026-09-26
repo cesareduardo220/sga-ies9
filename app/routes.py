@@ -994,9 +994,8 @@ def _calcular_aviso_plan(rol, carrera_id, ciclo=None):
                                              ciclo['anio_inicio'])
                 if s['situacion'] == 'egresado':
                     continue
-                # Con prorroga vigente no hay nada que hacer todavia, aunque tenga
-                # cursadas abiertas (ahi su situacion figura 'bloqueado')
-                if s['prorroga'] and s['prorroga']['vigente']:
+                # Con prorroga vigente no hay nada que hacer hasta que venza
+                if s['situacion'] == 'prorroga':
                     con_prorroga += 1
                 else:
                     pendientes += 1
@@ -1960,12 +1959,14 @@ def _situacion_cierre_alumno(cur, aid, plan_viejo_id, plan_nuevo_id, politica, a
         prorroga = {'hasta': txt_fecha(fila_p[0]), 'motivo': fila_p[1],
                     'disposicion': fila_p[2] or '', 'vigente': fila_p[0] >= date.today()}
 
+    # Una prorroga vigente manda sobre las cursadas abiertas: el alumno sigue
+    # cursando el plan viejo justamente porque tiene prorroga.
     if egresado:
         situacion, sugerencia = 'egresado', None
-    elif abiertas:
-        situacion, sugerencia = 'bloqueado', None
     elif prorroga and prorroga['vigente']:
         situacion, sugerencia = 'prorroga', None
+    elif abiertas:
+        situacion, sugerencia = 'bloqueado', None
     else:
         situacion = 'migrable'
         sugerencia = 'prorroga' if pendientes_viejo < pendientes_nuevo else 'migrar'
