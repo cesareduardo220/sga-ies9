@@ -1692,7 +1692,7 @@
                     <div class="ficha-card">
                         <h3>Situación académica</h3>
                         <div class="ficha-dato"><span class="label">Año de ingreso</span><span class="valor" id="fd-anio-ingreso">—</span></div>
-                        <div class="ficha-dato"><span class="label">Materias aprobadas <span style="font-size:11px;color:var(--sga-texto-gris)">(toda la carrera)</span></span><span class="valor" id="fd-aprobadas">—</span></div>
+                        <div class="ficha-dato"><span class="label">Materias aprobadas <span id="fd-aprobadas-plan" style="font-size:11px;color:var(--sga-texto-gris)">(plan actual)</span></span><span class="valor" id="fd-aprobadas">—</span></div>
                     </div>
                 </div>
             </div>
@@ -11387,13 +11387,15 @@ async function eliminarPreceptora(id, apellido) {
             document.getElementById('historial-vacio').style.display = 'block';
             return;
         }
+        document.getElementById('fd-aprobadas-plan').textContent =
+            data.plan_nombre ? `(${data.plan_nombre})` : '(plan actual)';
 
         const anios = data.anios;
         const aniosOrdenados = Object.keys(anios).map(Number).sort((a, b) => b - a);
 
         if (!aniosOrdenados.length) {
             document.getElementById('historial-vacio').style.display = 'block';
-            document.getElementById('fd-aprobadas').textContent = '0';
+            document.getElementById('fd-aprobadas').textContent = data.aprobadas_plan;
             return;
         }
 
@@ -11401,14 +11403,10 @@ async function eliminarPreceptora(id, apellido) {
         // (en las planillas oficiales del IES N°9 no existe como categoría aparte)
         const condicionNormalizada = c => c === 'ausente' ? 'libre' : c;
 
-        // Materias aprobadas (Resumen) — aprobado o promocionado, en cualquier año
-        let totalAprobadas = 0;
-        Object.values(anios).forEach(cursadas => {
-            totalAprobadas += cursadas.filter(c =>
-                ['aprobado','promocionado'].includes(condicionNormalizada(c.condicion))
-                && !c.promocion_provisoria).length;
-        });
-        document.getElementById('fd-aprobadas').textContent = totalAprobadas;
+        // Materias aprobadas (Resumen): las del plan actual, propias o por
+        // equivalencia, sin promociones provisorias. Las cuenta el servidor con
+        // el mismo criterio que el estado académico en PDF.
+        document.getElementById('fd-aprobadas').textContent = data.aprobadas_plan;
 
         const contenido = document.getElementById('historial-contenido');
         validarConstancia(alumnoId);

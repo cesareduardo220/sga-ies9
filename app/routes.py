@@ -3223,6 +3223,81 @@ def api_alumnos_eliminar(aid):
 # API — HISTORIAL ACADÉMICO (coordinador + preceptora)
 # ================================================================
 
+def _estado_plan_alumno(cur, aid, carrera_id, anio_actual):
+    """
+    Materias del plan actual del alumno y su estado, con el mismo criterio que el
+    resto del sistema (aprobada = promocion firme o final aprobado; regular
+    vigente o vencida) mas lo reconocido por equivalencia. Una promocion
+    provisoria sin final aprobado figura aparte: todavia se puede caer.
+    La usan el estado academico en PDF y el contador de la ficha.
+    Devuelve (materias, estados, provisorias):
+      materias:    [(id, nombre, anio, orden, regimen)] en el orden del plan
+      estados:     {materia_id: 'aprobada' | 'aprobada_eq' | 'provisoria' |
+                    'cursando' | 'regular' | 'regular_eq' | 'vencida' |
+                    'vencida_eq' | 'libre' | 'sin_cursar'}
+      provisorias: {materia_id: fecha limite de la promocion provisoria}
+    """
+    cur.execute("""
+        SELECT m.id, m.nombre, m.anio, m.orden, m.regimen
+        FROM materias m
+        WHERE m.carrera_id = %s AND m.activa = TRUE
+          AND m.plan_id IS NOT DISTINCT FROM %s
+        ORDER BY m.anio, m.orden
+    """, (carrera_id, _plan_de_alumno(cur, aid)))
+    materias = cur.fetchall()
+    propio = _estado_materias_alumno(cur, aid)
+    reconocidas = _reconocidas_por_equivalencia(cur, aid)
+    # Inscriptas en el anio lectivo actual que todavia no tienen condicion
+    cur.execute("""
+        SELECT DISTINCT i.materia_id
+        FROM inscripciones i
+        LEFT JOIN cursadas cu ON cu.inscripcion_id = i.id
+        WHERE i.alumno_id = %s AND i.anio_lectivo = %s AND cu.condicion IS NULL
+    """, (aid, int(anio_actual)))
+    cursando = {fila[0] for fila in cur.fetchall()}
+    # Aprobadas solo por una promocion provisoria (sin promocion firme ni final)
+    cur.execute("""
+        SELECT i.materia_id, MAX(i.anio_lectivo)
+        FROM inscripciones i
+        JOIN cursadas cu ON cu.inscripcion_id = i.id
+        WHERE i.alumno_id = %s AND cu.condicion = 'promocionado'
+          AND COALESCE(cu.promocion_provisoria, FALSE)
+          AND NOT EXISTS (
+              SELECT 1 FROM inscripciones i2
+              JOIN cursadas c2 ON c2.inscripcion_id = i2.id
+              WHERE i2.alumno_id = i.alumno_id AND i2.materia_id = i.materia_id
+                AND c2.condicion = 'promocionado'
+                AND NOT COALESCE(c2.promocion_provisoria, FALSE))
+          AND NOT EXISTS (
+              SELECT 1 FROM examenes e
+              WHERE e.alumno_id = i.alumno_id AND e.materia_id = i.materia_id
+                AND e.resultado = 'aprobado')
+        GROUP BY i.materia_id
+    """, (aid,))
+    provisorias = {mid: _fecha_limite_promocion(cur, anio) for mid, anio in cur.fetchall()}
+
+    estados = {}
+    for mid, *_ in materias:
+        propia = propio.get(mid, {}).get('estado')
+        rec = reconocidas.get(mid)
+        if propia == 'aprobada' and mid not in provisorias:
+            est = 'aprobada'
+        elif rec and rec['resultado'] == 'aprobada':
+            est = 'aprobada_eq'
+        elif propia == 'aprobada':
+            est = 'provisoria'
+        elif mid in cursando:
+            est = 'cursando'
+        elif propia in ('regular', 'vencida', 'libre'):
+            est = propia  # una cursada propia manda sobre la regularidad heredada
+        elif rec:
+            est = 'regular_eq' if rec['vigente'] else 'vencida_eq'
+        else:
+            est = 'sin_cursar'
+        estados[mid] = est
+    return materias, estados, provisorias
+
+
 @auth.route('/api/historial/alumno/<int:aid>', methods=['GET'])
 @login_requerido(['coordinador', 'preceptora'])
 def api_historial_alumno(aid):
@@ -3274,6 +3349,16 @@ def api_historial_alumno(aid):
     """, (aid, carrera_id))
 
     rows = cur.fetchall()
+
+    # Materias aprobadas del plan actual (propias o por equivalencia, sin
+    # promociones provisorias), con el mismo criterio que el estado academico
+    cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
+    fila_anio = cur.fetchone()
+    anio_cfg = int(fila_anio[0]) if fila_anio else date.today().year
+    _, estados_plan, _ = _estado_plan_alumno(cur, aid, carrera_id, anio_cfg)
+    aprobadas_plan = sum(1 for e in estados_plan.values() if e in ('aprobada', 'aprobada_eq'))
+    cur.execute("SELECT nombre FROM planes_estudio WHERE id = %s", (_plan_de_alumno(cur, aid),))
+    fila_plan = cur.fetchone()
     cur.close()
     conn.close()
 
@@ -3311,7 +3396,9 @@ def api_historial_alumno(aid):
             'nombre': alumno[2], 'dni': formatear_dni(alumno[3]),
             'anio_ingreso': alumno[4]
         },
-        'anios': anios
+        'anios': anios,
+        'aprobadas_plan': aprobadas_plan,
+        'plan_nombre': fila_plan[0] if fila_plan else None,
     })
 
 
@@ -3522,44 +3609,13 @@ def api_historial_descargar_estado(aid):
     cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
     anio_actual = cur.fetchone()[0]
 
-    # Materias del plan del alumno. El estado sale del mismo criterio que el resto
-    # del sistema (aprobada = promocionada o final aprobado; regular vigente o
-    # vencida) mas lo reconocido por equivalencia si migro de un plan anterior.
-    cur.execute("""
-        SELECT m.id, m.nombre, m.anio, m.orden, m.regimen
-        FROM materias m
-        WHERE m.carrera_id = %s AND m.activa = TRUE
-          AND m.plan_id IS NOT DISTINCT FROM %s
-        ORDER BY m.anio, m.orden
-    """, (carrera_id, _plan_de_alumno(cur, aid)))
-    materias = cur.fetchall()
-    propio = _estado_materias_alumno(cur, aid)
-    reconocidas = _reconocidas_por_equivalencia(cur, aid)
-    # Inscriptas en el anio lectivo actual que todavia no tienen condicion
-    cur.execute("""
-        SELECT DISTINCT i.materia_id
-        FROM inscripciones i
-        LEFT JOIN cursadas cu ON cu.inscripcion_id = i.id
-        WHERE i.alumno_id = %s AND i.anio_lectivo = %s AND cu.condicion IS NULL
-    """, (aid, int(anio_actual)))
-    cursando = {fila[0] for fila in cur.fetchall()}
+    # Materias del plan del alumno y su estado: mismo criterio que la ficha
+    materias, estados, provisorias = _estado_plan_alumno(cur, aid, carrera_id, anio_actual)
     cur.close()
     conn.close()
 
     def estado_pdf(mid):
-        propia = propio.get(mid, {}).get('estado')
-        rec = reconocidas.get(mid)
-        if propia == 'aprobada':
-            return 'aprobada'
-        if rec and rec['resultado'] == 'aprobada':
-            return 'aprobada_eq'
-        if mid in cursando:
-            return 'cursando'
-        if propia in ('regular', 'vencida', 'libre'):
-            return propia  # una cursada propia manda sobre la regularidad heredada
-        if rec:
-            return 'regular_eq' if rec['vigente'] else 'vencida_eq'
-        return 'sin_cursar'
+        return estados[mid]
 
     VERDE      = colors.HexColor('#1a4731')
     GRIS_BORDE = colors.HexColor('#CCCCCC')
@@ -3620,9 +3676,11 @@ def api_historial_descargar_estado(aid):
         por_anio[a].append(m)
 
     C_CURSA   = colors.HexColor('#8a5a00')
+    C_PROV    = colors.HexColor('#6f42c1')
     est_label = {
         'aprobada':    '✔ Aprobada',
         'aprobada_eq': '✔ Aprobada por equivalencia',
+        'provisoria':  '◆ Promoción provisoria',
         'cursando':    f'● Cursando {anio_actual}',
         'regular':     '~ Regular (adeuda final)',
         'regular_eq':  '~ Regular por equivalencia (adeuda final)',
@@ -3631,7 +3689,7 @@ def api_historial_descargar_estado(aid):
         'libre':       '✘ Libre (adeuda)',
         'sin_cursar':  '— Sin cursar',
     }
-    est_col = {'aprobada': C_PROMO, 'aprobada_eq': C_PROMO, 'cursando': C_CURSA,
+    est_col = {'aprobada': C_PROMO, 'aprobada_eq': C_PROMO, 'provisoria': C_PROV, 'cursando': C_CURSA,
                'regular': C_REG, 'regular_eq': C_REG, 'vencida': C_LIBRE,
                'vencida_eq': C_LIBRE, 'libre': C_LIBRE, 'sin_cursar': C_PEND}
 
@@ -3651,7 +3709,8 @@ def api_historial_descargar_estado(aid):
             filas.append([
                 Paragraph(mat, st_cel),
                 Paragraph(reg or '—', st_num),
-                Paragraph(est_label[est], st_est),
+                Paragraph(est_label[est] + (f' (hasta {provisorias[mid].strftime("%d/%m/%Y")})'
+                                            if est == 'provisoria' else ''), st_est),
             ])
 
         tabla = Table(filas, colWidths=[8*cm, 3*cm, 6.5*cm])
@@ -3677,6 +3736,7 @@ def api_historial_descargar_estado(aid):
     leyenda = [
         (('aprobada',),    '✔ Aprobada = Promocionó o aprobó el final'),
         (('aprobada_eq',), '✔ Aprobada por equivalencia = Reconocida por lo aprobado en el plan anterior'),
+        (('provisoria',),  '◆ Promoción provisoria = Promocionó adeudando el final de una correlativa; si no lo aprueba antes de la fecha indicada, pasa a Regular'),
         (('cursando',),    f'● Cursando = Inscripta en el año lectivo {anio_actual}'),
         (('regular',),     '~ Regular = Adeuda examen final'),
         (('regular_eq',),  '~ Regular por equivalencia = Conserva la regularidad del plan anterior; rinde el final de esta materia'),
