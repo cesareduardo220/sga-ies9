@@ -1805,6 +1805,31 @@
             </div>
         </div>
 
+        <!-- Cartel para no reconocer una materia (politica personalizada) -->
+        <div id="modal-cierre-reconoc" class="modal-overlay" style="display:none;">
+            <div class="modal-card" style="max-width:520px;">
+                <div class="modal-card-header"><h3>No reconocer una materia</h3></div>
+                <div class="modal-card-body">
+                    <p id="cierre-reconoc-alumno" style="font-weight:600;margin:0 0 6px;"></p>
+                    <p style="font-size:0.82rem;color:var(--sga-texto-gris);margin:0 0 12px;">
+                        Al migrar, esta materia no se le reconoce aunque tenga lo que pide la tabla de
+                        equivalencias: la tiene que cursar en el plan nuevo. Se puede volver a reconocer
+                        mientras siga en el plan anterior.
+                    </p>
+                    <div class="campo-edit">
+                        <label>Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
+                        <textarea id="cierre-reconoc-motivo" class="input-edit-ficha" rows="3" style="font-family:inherit;resize:vertical;"
+                                  placeholder="Ej: La aprobó con un programa anterior al de la equivalencia"></textarea>
+                    </div>
+                    <div id="cierre-reconoc-error" class="form-error" style="display:none"></div>
+                </div>
+                <div class="modal-card-footer">
+                    <button class="modal-btn-cancelar" onclick="cerrarModal('modal-cierre-reconoc')">Cancelar</button>
+                    <button class="modal-btn-confirmar" onclick="cierreGuardarReconocimiento()">No reconocer</button>
+                </div>
+            </div>
+        </div>
+
 
 <!-- ══════════════════════════════════════════════════════════════
      SECCIÓN INSCRIPCIONES — reemplaza el placeholder en dashboard
@@ -5747,6 +5772,8 @@ async function eliminarPreceptora(id, apellido) {
     var _cierreResultado = null;        // resultado de la ultima migracion (se muestra una vez)
     var _cierreConfirmarAccion = null;  // que hacer al confirmar el cartel
     var _cierreProrrogaAlumno = null;   // alumno del cartel de prorroga
+    var _cierreReconoc = null;          // {alumno, materia} del cartel de reconocimiento
+    var _cierreDetAbiertos = new Set(); // detalles abiertos (siguen abiertos al recargar)
 
     const _CIERRE_MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
                            'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -5776,6 +5803,7 @@ async function eliminarPreceptora(id, apellido) {
         // Sin argumento: el plan elegido en Plan de Estudios; desde la barra de aviso, el del aviso
         cierrePlanId = planId || materiasPlanSel;
         _cierreResultado = null;
+        _cierreDetAbiertos.clear();
         navegarA('cierre-plan', 'Cerrar plan');
     }
 
@@ -5786,6 +5814,7 @@ async function eliminarPreceptora(id, apellido) {
         const abrir = det.style.display === 'none';
         det.style.display = abrir ? 'block' : 'none';
         if (btn) btn.textContent = abrir ? 'Ocultar detalle' : 'Ver detalle';
+        if (abrir) _cierreDetAbiertos.add(id); else _cierreDetAbiertos.delete(id);
     }
 
     function cierreActualizarBoton() {
@@ -5842,6 +5871,11 @@ async function eliminarPreceptora(id, apellido) {
                 Mientras tanto podés revisar la situación de cada alumno y registrar prórrogas.</div>`;
         }
 
+        const avisoPersonal = data.politica === 'personalizado'
+            ? `<div style="background:#E5F0F8;color:#2D6FBD;border-radius:10px;padding:10px 14px;font-size:0.85rem;margin-bottom:14px;">
+                Política personalizada: en «Ver detalle» de cada alumno podés marcar las materias que no se le reconocen, antes de migrarlo.</div>`
+            : '';
+
         // Resultado de la ultima migracion (se muestra una sola vez)
         let resultado = '';
         if (_cierreResultado) {
@@ -5874,6 +5908,7 @@ async function eliminarPreceptora(id, apellido) {
         const botonChico = (txt, accion) =>
             `<button type="button" class="btn-secundario" style="padding:4px 10px;font-size:0.78rem;" onclick="${accion}">${txt}</button>`;
 
+        const personalizado = data.politica === 'personalizado';
         const ORDEN = a => a.sugerencia === 'prorroga' ? 0 : a.sugerencia === 'migrar' ? 1
                          : a.situacion === 'prorroga' ? 2 : a.situacion === 'bloqueado' ? 3 : 4;
         const alumnos = data.alumnos.slice().sort((x, y) => (ORDEN(x) - ORDEN(y)) || x.apellido.localeCompare(y.apellido));
@@ -5917,10 +5952,20 @@ async function eliminarPreceptora(id, apellido) {
                 const con = m.con.length
                     ? m.con.map(c => `${esc(c.nombre)} <span style="color:var(--sga-texto-gris);">(${esc(ESTADO_VIEJA(c))})</span>`).join('<br>')
                     : '<span style="color:var(--sga-texto-gris);font-style:italic;">sin equivalente</span>';
+                // Politica personalizada: quitar o devolver el reconocimiento (antes de migrar)
+                let ajuste = '';
+                if (personalizado && a.situacion !== 'egresado' && m.con.length) {
+                    if (m.excluida) {
+                        ajuste = `<div style="font-size:0.72rem;color:var(--sga-texto-gris);margin-top:2px;">${esc(m.motivo_excluida || '')}</div>
+                            <div style="margin-top:4px;"><button type="button" class="btn-secundario" style="padding:2px 8px;font-size:0.72rem;" onclick="cierreReconocer(${a.id}, ${m.id})">Volver a reconocer</button></div>`;
+                    } else if (m.resultado !== 'cursar') {
+                        ajuste = `<div style="margin-top:4px;"><button type="button" class="btn-secundario" style="padding:2px 8px;font-size:0.72rem;" onclick="cierreAbrirReconoc(${a.id}, ${m.id})">No reconocer</button></div>`;
+                    }
+                }
                 return `<div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.6fr) minmax(0,0.8fr);gap:10px;padding:6px 0;border-top:1px solid var(--sga-borde);font-size:0.8rem;">
                     <div><strong>${esc(m.nombre)}</strong> <span style="color:var(--sga-texto-gris);">(${m.anio}°)</span></div>
                     <div>${con}</div>
-                    <div>${badge(bg[0], bg[1], bg[2])}${extra}</div>
+                    <div>${m.excluida ? badge('No reconocida', '#FBEAEA', 'var(--sga-error)') : badge(bg[0], bg[1], bg[2])}${extra}${ajuste}</div>
                 </div>`;
             }).join('');
             return `<div style="padding:12px 16px;border-top:1px solid var(--sga-borde);">
@@ -5932,10 +5977,10 @@ async function eliminarPreceptora(id, apellido) {
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                         ${etiqueta}
                         ${acciones}
-                        ${botonChico('Ver detalle', `cierreToggleDetalle(${a.id})`).replace('<button ', `<button id="cierre-btn-det-${a.id}" `)}
+                        ${botonChico(_cierreDetAbiertos.has(a.id) ? 'Ocultar detalle' : 'Ver detalle', `cierreToggleDetalle(${a.id})`).replace('<button ', `<button id="cierre-btn-det-${a.id}" `)}
                     </div>
                 </div>
-                <div id="cierre-det-${a.id}" style="display:none;margin-top:8px;padding-left:12px;">
+                <div id="cierre-det-${a.id}" style="display:${_cierreDetAbiertos.has(a.id) ? 'block' : 'none'};margin-top:8px;padding-left:12px;">
                     <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.6fr) minmax(0,0.8fr);gap:10px;font-size:0.72rem;font-weight:700;color:var(--sga-texto-gris);text-transform:uppercase;padding-bottom:4px;">
                         <div>Plan nuevo</div><div>Se reconoce con (plan anterior)</div><div>Queda como</div>
                     </div>
@@ -5955,6 +6000,7 @@ async function eliminarPreceptora(id, apellido) {
             ${resultado}
             <div style="background:${avisoFondo};color:${avisoColor};border-radius:10px;padding:10px 14px;font-size:0.85rem;margin-bottom:14px;">${aviso}</div>
             ${avisoMigrar}
+            ${avisoPersonal}
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:14px;">
                 ${tarjeta('Terminaron', r.egresados)}
                 ${tarjeta('Sugeridos para migrar', r.sugeridos_migrar)}
@@ -6111,6 +6157,56 @@ async function eliminarPreceptora(id, apellido) {
         }
         if (data.error) { mostrarError(data.error); return; }
         cerrarModal('modal-cierre-prorroga');
+        if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('✅ ' + data.mensaje);
+        cargarCierrePlan();
+    }
+    // ── Politica personalizada: no reconocer (o volver a reconocer) una materia ──
+    function cierreAbrirReconoc(aid, mid) {
+        if (!_cierreDatos) return;
+        const a = _cierreDatos.alumnos.find(x => x.id === aid);
+        const m = a && a.materias.find(x => x.id === mid);
+        if (!m) return;
+        _cierreReconoc = { alumno: aid, materia: mid };
+        document.getElementById('cierre-reconoc-alumno').textContent =
+            `${a.apellido}, ${a.nombre} · ${m.nombre} (${m.anio}°)`;
+        document.getElementById('cierre-reconoc-motivo').value = '';
+        document.getElementById('cierre-reconoc-error').style.display = 'none';
+        abrirModal('modal-cierre-reconoc');
+    }
+    async function _cierreEnviarReconocimiento(cuerpo) {
+        try {
+            const res = await fetch(`/api/planes/${cierrePlanId}/cierre/reconocimiento`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(cuerpo)
+            });
+            return await res.json();
+        } catch (e) {
+            return { error: 'No se pudo guardar el cambio.' };
+        }
+    }
+    async function cierreGuardarReconocimiento() {
+        const err = document.getElementById('cierre-reconoc-error');
+        err.style.display = 'none';
+        const motivo = document.getElementById('cierre-reconoc-motivo').value.trim();
+        if (motivo.length < 5) {
+            err.textContent = 'El motivo es obligatorio (mínimo 5 caracteres).';
+            err.style.display = 'block';
+            return;
+        }
+        const data = await _cierreEnviarReconocimiento({ alumno_id: _cierreReconoc.alumno,
+            materia_id: _cierreReconoc.materia, reconocer: false, motivo });
+        if (data.error) { err.textContent = data.error; err.style.display = 'block'; return; }
+        cerrarModal('modal-cierre-reconoc');
+        if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('✅ ' + data.mensaje);
+        cargarCierrePlan();
+    }
+    async function cierreReconocer(aid, mid) {
+        const data = await _cierreEnviarReconocimiento({ alumno_id: aid, materia_id: mid, reconocer: true });
+        if (data.error) {
+            if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('⚠️ ' + data.error);
+            else alert(data.error);
+            return;
+        }
         if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('✅ ' + data.mensaje);
         cargarCierrePlan();
     }

@@ -1901,9 +1901,9 @@ def _situacion_cierre_alumno(cur, aid, plan_viejo_id, plan_nuevo_id, politica, a
         for eq_id, id_nueva, id_vieja in cur.fetchall():
             grupos.setdefault(id_nueva, []).append((eq_id, id_vieja))
     # Excepciones del coordinador (politica personalizada)
-    cur.execute("""SELECT equivalencia_id FROM reconocimientos_alumno
+    cur.execute("""SELECT equivalencia_id, motivo FROM reconocimientos_alumno
                    WHERE alumno_id = %s AND reconocida = FALSE""", (aid,))
-    excluidas = {fila[0] for fila in cur.fetchall()}
+    excluidas = {fila[0]: fila[1] for fila in cur.fetchall()}
 
     # Cursadas abiertas del plan viejo en el anio lectivo actual
     cur.execute("""
@@ -1942,6 +1942,8 @@ def _situacion_cierre_alumno(cur, aid, plan_viejo_id, plan_nuevo_id, politica, a
                 intentos = max(x['intentos'] for x in regs)
         materias.append({'id': id_nueva, 'nombre': nombre, 'anio': anio,
                          'resultado': resultado, 'excluida': excluida,
+                         'motivo_excluida': next((excluidas[eq] for eq, _ in filas
+                                                  if eq in excluidas), None),
                          'vence': txt_fecha(vence), 'intentos': intentos, 'con': con})
 
     egresado = bool(viejas) and all(estado.get(v[0], {}).get('estado') == 'aprobada' for v in viejas)
@@ -2173,6 +2175,81 @@ def api_plan_cierre_prorroga(plan_id):
         conn.commit()
         return jsonify({'ok': True, 'mensaje': f'Prórroga registrada para {fila[0]}, {fila[1]} '
                                               f'hasta el {hasta.strftime("%d/%m/%Y")}.'})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+
+@auth.route('/api/planes/<int:plan_id>/cierre/reconocimiento', methods=['POST'])
+@login_requerido(['coordinador'])
+def api_plan_cierre_reconocimiento(plan_id):
+    """Politica personalizada: quita (o devuelve) a un alumno del plan viejo el
+    reconocimiento de una materia del plan nuevo, antes de migrarlo. Quitar
+    guarda reconocida = FALSE en reconocimientos_alumno para todas las
+    equivalencias de esa materia (motivo obligatorio); volver a reconocer borra
+    esas filas. Despues de migrar la exclusion se sigue respetando, pero ya no
+    se cambia desde aca."""
+    carrera_id = session.get('carrera_id')
+    user_id    = session.get('user_id')
+    data = request.get_json() or {}
+    motivo    = (data.get('motivo') or '').strip()
+    reconocer = data.get('reconocer') is True
+    try:
+        aid = int(data.get('alumno_id'))
+        mid = int(data.get('materia_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Faltan el alumno o la materia'}), 400
+    if not reconocer and len(motivo) < 5:
+        return jsonify({'error': 'El motivo es obligatorio (mínimo 5 caracteres)'}), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        viejo, nuevo, err = _planes_del_cierre(cur, plan_id, carrera_id)
+        if err:
+            return jsonify({'error': err[0]}), err[1]
+        if nuevo[3] != 'personalizado':
+            return jsonify({'error': 'El plan nuevo no tiene la política personalizada: '
+                                     'se reconoce según la tabla de equivalencias'}), 409
+        cur.execute("""SELECT apellido, nombre FROM alumnos_carrera
+                       WHERE id = %s AND carrera_id = %s AND plan_id = %s AND activo = TRUE""",
+                    (aid, carrera_id, plan_id))
+        alumno = cur.fetchone()
+        if not alumno:
+            return jsonify({'error': 'El alumno no está en este plan'}), 404
+        cur.execute("""SELECT e.id, m.nombre FROM equivalencias_plan e
+                       JOIN materias m ON m.id = e.materia_nueva_id
+                       WHERE e.plan_nuevo_id = %s AND e.materia_nueva_id = %s""",
+                    (nuevo[0], mid))
+        filas = cur.fetchall()
+        if not filas:
+            return jsonify({'error': 'Esa materia no tiene equivalencias en el plan nuevo'}), 404
+        s = _situacion_cierre_alumno(cur, aid, plan_id, nuevo[0], nuevo[3],
+                                     get_ciclo_lectivo()['anio_inicio'])
+        if s['situacion'] == 'egresado':
+            return jsonify({'error': 'El alumno ya terminó el plan: no se migra'}), 409
+        materia = filas[0][1]
+        if reconocer:
+            cur.execute("""DELETE FROM reconocimientos_alumno
+                           WHERE alumno_id = %s AND equivalencia_id = ANY(%s)""",
+                        (aid, [f[0] for f in filas]))
+            mensaje = f'Se le vuelve a reconocer {materia} a {alumno[0]}, {alumno[1]}.'
+        else:
+            for eq_id, _ in filas:
+                cur.execute("""
+                    INSERT INTO reconocimientos_alumno
+                        (alumno_id, equivalencia_id, reconocida, motivo, registrado_por)
+                    VALUES (%s, %s, FALSE, %s, %s)
+                    ON CONFLICT (alumno_id, equivalencia_id) DO UPDATE
+                    SET reconocida = FALSE, motivo = EXCLUDED.motivo,
+                        registrado_por = EXCLUDED.registrado_por, registrado_en = NOW()
+                """, (aid, eq_id, motivo, user_id))
+            mensaje = f'No se le reconoce {materia} a {alumno[0]}, {alumno[1]}.'
+        conn.commit()
+        return jsonify({'ok': True, 'mensaje': mensaje})
     except Exception:
         conn.rollback()
         raise
