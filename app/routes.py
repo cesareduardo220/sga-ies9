@@ -3188,9 +3188,42 @@ def api_materia_agregar():
         return jsonify({'ok': True, 'id': nuevo_id})
     except Exception as e:
         conn.rollback()
-        if 'unique' in str(e).lower():
+        if 'materias_carrera_plan_anio_orden_key' in str(e):
             return jsonify({'error': f"Ya existe una materia con orden {datos['orden']} en "
                                      f"{datos['anio']}° año de este plan"}), 409
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@auth.route('/api/materias/<int:mid>/eliminar', methods=['POST'])
+@login_requerido(['coordinador'])
+def api_materia_eliminar(mid):
+    """Elimina una materia de un plan activo cargada por error. Solo si no
+    tiene inscripciones, examenes, mesas ni preinscripciones. Con ella se van
+    sus correlatividades (tambien las que otras materias le pedian), sus
+    equivalencias y los profesores asignados."""
+    carrera_id = session.get('carrera_id')
+    conn = get_db()
+    cur  = conn.cursor()
+    try:
+        cur.execute("""SELECT m.nombre FROM materias m
+                       LEFT JOIN planes_estudio p ON p.id = m.plan_id
+                       WHERE m.id = %s AND m.carrera_id = %s AND m.activa = TRUE
+                         AND (m.plan_id IS NULL OR p.activo = TRUE)""", (mid, carrera_id))
+        fila = cur.fetchone()
+        if not fila:
+            return jsonify({'error': 'Materia no encontrada'}), 404
+        movimientos = _movimientos_materia(cur, mid)
+        if movimientos:
+            return jsonify({'error': f"No se puede eliminar: la materia ya tiene {', '.join(movimientos)}. "
+                                     f"Con historia académica, el cambio va en un plan nuevo."}), 409
+        cur.execute("DELETE FROM materias WHERE id = %s", (mid,))
+        conn.commit()
+        return jsonify({'ok': True, 'mensaje': f'Se eliminó «{fila[0]}» del plan.'})
+    except Exception as e:
+        conn.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
         cur.close()
@@ -3241,7 +3274,7 @@ def api_materia_editar(mid):
         return jsonify({'ok': True})
     except Exception as e:
         conn.rollback()
-        if 'unique' in str(e).lower():
+        if 'materias_carrera_plan_anio_orden_key' in str(e):
             return jsonify({'error': f"Ya existe una materia con orden {datos['orden']} en "
                                      f"{datos['anio']}° año de este plan"}), 409
         return jsonify({'error': str(e)}), 500

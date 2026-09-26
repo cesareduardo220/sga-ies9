@@ -1888,6 +1888,25 @@
             </div>
         </div>
 
+        <!-- Cartel para eliminar un espacio curricular (solo sin inscripciones) -->
+        <div id="modal-eliminar-materia" class="modal-overlay" style="display:none;">
+            <div class="modal-card" style="max-width:500px;">
+                <div class="modal-card-header"><h3>Eliminar espacio curricular</h3></div>
+                <div class="modal-card-body">
+                    <p id="eliminar-materia-texto" style="margin:0 0 8px;"></p>
+                    <p id="eliminar-materia-dependientes" style="font-size:0.85rem;color:var(--sga-error);margin:0 0 8px;display:none;"></p>
+                    <p style="font-size:0.82rem;color:var(--sga-texto-gris);margin:0;">
+                        Se quitan también sus correlatividades, equivalencias y profesores asignados. No se puede deshacer.
+                    </p>
+                    <div id="eliminar-materia-error" class="form-error" style="display:none"></div>
+                </div>
+                <div class="modal-card-footer">
+                    <button class="modal-btn-cancelar" onclick="cerrarModal('modal-eliminar-materia')">Cancelar</button>
+                    <button class="modal-btn-confirmar" onclick="confirmarEliminarMateria()">Eliminar</button>
+                </div>
+            </div>
+        </div>
+
 
 <!-- ══════════════════════════════════════════════════════════════
      SECCIÓN INSCRIPCIONES — reemplaza el placeholder en dashboard
@@ -6435,7 +6454,8 @@ async function eliminarPreceptora(id, apellido) {
                             ${conApCursar ? `<td style="font-size:0.8rem;color:var(--sga-texto-gris)">${m.correl_aprobada_cursar || '—'}</td>` : ''}
                             <td style="font-size:0.8rem;color:var(--sga-texto-gris)">${m.correl_aprobada || '—'}</td>
                             ${puedeEditarPlan ? `<td style="text-align:right;white-space:nowrap">${m.editable
-                                ? `<button type="button" class="btn-secundario" style="padding:3px 10px;font-size:0.75rem" onclick="abrirEditarMateria(${m.id})">Editar</button>`
+                                ? `<button type="button" class="btn-secundario" style="padding:3px 10px;font-size:0.75rem" onclick="abrirEditarMateria(${m.id})">Editar</button>
+                                   <button type="button" class="btn-secundario" style="padding:3px 10px;font-size:0.75rem;color:var(--sga-error);margin-left:4px" onclick="abrirEliminarMateria(${m.id})">Eliminar</button>`
                                 : '<span title="Tiene inscripciones, exámenes o mesas: se corrige cargando un plan nuevo" style="color:var(--sga-texto-gris);font-size:0.8rem;cursor:help">🔒</span>'}</td>` : ''}
                         </tr>
                     `).join('')}
@@ -6516,6 +6536,47 @@ async function eliminarPreceptora(id, apellido) {
         }
         cerrarModal('modal-editar-materia');
         if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('✅ Espacio curricular actualizado.');
+        cargarMaterias();
+    }
+    // ── Eliminar un espacio curricular cargado por error (misma regla que editar) ──
+    var _materiaEliminando = null;
+    function abrirEliminarMateria(id) {
+        const todas = window._materiasPlan || {};
+        const m = todas[id];
+        if (!m) return;
+        _materiaEliminando = id;
+        document.getElementById('eliminar-materia-texto').textContent =
+            `Se va a eliminar «${m.nombre}» (${m.anio}° año, orden ${m.orden})${m.plan_nombre ? ' del ' + m.plan_nombre : ''}.`;
+        // Materias del mismo plan que la piden como correlativa (se les quita)
+        const orden = String(m.orden);
+        const dependientes = Object.values(todas)
+            .filter(x => x.id !== m.id && x.plan_id === m.plan_id &&
+                [x.correl_cursada, x.correl_aprobada_cursar, x.correl_aprobada]
+                    .some(c => (c || '').split('-').includes(orden)))
+            .map(x => x.nombre);
+        const dep = document.getElementById('eliminar-materia-dependientes');
+        dep.textContent = dependientes.length ? `Deja de ser correlativa de: ${dependientes.join(', ')}.` : '';
+        dep.style.display = dependientes.length ? 'block' : 'none';
+        document.getElementById('eliminar-materia-error').style.display = 'none';
+        abrirModal('modal-eliminar-materia');
+    }
+    async function confirmarEliminarMateria() {
+        const err = document.getElementById('eliminar-materia-error');
+        err.style.display = 'none';
+        let data;
+        try {
+            const res = await fetch(`/api/materias/${_materiaEliminando}/eliminar`, { method: 'POST' });
+            data = await res.json();
+        } catch (e) {
+            data = { error: 'No se pudo eliminar.' };
+        }
+        if (data.error) {
+            err.textContent = data.error;
+            err.style.display = 'block';
+            return;
+        }
+        cerrarModal('modal-eliminar-materia');
+        if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('✅ ' + data.mensaje);
         cargarMaterias();
     }
 
