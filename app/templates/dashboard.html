@@ -5374,25 +5374,25 @@ async function eliminarPreceptora(id, apellido) {
     async function importarPlan() {
         const input = document.getElementById('input-plan-excel');
         if (!input.files[0]) {
-            mostrarMensaje('plan-mensaje', 'error', 'Seleccioná un archivo primero.');
+            mostrarMensaje('plan-mensaje', 'Seleccioná un archivo primero.', 'error');
             return;
         }
         const formData = new FormData();
         formData.append('archivo', input.files[0]);
-        mostrarMensaje('plan-mensaje', 'info', '⏳ Analizando plan...');
+        mostrarMensaje('plan-mensaje', '⏳ Analizando plan...', 'info');
 
         const res  = await fetch('/api/importar-plan', { method: 'POST', body: formData });
         const data = await res.json();
 
         if (data.error) {
-            mostrarMensaje('plan-mensaje', 'error', data.error);
+            mostrarMensaje('plan-mensaje', data.error, 'error', 12000);
             return;
         }
 
         // Siempre se muestra la pantalla de revisión antes de tocar la base de
         // datos — incluso en la primera carga, para no escribir nada a ciegas.
         _planNuevoData = data;
-        mostrarMensaje('plan-mensaje', 'info', '📊 Revisá el contenido antes de confirmar.');
+        mostrarMensaje('plan-mensaje', '📊 Revisá el contenido antes de confirmar.', 'info');
 
         if (data.hay_plan_actual) {
             document.getElementById('aviso-cambio-titulo').textContent = '⚠️ Cambio de plan de estudios detectado';
