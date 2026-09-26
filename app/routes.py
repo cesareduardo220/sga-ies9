@@ -1714,7 +1714,8 @@ def api_materias_listar():
         SELECT m.id, m.nombre, m.anio, m.orden, m.regimen, m.regimen_aprobacion,
                STRING_AGG(CASE WHEN co.tipo = 'cursada' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_cursada,
                STRING_AGG(CASE WHEN co.tipo = 'aprobada' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_aprobada,
-               m.plan_id, p.nombre AS plan_nombre
+               m.plan_id, p.nombre AS plan_nombre,
+               STRING_AGG(CASE WHEN co.tipo = 'aprobada_cursar' THEN r.orden::text END, '-' ORDER BY r.orden) AS correl_aprobada_cursar
         FROM materias m
         LEFT JOIN planes_estudio p ON p.id = m.plan_id
         LEFT JOIN correlatividades co ON co.materia_id = m.id
@@ -1732,7 +1733,8 @@ def api_materias_listar():
         'id': r[0], 'nombre': r[1], 'anio': r[2], 'orden': r[3],
         'regimen': r[4], 'regimen_aprobacion': r[5],
         'correl_cursada': r[6], 'correl_aprobada': r[7],
-        'plan_id': r[8], 'plan_nombre': (r[9] or '').strip()
+        'plan_id': r[8], 'plan_nombre': (r[9] or '').strip(),
+        'correl_aprobada_cursar': r[10],
     } for r in rows])
 
 def _plan_actual_id(cur, carrera_id):
@@ -2417,7 +2419,8 @@ def api_materias_descargar_pdf():
     cur.execute("""
         SELECT m.anio, m.orden, m.nombre, m.regimen, m.regimen_aprobacion,
                STRING_AGG(CASE WHEN co.tipo = 'cursada' THEN r.orden::text END, ', ' ORDER BY r.orden) AS correl_cursada,
-               STRING_AGG(CASE WHEN co.tipo = 'aprobada' THEN r.orden::text END, ', ' ORDER BY r.orden) AS correl_aprobada
+               STRING_AGG(CASE WHEN co.tipo = 'aprobada' THEN r.orden::text END, ', ' ORDER BY r.orden) AS correl_aprobada,
+               STRING_AGG(CASE WHEN co.tipo = 'aprobada_cursar' THEN r.orden::text END, ', ' ORDER BY r.orden) AS correl_aprobada_cursar
         FROM materias m
         LEFT JOIN correlatividades co ON co.materia_id = m.id
         LEFT JOIN materias r ON r.id = co.requiere_materia_id
@@ -2498,6 +2501,10 @@ def api_materias_descargar_pdf():
         Paragraph('<b>Correl. Regularizadas para cursar</b>', estilo_celda_centro),
         Paragraph('<b>Correl. Aprobadas para rendir</b>', estilo_celda_centro),
     ]
+    # "Aprobadas para cursar" (Profesorados): la columna aparece solo si el plan la usa
+    con_ap_cursar = any(m[7] for m in materias)
+    if con_ap_cursar:
+        encabezados.insert(6, Paragraph('<b>Correl. Aprobadas para cursar</b>', estilo_celda_centro))
     filas = [encabezados]
 
     color_anio = {
@@ -2509,7 +2516,7 @@ def api_materias_descargar_pdf():
     }
 
     for m in materias:
-        anio, orden, nombre, regimen, reg_aprobacion, correl_c, correl_a = m
+        anio, orden, nombre, regimen, reg_aprobacion, correl_c, correl_a, correl_ac = m
         fila = [
             Paragraph(str(anio), estilo_celda_centro),
             Paragraph(str(orden), estilo_celda_centro),
@@ -2519,9 +2526,13 @@ def api_materias_descargar_pdf():
             Paragraph(correl_c or '—', estilo_celda_centro),
             Paragraph(correl_a or '—', estilo_celda_centro),
         ]
+        if con_ap_cursar:
+            fila.insert(6, Paragraph(correl_ac or '—', estilo_celda_centro))
         filas.append(fila)
 
-    tabla = Table(filas, colWidths=[1.2*cm, 1.2*cm, 7*cm, 3.5*cm, 4*cm, 4.5*cm, 4.5*cm])
+    anchos = ([1.1*cm, 1.1*cm, 6.2*cm, 2.6*cm, 3.8*cm, 3.8*cm, 3.8*cm, 3.8*cm] if con_ap_cursar
+              else [1.2*cm, 1.2*cm, 7*cm, 3.5*cm, 4*cm, 4.5*cm, 4.5*cm])
+    tabla = Table(filas, colWidths=anchos)
 
     estilo_tabla = TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1a4731')),

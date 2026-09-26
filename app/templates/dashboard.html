@@ -6305,6 +6305,8 @@ async function eliminarPreceptora(id, apellido) {
 
         const contenedor = document.getElementById('materias-por-anio');
         contenedor.innerHTML = '';
+        // "Aprobadas para cursar" (Profesorados): la columna aparece solo si el plan la usa
+        const conApCursar = data.some(m => m.correl_aprobada_cursar);
 
         Object.keys(porAnio).sort().forEach(anio => {
             const materias = porAnio[anio];
@@ -6323,6 +6325,7 @@ async function eliminarPreceptora(id, apellido) {
                         <th>Régimen</th>
                         <th>Régimen de aprobación</th>
                         <th>Regularizadas<br><span style="font-weight:400;font-size:11px">para cursar</span></th>
+                        ${conApCursar ? '<th>Aprobadas<br><span style="font-weight:400;font-size:11px">para cursar</span></th>' : ''}
                         <th>Aprobadas<br><span style="font-weight:400;font-size:11px">para rendir</span></th>
                     </tr></thead>
                     <tbody>
@@ -6333,6 +6336,7 @@ async function eliminarPreceptora(id, apellido) {
                             <td>${m.regimen || '—'}</td>
                             <td>${m.regimen_aprobacion || '—'}</td>
                             <td style="font-size:0.8rem;color:var(--sga-texto-gris)">${m.correl_cursada || '—'}</td>
+                            ${conApCursar ? `<td style="font-size:0.8rem;color:var(--sga-texto-gris)">${m.correl_aprobada_cursar || '—'}</td>` : ''}
                             <td style="font-size:0.8rem;color:var(--sga-texto-gris)">${m.correl_aprobada || '—'}</td>
                         </tr>
                     `).join('')}
