@@ -5467,6 +5467,13 @@ async function eliminarPreceptora(id, apellido) {
             html += `<div style="font-size:0.8rem;color:var(--sga-texto-gris);margin:10px 0 4px;">
                 Correlatividades leídas: ${rc.cursada} regularizadas para cursar · ${rc.aprobada_cursar} aprobadas para cursar · ${rc.aprobada} aprobadas para rendir.</div>`;
         }
+        const rl = (_planNuevoData && _planNuevoData.resumen_libre) || null;
+        if (rl) {
+            html += `<div style="font-size:0.8rem;color:var(--sga-texto-gris);margin:0 0 4px;">
+                Examen libre: ${rl.con_marca
+                    ? `lo admiten ${rl.admiten} de ${rl.total} espacios (los marcados con (*))`
+                    : 'lo admiten todos los espacios (ninguno tiene (*))'}.</div>`;
+        }
         if (avisosC.length) {
             html += `<div style="background:#FBEAEA;border-radius:10px;padding:12px;margin-top:8px;">
                 <div style="font-weight:700;font-size:0.8rem;color:var(--sga-error);margin-bottom:8px">⚠️ Revisá estas correlatividades</div>

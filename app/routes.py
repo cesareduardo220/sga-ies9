@@ -2652,6 +2652,18 @@ def api_importar_plan():
                                          f"{f['nombre']}): cada espacio curricular tiene que tener un "
                                          f"número de orden distinto. Corregí el Excel y volvé a cargarlo."}), 400
             vistos[f['orden']] = f['nombre']
+        # Examen libre: como en la resolución, "(*)" en el nombre marca las
+        # materias que admiten alumnos libres. Si alguna del plan lo tiene, solo
+        # esas lo admiten; si ninguna (Tecnicaturas), todas. La marca se saca
+        # del nombre: queda guardada aparte y la pantalla la vuelve a mostrar.
+        _marca_libre = re.compile(r'\(\s*\*\s*\)|\*+\s*$')
+        con_marca = any(_marca_libre.search(f['nombre']) for f in filas_nuevo)
+        for f in filas_nuevo:
+            tiene = bool(_marca_libre.search(f['nombre']))
+            f['nombre'] = re.sub(r'\s{2,}', ' ', _marca_libre.sub('', f['nombre'])).strip()
+            f['admite_libre'] = tiene or not con_marca
+        resumen_libre = {'con_marca': con_marca, 'total': len(filas_nuevo),
+                         'admiten': sum(1 for f in filas_nuevo if f['admite_libre'])}
         avisos_correl, resumen_correl = _revisar_correlativas_plan(filas_nuevo)
 
         conn = get_db()
@@ -2742,6 +2754,7 @@ def api_importar_plan():
             'total_nuevo': len(filas_nuevo),
             'avisos_correlativas': avisos_lectura + avisos_correl,
             'resumen_correlativas': resumen_correl,
+            'resumen_libre': resumen_libre,
         })
 
     except Exception as e:
@@ -2873,10 +2886,12 @@ def _ejecutar_importacion(cur, carrera_id, filas, plan_id=None):
     orden_a_id = {}
     for f in filas:
         cur.execute("""
-            INSERT INTO materias (carrera_id, nombre, anio, orden, regimen, regimen_aprobacion, plan_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+            INSERT INTO materias (carrera_id, nombre, anio, orden, regimen, regimen_aprobacion, plan_id,
+                                  admite_libre)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         """, (carrera_id, f['nombre'], f['anio'], f['orden'],
-              f['regimen'], f['regimen_aprobacion'], plan_id))
+              f['regimen'], f['regimen_aprobacion'], plan_id,
+              f.get('admite_libre') is not False))
         orden_a_id[f['orden']] = cur.fetchone()[0]
 
     # Correlativas: las tres columnas, con la misma lectura que la revisión
@@ -7428,7 +7443,7 @@ def api_mesas_crear():
 
     # ── El plan manda: las materias de régimen sólo "Promoción"
     #    (prácticas profesionalizantes, EDI) no van a mesa de examen ──
-    cur.execute("""SELECT nombre, regimen_aprobacion FROM materias
+    cur.execute("""SELECT nombre, regimen_aprobacion, admite_libre FROM materias
                    WHERE id = %s AND carrera_id = %s""", (materia_id, carrera_id))
     _mat = cur.fetchone()
     if not _mat:
@@ -7438,6 +7453,10 @@ def api_mesas_crear():
         cur.close(); conn.close()
         return jsonify({'error': f'"{_mat[0]}" se aprueba únicamente por promoción '
                                  f'según el plan de estudios, no se rinde en mesa de examen.'}), 400
+    if tipo == 'libre' and not _mat[2]:
+        cur.close(); conn.close()
+        return jsonify({'error': f'"{_mat[0]}" no admite examen libre según el plan de estudios: '
+                                 f'quien quedó libre tiene que recursarla.'}), 400
 
     cur.execute("SELECT valor FROM configuracion WHERE clave = 'anio_lectivo_actual'")
     anio = int(cur.fetchone()[0])
