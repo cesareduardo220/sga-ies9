@@ -1578,15 +1578,15 @@
                         <!-- EDICIÓN -->
                         <div id="datos-edicion" style="display:none;">
                             <div class="campo-edit">
-                                <label>Apellido</label>
+                                <label for="fe-apellido">Apellido</label>
                                 <input type="text" class="input-edit-ficha" id="fe-apellido">
                             </div>
                             <div class="campo-edit">
-                                <label>Nombre</label>
+                                <label for="fe-nombre">Nombre</label>
                                 <input type="text" class="input-edit-ficha" id="fe-nombre">
                             </div>
                             <div class="campo-edit">
-                                <label>Tipo de documento <span class="nota-rol">(solo coordinador)</span></label>
+                                <label for="fe-tipo-doc">Tipo de documento <span class="nota-rol">(solo coordinador)</span></label>
                                 <select class="input-edit-ficha" id="fe-tipo-doc" onchange="onTipoDocFichaChange()">
                                     <option value="DNI">DNI Argentino</option>
                                     <option value="DNI_EXT">DNI Extranjero</option>
@@ -1595,7 +1595,7 @@
                                 </select>
                             </div>
                             <div class="campo-edit">
-                                <label id="fe-dni-label">DNI <span class="nota-rol">(solo coordinador)</span></label>
+                                <label id="fe-dni-label" for="fe-dni">DNI <span class="nota-rol">(solo coordinador)</span></label>
                                 <input type="text" class="input-edit-ficha" id="fe-dni" oninput="onDniInputFicha()">
                             </div>
                             <div id="fe-dni-confirm-wrap" style="display:none;margin-bottom:13px">
@@ -1603,19 +1603,19 @@
                                     <span style="font-size:16px;line-height:1">⚠️</span>
                                     <div style="font-size:12px;color:#7a5200">Estás modificando el documento. Afecta todos los registros académicos del alumno.</div>
                                 </div>
-                                <label style="display:block; font-size:0.78rem; font-weight:600; color:var(--sga-texto-gris); margin-bottom:5px;">Confirmá el nuevo número</label>
+                                <label style="display:block; font-size:0.78rem; font-weight:600; color:var(--sga-texto-gris); margin-bottom:5px;" for="fe-dni-confirm">Confirmá el nuevo número</label>
                                 <input type="text" class="input-edit-ficha" id="fe-dni-confirm" placeholder="Repetí el número de documento">
                             </div>
                             <div class="campo-edit">
-                                <label>CUIL <span style="color:var(--sga-texto-gris);font-weight:400">(opcional)</span></label>
+                                <label for="fe-cuil">CUIL <span style="color:var(--sga-texto-gris);font-weight:400">(opcional)</span></label>
                                 <input type="text" class="input-edit-ficha" id="fe-cuil" placeholder="20-12345678-3" maxlength="13" oninput="onCuilFichaInput()">
                             </div>
                             <div class="campo-edit">
-                                <label>N° de legajo (opcional)</label>
+                                <label for="fe-legajo">N° de legajo (opcional)</label>
                                 <input type="text" class="input-edit-ficha" id="fe-legajo" placeholder="Se completa cuando el instituto lo asigna" maxlength="20">
                             </div>
                             <div class="campo-edit">
-                                <label>Fecha de nacimiento</label>
+                                <label for="fe-fnac-dia">Fecha de nacimiento</label>
                                 <div style="display:flex;gap:8px;">
                                     <input type="number" class="input-edit-ficha" id="fe-fnac-dia" placeholder="Día" min="1" max="31" style="width:70px;text-align:center">
                                     <select class="input-edit-ficha" id="fe-fnac-mes" style="width:130px">
@@ -1629,19 +1629,19 @@
                                 </div>
                             </div>
                             <div class="campo-edit">
-                                <label>Celular</label>
+                                <label for="fe-celular">Celular</label>
                                 <input type="text" class="input-edit-ficha" id="fe-celular">
                             </div>
                             <div class="campo-edit">
-                                <label>Dirección</label>
+                                <label for="fe-direccion">Dirección</label>
                                 <input type="text" class="input-edit-ficha" id="fe-direccion">
                             </div>
                             <div class="campo-edit">
-                                <label>Localidad</label>
+                                <label for="fe-localidad">Localidad</label>
                                 <input type="text" class="input-edit-ficha" id="fe-localidad">
                             </div>
                             <div class="campo-edit">
-                                <label>Provincia <span style="color:var(--sga-texto-gris);font-weight:400">(opcional)</span></label>
+                                <label for="fe-provincia">Provincia <span style="color:var(--sga-texto-gris);font-weight:400">(opcional)</span></label>
                                 <select class="input-edit-ficha" id="fe-provincia">
                                     <option value="">— Seleccionar —</option>
                                     <option>Buenos Aires</option>
@@ -1671,15 +1671,15 @@
                                 </select>
                             </div>
                             <div class="campo-edit">
-                                <label>Email</label>
+                                <label for="fe-email">Email</label>
                                 <input type="email" class="input-edit-ficha" id="fe-email">
                             </div>
                             <div class="campo-edit">
-                                <label>Contacto de emergencia — nombre</label>
+                                <label for="fe-cem-nombre">Contacto de emergencia — nombre</label>
                                 <input type="text" class="input-edit-ficha" id="fe-cem-nombre">
                             </div>
                             <div class="campo-edit">
-                                <label>Contacto de emergencia — teléfono</label>
+                                <label for="fe-cem-tel">Contacto de emergencia — teléfono</label>
                                 <input type="text" class="input-edit-ficha" id="fe-cem-tel">
                             </div>
                             <div id="ficha-edicion-error" class="form-error" style="display:none;margin-bottom:10px"></div>
@@ -1780,7 +1780,7 @@
                         vuelve a aparecer en esta pantalla para decidir de nuevo.
                     </p>
                     <div class="campo-edit">
-                        <label>Hasta <span style="color:#c00;">*</span></label>
+                        <label for="cierre-prorroga-dia">Hasta <span style="color:#c00;">*</span></label>
                         <div style="display:flex;gap:8px;">
                             <input type="number" id="cierre-prorroga-dia" class="input-edit-ficha" placeholder="Día" min="1" max="31" style="width:70px;text-align:center">
                             <select id="cierre-prorroga-mes" class="input-edit-ficha"></select>
@@ -1788,12 +1788,12 @@
                         </div>
                     </div>
                     <div class="campo-edit">
-                        <label>Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
+                        <label for="cierre-prorroga-motivo">Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
                         <textarea id="cierre-prorroga-motivo" class="input-edit-ficha" rows="3" style="font-family:inherit;resize:vertical;"
                                   placeholder="Ej: Le falta una materia para terminar el plan"></textarea>
                     </div>
                     <div class="campo-edit">
-                        <label>Disposición o resolución (opcional)</label>
+                        <label for="cierre-prorroga-disp">Disposición o resolución (opcional)</label>
                         <input type="text" id="cierre-prorroga-disp" class="input-edit-ficha" maxlength="100" placeholder="Ej: Disp. 12/2026">
                     </div>
                     <div id="cierre-prorroga-error" class="form-error" style="display:none"></div>
@@ -1817,7 +1817,7 @@
                         mientras siga en el plan anterior.
                     </p>
                     <div class="campo-edit">
-                        <label>Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
+                        <label for="cierre-reconoc-motivo">Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
                         <textarea id="cierre-reconoc-motivo" class="input-edit-ficha" rows="3" style="font-family:inherit;resize:vertical;"
                                   placeholder="Ej: La aprobó con un programa anterior al de la equivalencia"></textarea>
                     </div>
@@ -1840,38 +1840,38 @@
                     </p>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                         <div class="campo-edit" style="grid-column:1/-1">
-                            <label>Nombre *</label>
+                            <label for="edit-materia-nombre">Nombre *</label>
                             <input type="text" id="edit-materia-nombre" class="input-edit-ficha">
                         </div>
                         <div class="campo-edit">
-                            <label>Año *</label>
+                            <label for="edit-materia-anio">Año *</label>
                             <select id="edit-materia-anio" class="input-edit-ficha">
                                 <option value="1">1°</option><option value="2">2°</option><option value="3">3°</option>
                                 <option value="4">4°</option><option value="5">5°</option><option value="6">6°</option>
                             </select>
                         </div>
                         <div class="campo-edit">
-                            <label>Orden *</label>
+                            <label for="edit-materia-orden">Orden *</label>
                             <input type="number" id="edit-materia-orden" class="input-edit-ficha" min="1">
                         </div>
                         <div class="campo-edit">
-                            <label>Régimen</label>
+                            <label for="edit-materia-regimen">Régimen</label>
                             <select id="edit-materia-regimen" class="input-edit-ficha"></select>
                         </div>
                         <div class="campo-edit">
-                            <label>Régimen de aprobación</label>
+                            <label for="edit-materia-reg-aprobacion">Régimen de aprobación</label>
                             <select id="edit-materia-reg-aprobacion" class="input-edit-ficha"></select>
                         </div>
                         <div class="campo-edit">
-                            <label>Regularizadas para cursar</label>
+                            <label for="edit-materia-correl-cursada">Regularizadas para cursar</label>
                             <input type="text" id="edit-materia-correl-cursada" class="input-edit-ficha" placeholder="Ej: 4-6">
                         </div>
                         <div class="campo-edit">
-                            <label>Aprobadas para cursar</label>
+                            <label for="edit-materia-correl-aprobada-cursar">Aprobadas para cursar</label>
                             <input type="text" id="edit-materia-correl-aprobada-cursar" class="input-edit-ficha" placeholder="Profesorados. Ej: 27">
                         </div>
                         <div class="campo-edit">
-                            <label>Aprobadas para rendir</label>
+                            <label for="edit-materia-correl-aprobada">Aprobadas para rendir</label>
                             <input type="text" id="edit-materia-correl-aprobada" class="input-edit-ficha" placeholder="Ej: 4-6 o 1° Año">
                         </div>
                         <div class="campo-edit" style="display:flex;align-items:center;gap:8px;">
@@ -2123,7 +2123,7 @@
                 Si el alumno tiene que volver a cargarla, vas a tener que generarle un token nuevo.
             </p>
             <div class="campo-edit">
-                <label>Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
+                <label for="modal-prei-rechazo-motivo">Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
                 <textarea id="modal-prei-rechazo-motivo" class="input-edit-ficha" rows="4" maxlength="500"
                           placeholder="Ej: La documentación presentada no coincide con los datos cargados"
                           style="font-family:inherit; resize:vertical;"></textarea>
@@ -2198,7 +2198,7 @@
         <h3 class="tok-pregunta" id="tok-conf-tipo-titulo"></h3>
         <p class="tok-bajada" id="tok-conf-tipo-texto"></p>
         <div class="campo-edit" style="max-width:420px;">
-            <label>Correo del alumno <span style="color:#c00;">*</span></label>
+            <label for="tok-suelto-email">Correo del alumno <span style="color:#c00;">*</span></label>
             <input type="email" id="tok-suelto-email" class="input-edit-ficha" autocomplete="off"
                    placeholder="nombre@gmail.com" onkeydown="if (event.key === 'Enter') tokGenerarSuelto()">
         </div>
@@ -2281,7 +2281,7 @@
         <div class="modal-card-body">
             <p id="tok-reenv-texto"></p>
             <div class="campo-edit">
-                <label>Correo del alumno</label>
+                <label for="tok-reenv-email">Correo del alumno</label>
                 <input type="email" id="tok-reenv-email" class="input-edit-ficha" autocomplete="off"
                        onkeydown="if (event.key === 'Enter') tokConfirmarReenvio()">
             </div>
@@ -2306,12 +2306,12 @@
                 Habilitar el formulario público de inscripción
             </label>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                <div class="campo-edit"><label>Desde (opcional)</label>
+                <div class="campo-edit"><label for="tok-v-inicio">Desde (opcional)</label>
                     <input type="date" id="tok-v-inicio" class="input-edit-ficha"></div>
-                <div class="campo-edit"><label>Hasta (opcional)</label>
+                <div class="campo-edit"><label for="tok-v-fin">Hasta (opcional)</label>
                     <input type="date" id="tok-v-fin" class="input-edit-ficha"></div>
             </div>
-            <div class="campo-edit"><label>Días de validez de los tokens nuevos</label>
+            <div class="campo-edit"><label for="tok-v-vigencia">Días de validez de los tokens nuevos</label>
                 <input type="number" id="tok-v-vigencia" class="input-edit-ficha" min="1" max="90" style="max-width:120px;"></div>
             <p style="font-size:0.8rem;">Si dejás las fechas vacías, el formulario queda abierto mientras esté habilitado.</p>
             <div id="tok-v-error" style="display:none; color:var(--sga-error); font-size:0.84rem;"></div>
@@ -2399,7 +2399,7 @@
                 con tu usuario y la fecha actual.
             </p>
             <div class="campo-edit">
-                <label>Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
+                <label for="modal-insc-autorizar-motivo">Motivo (mínimo 5 caracteres) <span style="color:#c00;">*</span></label>
                 <textarea id="modal-insc-autorizar-motivo" class="input-edit-ficha" rows="4"
                           placeholder="Ej: Error en carga inicial - se omitió Química Aplicada"
                           style="font-family:inherit; resize:vertical;"></textarea>
@@ -2580,7 +2580,7 @@
                     <p>Para casos excepcionales. Cada corrección queda registrada con tu usuario, fecha y el motivo que indiques. No se puede corregir si el alumno ya aprobó en mesa de examen, ni si ya tiene libro y folio oficiales cargados.</p>
 
                     <div class="campo-edit">
-                        <label>Alumno</label>
+                        <label for="correccion-select-alumno">Alumno</label>
                         <select class="input-edit-ficha" id="correccion-select-alumno" onchange="correccionSeleccionarAlumno()">
                             <option value="">— Seleccionar alumno de esta cursada —</option>
                         </select>
@@ -2589,11 +2589,11 @@
                     <div id="form-correccion-alumno" style="display:none;">
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
                             <div class="campo-edit">
-                                <label>Nota</label>
+                                <label for="correccion-nota">Nota</label>
                                 <input type="number" min="1" max="10" step="0.01" class="input-edit-ficha" id="correccion-nota">
                             </div>
                             <div class="campo-edit">
-                                <label>Condición</label>
+                                <label for="correccion-condicion">Condición</label>
                                 <select class="input-edit-ficha" id="correccion-condicion">
                                     <option value="promocionado">Promocionó</option>
                                     <option value="regular">Regularizó</option>
@@ -2601,16 +2601,16 @@
                                 </select>
                             </div>
                             <div class="campo-edit">
-                                <label>% Asistencia</label>
+                                <label for="correccion-asistencia">% Asistencia</label>
                                 <input type="number" min="0" max="100" class="input-edit-ficha" id="correccion-asistencia">
                             </div>
                             <div class="campo-edit">
-                                <label>% TP</label>
+                                <label for="correccion-tp">% TP</label>
                                 <input type="number" min="0" max="100" class="input-edit-ficha" id="correccion-tp">
                             </div>
                         </div>
                         <div class="campo-edit">
-                            <label>Motivo de la corrección *</label>
+                            <label for="correccion-motivo">Motivo de la corrección *</label>
                             <input type="text" class="input-edit-ficha" id="correccion-motivo" placeholder="Ej: error de tipeo al cargar la nota original">
                         </div>
                         <div id="correccion-error" class="form-error" style="display:none;margin-bottom:10px"></div>
@@ -2670,15 +2670,15 @@
                         <div class="tarjeta-form-titulo">📝 Datos del nuevo plan</div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                             <div class="campo-edit">
-                                <label>Nombre del plan *</label>
+                                <label for="nuevo-plan-nombre">Nombre del plan *</label>
                                 <input type="text" id="nuevo-plan-nombre" class="input-edit-ficha" placeholder="ej: Plan 2026 Res. XXXX">
                             </div>
                             <div class="campo-edit">
-                                <label>N° Resolución</label>
+                                <label for="nuevo-plan-resolucion">N° Resolución</label>
                                 <input type="text" id="nuevo-plan-resolucion" class="input-edit-ficha" placeholder="ej: Res. 3003-E-">
                             </div>
                             <div class="campo-edit">
-                                <label>Fecha de vigencia *</label>
+                                <label for="nuevo-plan-vig-dia">Fecha de vigencia *</label>
                                 <div style="display:flex;gap:6px;align-items:center">
                                     <input type="number" id="nuevo-plan-vig-dia" class="input-edit-ficha" placeholder="Día" min="1" max="31" style="width:65px;text-align:center">
                                     <select id="nuevo-plan-vig-mes" class="input-edit-ficha" style="flex:1">
@@ -2700,7 +2700,7 @@
                                 </div>
                             </div>
                             <div class="campo-edit">
-                                <label>Fecha límite de transición</label>
+                                <label for="nuevo-plan-cierre-dia">Fecha límite de transición</label>
                                 <div style="display:flex;gap:6px;align-items:center">
                                     <input type="number" id="nuevo-plan-cierre-dia" class="input-edit-ficha" placeholder="Día" min="1" max="31" style="width:65px;text-align:center">
                                     <select id="nuevo-plan-cierre-mes" class="input-edit-ficha" style="flex:1">
@@ -2768,11 +2768,11 @@
                     </p>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                         <div class="campo-edit" style="grid-column:1/-1">
-                            <label>Nombre del espacio curricular *</label>
+                            <label for="nueva-materia-nombre">Nombre del espacio curricular *</label>
                             <input type="text" id="nueva-materia-nombre" class="input-edit-ficha" placeholder="Ej: Matemática">
                         </div>
                         <div class="campo-edit">
-                            <label>Año *</label>
+                            <label for="nueva-materia-anio">Año *</label>
                             <select id="nueva-materia-anio" class="input-edit-ficha">
                                 <option value="">-- Seleccionar --</option>
                                 <option value="1">1°</option>
@@ -2784,11 +2784,11 @@
                             </select>
                         </div>
                         <div class="campo-edit">
-                            <label>Orden *</label>
+                            <label for="nueva-materia-orden">Orden *</label>
                             <input type="number" id="nueva-materia-orden" class="input-edit-ficha" placeholder="Ej: 5" min="1">
                         </div>
                         <div class="campo-edit">
-                            <label>Régimen</label>
+                            <label for="nueva-materia-regimen">Régimen</label>
                             <select id="nueva-materia-regimen" class="input-edit-ficha">
                                 <option value="">-- Sin especificar --</option>
                                 <option value="Anual">Anual</option>
@@ -2798,7 +2798,7 @@
                             </select>
                         </div>
                         <div class="campo-edit">
-                            <label>Régimen de Aprobación</label>
+                            <label for="nueva-materia-reg-aprobacion">Régimen de Aprobación</label>
                             <select id="nueva-materia-reg-aprobacion" class="input-edit-ficha">
                                 <option value="">-- Sin especificar --</option>
                                 <option value="Promoción / Examen Final">Promoción / Examen Final</option>
@@ -2807,15 +2807,15 @@
                             </select>
                         </div>
                         <div class="campo-edit">
-                            <label>Correlativas: regularizadas para cursar</label>
+                            <label for="nueva-materia-correl-cursada">Correlativas: regularizadas para cursar</label>
                             <input type="text" id="nueva-materia-correl-cursada" class="input-edit-ficha" placeholder="Ej: 4-6">
                         </div>
                         <div class="campo-edit">
-                            <label>Correlativas: aprobadas para cursar</label>
+                            <label for="nueva-materia-correl-aprobada-cursar">Correlativas: aprobadas para cursar</label>
                             <input type="text" id="nueva-materia-correl-aprobada-cursar" class="input-edit-ficha" placeholder="Profesorados. Ej: 27">
                         </div>
                         <div class="campo-edit">
-                            <label>Correlativas: aprobadas para rendir</label>
+                            <label for="nueva-materia-correl-aprobada">Correlativas: aprobadas para rendir</label>
                             <input type="text" id="nueva-materia-correl-aprobada" class="input-edit-ficha" placeholder="Ej: 4-6 o 1° Año">
                         </div>
                         <div class="campo-edit" style="display:flex;align-items:center;gap:8px;">
@@ -3136,7 +3136,7 @@
                     Cambiarlo afecta inscripciones, cursadas y reportes para todos los roles.
                 </p>
                 <div class="campo-edit">
-                    <label>Año lectivo actual</label>
+                    <label for="input-anio-lectivo">Año lectivo actual</label>
                     <input type="text" id="input-anio-lectivo" class="input-edit-ficha"
                            placeholder="Ej: 2026" maxlength="4"
                            style="max-width:140px; font-size:1.3rem; font-weight:800; text-align:center;">
@@ -3158,7 +3158,7 @@
 
                 <div style="display:flex; flex-direction:column; gap:14px;">
                     <div class="campo-edit">
-                        <label>Apertura *</label>
+                        <label for="insc-inicio-dia">Apertura *</label>
                         <div style="display:flex;gap:6px;align-items:center">
                             <input type="number" id="insc-inicio-dia" class="input-edit-ficha" placeholder="Día" min="1" max="31" style="width:65px;text-align:center">
                             <select id="insc-inicio-mes" class="input-edit-ficha" style="flex:1">
@@ -3180,7 +3180,7 @@
                         </div>
                     </div>
                     <div class="campo-edit">
-                        <label>Cierre *</label>
+                        <label for="insc-fin-dia">Cierre *</label>
                         <div style="display:flex;gap:6px;align-items:center">
                             <input type="number" id="insc-fin-dia" class="input-edit-ficha" placeholder="Día" min="1" max="31" style="width:65px;text-align:center">
                             <select id="insc-fin-mes" class="input-edit-ficha" style="flex:1">
@@ -3204,7 +3204,7 @@
                 </div>
 
                 <div class="campo-edit">
-                    <label>Motivo del cambio <span style="color:#c00;">*</span></label>
+                    <label for="input-insc-motivo">Motivo del cambio <span style="color:#c00;">*</span></label>
                     <textarea id="input-insc-motivo" class="input-edit-ficha" rows="3"
                               placeholder="Ej: Ajuste de calendario académico 2026" style="font-family:inherit;"></textarea>
                 </div>
@@ -3235,7 +3235,7 @@
                 el acta se conserva con el motivo que indiques.
             </p>
             <div class="campo-edit">
-                <label>Motivo <span style="color:#c00;">*</span></label>
+                <label for="input-mesa-desierta-motivo">Motivo <span style="color:#c00;">*</span></label>
                 <textarea id="input-mesa-desierta-motivo" class="input-edit-ficha" rows="3"
                           placeholder="Ej: Ningún alumno se inscribió al llamado."
                           style="font-family:inherit;"></textarea>
@@ -3261,7 +3261,7 @@
                 Esta acción se registra en la auditoría del sistema.
             </p>
             <div class="campo-edit">
-                <label>Motivo del cierre manual <span style="color:#c00;">*</span></label>
+                <label for="input-insc-motivo-cierre">Motivo del cierre manual <span style="color:#c00;">*</span></label>
                 <textarea id="input-insc-motivo-cierre" class="input-edit-ficha" rows="4"
                           placeholder="Ej: Cupo completo, no se aceptan más inscripciones" style="font-family:inherit;"></textarea>
             </div>
@@ -3285,7 +3285,7 @@
                 del período configurado, las inscripciones quedarán abiertas. Esta acción se registra en la auditoría.
             </p>
             <div class="campo-edit">
-                <label>Motivo de la reapertura <span style="color:#c00;">*</span></label>
+                <label for="input-insc-motivo-reabrir">Motivo de la reapertura <span style="color:#c00;">*</span></label>
                 <textarea id="input-insc-motivo-reabrir" class="input-edit-ficha" rows="4"
                           placeholder="Ej: Se sumó personal a preceptoría con alumnos pendientes" style="font-family:inherit;"></textarea>
             </div>
@@ -3310,30 +3310,30 @@
             <div id="modal-admin-error" class="form-error" style="display:none;margin-bottom:12px"></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                 <div class="campo-edit">
-                    <label>Apellido *</label>
+                    <label for="input-admin-apellido">Apellido *</label>
                     <input type="text" id="input-admin-apellido" class="input-edit-ficha" placeholder="Apellido">
                 </div>
                 <div class="campo-edit">
-                    <label>Nombre *</label>
+                    <label for="input-admin-nombre">Nombre *</label>
                     <input type="text" id="input-admin-nombre" class="input-edit-ficha" placeholder="Nombre">
                 </div>
             </div>
             <div class="campo-edit" id="grupo-admin-dni">
-                <label>DNI * <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(será el usuario y contraseña inicial)</span></label>
+                <label for="input-admin-dni">DNI * <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(será el usuario y contraseña inicial)</span></label>
                 <input type="text" id="input-admin-dni" class="input-edit-ficha" placeholder="Sin puntos ni espacios">
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                 <div class="campo-edit">
-                    <label>Email</label>
+                    <label for="input-admin-email">Email</label>
                     <input type="email" id="input-admin-email" class="input-edit-ficha" placeholder="correo@ejemplo.com">
                 </div>
                 <div class="campo-edit">
-                    <label>Celular</label>
+                    <label for="input-admin-celular">Celular</label>
                     <input type="text" id="input-admin-celular" class="input-edit-ficha" placeholder="Ej: 388 1234567">
                 </div>
             </div>
             <div class="campo-edit">
-                <label>Domicilio</label>
+                <label for="input-admin-domicilio">Domicilio</label>
                 <input type="text" id="input-admin-domicilio" class="input-edit-ficha" placeholder="Opcional">
             </div>
         </div>
@@ -3412,11 +3412,11 @@
         </div>
         <div class="modal-card-body">
             <div class="campo-edit">
-                <label>Nombre de la carrera</label>
+                <label for="input-carrera-nombre">Nombre de la carrera</label>
                 <input type="text" id="input-carrera-nombre" class="input-edit-ficha" placeholder="Ej: Higiene y Seguridad en el Trabajo">
             </div>
             <div class="campo-edit">
-                <label>Nombre corto (opcional)</label>
+                <label for="input-carrera-nombre-corto">Nombre corto (opcional)</label>
                 <input type="text" id="input-carrera-nombre-corto" class="input-edit-ficha" maxlength="40" placeholder="Ej: Redes">
             </div>
             <div id="modal-carrera-error" class="form-error" style="display:none"></div>
@@ -3453,16 +3453,16 @@
         <div class="modal-card-body">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                 <div class="campo-edit">
-                    <label>Apellido *</label>
+                    <label for="input-coord-apellido">Apellido *</label>
                     <input type="text" id="input-coord-apellido" class="input-edit-ficha" placeholder="Apellido">
                 </div>
                 <div class="campo-edit">
-                    <label>Nombre *</label>
+                    <label for="input-coord-nombre">Nombre *</label>
                     <input type="text" id="input-coord-nombre" class="input-edit-ficha" placeholder="Nombre">
                 </div>
             </div>
             <div class="campo-edit">
-                <label>Género <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(define si figura como Coordinador, Coordinadora o Coordinación)</span></label>
+                <label for="input-coord-genero">Género <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(define si figura como Coordinador, Coordinadora o Coordinación)</span></label>
                 <select id="input-coord-genero" class="input-edit-ficha">
                     <option value="">Sin especificar</option>
                     <option value="F">Femenino</option>
@@ -3470,21 +3470,21 @@
                 </select>
             </div>
             <div class="campo-edit">
-                <label>DNI *</label>
+                <label for="input-coord-dni">DNI *</label>
                 <input type="text" id="input-coord-dni" class="input-edit-ficha" placeholder="Sin puntos ni espacios">
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                 <div class="campo-edit">
-                    <label>Email</label>
+                    <label for="input-coord-email">Email</label>
                     <input type="email" id="input-coord-email" class="input-edit-ficha" placeholder="email@ejemplo.com">
                 </div>
                 <div class="campo-edit">
-                    <label>Celular</label>
+                    <label for="input-coord-celular">Celular</label>
                     <input type="text" id="input-coord-celular" class="input-edit-ficha" placeholder="Ej: 388 1234567">
                 </div>
             </div>
             <div class="campo-edit">
-                <label>Carrera asignada</label>
+                <label for="input-coord-carrera">Carrera asignada</label>
                 <select id="input-coord-carrera" class="input-edit-ficha">
                     <option value="">— Sin carrera asignada —</option>
                 </select>
@@ -3525,17 +3525,17 @@
         <div style="font-size:11px;font-weight:600;color:var(--texto-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Datos personales</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-grupo">
-                <label class="form-label">Apellido *</label>
+                <label class="form-label" for="input-al-apellido">Apellido *</label>
                 <input type="text" id="input-al-apellido" class="form-input" placeholder="Apellido">
             </div>
             <div class="form-grupo">
-                <label class="form-label">Nombre *</label>
+                <label class="form-label" for="input-al-nombre">Nombre *</label>
                 <input type="text" id="input-al-nombre" class="form-input" placeholder="Nombre">
             </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-grupo">
-                <label class="form-label">Tipo de documento *</label>
+                <label class="form-label" for="input-al-tipo-doc">Tipo de documento *</label>
                 <select id="input-al-tipo-doc" class="form-input" onchange="onTipoDocChange()">
                     <option value="DNI">DNI Argentino</option>
                     <option value="DNI_EXT">DNI Extranjero</option>
@@ -3544,30 +3544,30 @@
                 </select>
             </div>
             <div class="form-grupo">
-                <label class="form-label" id="lbl-al-dni">Número de DNI *</label>
+                <label class="form-label" id="lbl-al-dni" for="input-al-dni">Número de DNI *</label>
                 <input type="text" id="input-al-dni" class="form-input" placeholder="Con o sin puntos (ej: 12.345.678)" maxlength="20" oninput="onDniInput()">
             </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-grupo">
-                <label class="form-label">CUIL <span style="color:var(--texto-3);font-weight:400">(opcional)</span></label>
+                <label class="form-label" for="input-al-cuil">CUIL <span style="color:var(--texto-3);font-weight:400">(opcional)</span></label>
                 <input type="text" id="input-al-cuil" class="form-input" placeholder="20-12345678-3" maxlength="13" oninput="onCuilInput()">
                 <div id="cuil-hint" style="font-size:11px;color:var(--texto-3);margin-top:4px;display:none">Formato: XX-XXXXXXXX-X (con o sin guiones)</div>
             </div>
             <div class="form-grupo">
-                <label class="form-label">Año de ingreso</label>
+                <label class="form-label" for="input-al-anio-ingreso">Año de ingreso</label>
                 <input type="number" id="input-al-anio-ingreso" class="form-input"
                        placeholder="Ej: 2026" min="2000" max="2099" style="max-width:120px">
             </div>
         </div>
                 <div class="form-grupo">
-                    <label class="form-label">N° de legajo <span style="color:var(--texto-3);font-weight:400">(opcional)</span></label>
+                    <label class="form-label" for="input-al-legajo">N° de legajo <span style="color:var(--texto-3);font-weight:400">(opcional)</span></label>
                     <input type="text" id="input-al-legajo" class="form-input"
                            placeholder="Se completa cuando el instituto lo asigna" maxlength="20">
                 </div>
 
         <div class="form-grupo">
-            <label class="form-label">Fecha de nacimiento</label>
+            <label class="form-label" for="input-al-fnac-dia">Fecha de nacimiento</label>
             <div style="display:flex;gap:8px;align-items:center">
                 <input type="number" id="input-al-fnac-dia" class="form-input"
                        placeholder="Día" min="1" max="31"
@@ -3603,21 +3603,21 @@
                 </div>
             </div>
             <div class="form-grupo" style="margin-bottom:0">
-                <label class="form-label">Confirmá el nuevo DNI *</label>
+                <label class="form-label" for="input-al-dni-confirm">Confirmá el nuevo DNI *</label>
                 <input type="text" id="input-al-dni-confirm" class="form-input" placeholder="Repetí el DNI para confirmar" maxlength="10">
             </div>
         </div>
         <div class="form-grupo">
-            <label class="form-label">Dirección</label>
+            <label class="form-label" for="input-al-direccion">Dirección</label>
             <input type="text" id="input-al-direccion" class="form-input" placeholder="Calle, número">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-grupo">
-                <label class="form-label">Localidad</label>
+                <label class="form-label" for="input-al-localidad">Localidad</label>
                 <input type="text" id="input-al-localidad" class="form-input" placeholder="Ej: San Pedro de Jujuy">
             </div>
             <div class="form-grupo">
-                <label class="form-label">Provincia <span style="color:var(--texto-3);font-weight:400">(opcional)</span></label>
+                <label class="form-label" for="input-al-provincia">Provincia <span style="color:var(--texto-3);font-weight:400">(opcional)</span></label>
                 <select id="input-al-provincia" class="form-input">
                     <option value="">— Seleccionar —</option>
                     <option>Buenos Aires</option>
@@ -3649,11 +3649,11 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-grupo">
-                <label class="form-label">Email</label>
+                <label class="form-label" for="input-al-email">Email</label>
                 <input type="email" id="input-al-email" class="form-input" placeholder="email@ejemplo.com">
             </div>
             <div class="form-grupo">
-                <label class="form-label">Celular</label>
+                <label class="form-label" for="input-al-celular">Celular</label>
                 <input type="text" id="input-al-celular" class="form-input" placeholder="Ej: 388 1234567">
             </div>
         </div>
@@ -3661,11 +3661,11 @@
         <div style="font-size:11px;font-weight:600;color:var(--texto-3);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 10px">Contacto de emergencia</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-grupo">
-                <label class="form-label">Nombre y apellido</label>
+                <label class="form-label" for="input-al-cem-nombre">Nombre y apellido</label>
                 <input type="text" id="input-al-cem-nombre" class="form-input" placeholder="Nombre del contacto">
             </div>
             <div class="form-grupo">
-                <label class="form-label">Teléfono</label>
+                <label class="form-label" for="input-al-cem-tel">Teléfono</label>
                 <input type="text" id="input-al-cem-tel" class="form-input" placeholder="Ej: 388 1234567">
             </div>
         </div>
@@ -3690,15 +3690,15 @@
         <div class="modal-card-body">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                 <div class="campo-edit">
-                    <label>Apellido *</label>
+                    <label for="input-prof-apellido">Apellido *</label>
                     <input type="text" id="input-prof-apellido" class="input-edit-ficha" placeholder="Apellido">
                 </div>
                 <div class="campo-edit">
-                    <label>Nombre *</label>
+                    <label for="input-prof-nombre">Nombre *</label>
                     <input type="text" id="input-prof-nombre" class="input-edit-ficha" placeholder="Nombre">
                 </div>
                 <div class="campo-edit" style="grid-column:1/-1">
-                    <label>Género <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(define si figura como Profesor, Profesora o Docente)</span></label>
+                    <label for="input-prof-genero">Género <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(define si figura como Profesor, Profesora o Docente)</span></label>
                     <select id="input-prof-genero" class="input-edit-ficha">
                         <option value="">Sin especificar</option>
                         <option value="F">Femenino</option>
@@ -3706,19 +3706,19 @@
                     </select>
                 </div>
                 <div class="campo-edit">
-                    <label>DNI *</label>
+                    <label for="input-prof-dni">DNI *</label>
                     <input type="text" id="input-prof-dni" class="input-edit-ficha" placeholder="Con o sin puntos">
                 </div>
                 <div class="campo-edit">
-                    <label>Celular</label>
+                    <label for="input-prof-celular">Celular</label>
                     <input type="text" id="input-prof-celular" class="input-edit-ficha" placeholder="Ej: 388 1234567">
                 </div>
                 <div class="campo-edit" style="grid-column:1/-1">
-                    <label>Título / Especialidad</label>
+                    <label for="input-prof-titulo">Título / Especialidad</label>
                     <input type="text" id="input-prof-titulo" class="input-edit-ficha" placeholder="Ej: Lic. en Matemática">
                 </div>
                 <div class="campo-edit" style="grid-column:1/-1">
-                    <label>Email</label>
+                    <label for="input-prof-email">Email</label>
                     <input type="email" id="input-prof-email" class="input-edit-ficha" placeholder="email@ejemplo.com">
                 </div>
             </div>
@@ -3743,11 +3743,11 @@
         <div class="modal-card-body">
             <div id="modal-asignar-profe-nombre" style="font-weight:700; color:var(--sga-verde-medio); margin-bottom:14px;"></div>
 
-            <label style="display:block; font-size:0.78rem; font-weight:600; color:var(--sga-texto-gris); margin-bottom:8px;" id="lbl-materias-asignadas">Materias asignadas</label>
+            <div style="display:block; font-size:0.78rem; font-weight:600; color:var(--sga-texto-gris); margin-bottom:8px;" id="lbl-materias-asignadas">Materias asignadas</div>
             <div id="lista-materias-asignadas" style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;"></div>
 
             <div class="campo-edit">
-                <label>Agregar otra materia</label>
+                <label for="input-asignar-materia">Agregar otra materia</label>
                 <div style="display:flex; gap:8px;">
                     <select id="input-asignar-materia" class="input-edit-ficha" style="flex:1;"></select>
                     <button class="btn-secundario" onclick="agregarMateriaAProfesor()">+ Agregar</button>
@@ -3775,16 +3775,16 @@
             <div id="modal-preceptora-error" class="form-error" style="display:none;margin-bottom:12px"></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                 <div class="campo-edit">
-                    <label>Apellido *</label>
+                    <label for="input-prec-apellido">Apellido *</label>
                     <input type="text" id="input-prec-apellido" class="input-edit-ficha" placeholder="Apellido">
                 </div>
                 <div class="campo-edit">
-                    <label>Nombre *</label>
+                    <label for="input-prec-nombre">Nombre *</label>
                     <input type="text" id="input-prec-nombre" class="input-edit-ficha" placeholder="Nombre">
                 </div>
             </div>
             <div class="campo-edit">
-                <label>Género <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(define si figura como Preceptor, Preceptora o Preceptoría)</span></label>
+                <label for="input-prec-genero">Género <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(define si figura como Preceptor, Preceptora o Preceptoría)</span></label>
                 <select id="input-prec-genero" class="input-edit-ficha">
                     <option value="">Sin especificar</option>
                     <option value="F">Femenino</option>
@@ -3792,15 +3792,15 @@
                 </select>
             </div>
             <div class="campo-edit" id="grupo-prec-dni">
-                <label>DNI * <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(será el usuario y contraseña inicial)</span></label>
+                <label for="input-prec-dni">DNI * <span style="font-size:0.74rem;color:var(--sga-texto-gris);font-weight:400">(será el usuario y contraseña inicial)</span></label>
                 <input type="text" id="input-prec-dni" class="input-edit-ficha" placeholder="Ej: 38909187">
             </div>
             <div class="campo-edit">
-                <label>Email</label>
+                <label for="input-prec-email">Email</label>
                 <input type="email" id="input-prec-email" class="input-edit-ficha" placeholder="correo@ejemplo.com">
             </div>
             <div class="campo-edit">
-                <label>Celular</label>
+                <label for="input-prec-celular">Celular</label>
                 <input type="text" id="input-prec-celular" class="input-edit-ficha" placeholder="Ej: 388 1234567">
             </div>
         </div>
@@ -3838,12 +3838,12 @@
         <div id="modal-cursada-error" class="form-error" style="display:none;margin-bottom:12px"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-grupo">
-                <label class="form-label">Nota (1-10)</label>
+                <label class="form-label" for="input-cursada-nota">Nota (1-10)</label>
                 <input type="number" id="input-cursada-nota" class="form-input"
                        min="1" max="10" step="0.5" placeholder="Ej: 7">
             </div>
             <div class="form-grupo">
-                <label class="form-label">Condición</label>
+                <label class="form-label" for="input-cursada-condicion">Condición</label>
                 <select id="input-cursada-condicion" class="form-input">
                     <option value="">— Sin condición —</option>
                     <option value="promocionado">Promocionado</option>
@@ -3855,18 +3855,18 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="form-grupo">
-                <label class="form-label">% Asistencia</label>
+                <label class="form-label" for="input-cursada-asist">% Asistencia</label>
                 <input type="number" id="input-cursada-asist" class="form-input"
                        min="0" max="100" step="1" placeholder="Ej: 80">
             </div>
             <div class="form-grupo">
-                <label class="form-label">% TP</label>
+                <label class="form-label" for="input-cursada-tp">% TP</label>
                 <input type="number" id="input-cursada-tp" class="form-input"
                        min="0" max="100" step="1" placeholder="Ej: 90">
             </div>
         </div>
         <div class="form-grupo">
-            <label class="form-label">Observaciones</label>
+            <label class="form-label" for="input-cursada-obs">Observaciones</label>
             <input type="text" id="input-cursada-obs" class="form-input" placeholder="Opcional">
         </div>
         <div class="modal-acciones">
@@ -9456,7 +9456,7 @@ async function eliminarPreceptora(id, apellido) {
             html += `<p class="tok-bajada">Todavía no tiene un token para este ciclo. Con el token va a confirmar sus datos
                         con el DNI y elegir las materias que puede cursar.</p>
                      <div class="campo-edit tok-solo-pc" style="max-width:420px;">
-                        <label>Correo del alumno <span style="color:#c00;">*</span></label>
+                        <label for="tok-alumno-email">Correo del alumno <span style="color:#c00;">*</span></label>
                         <input type="email" id="tok-alumno-email" class="input-edit-ficha" autocomplete="off"
                                value="${preiEsc(a.email || '')}" placeholder="nombre@gmail.com"
                                onkeydown="if (event.key === 'Enter') tokGenerarParaAlumno(${a.id})">
@@ -12081,18 +12081,18 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="modal-card-body">
             <div class="campo-edit">
-                <label>Materia *</label>
+                <label for="nueva-mesa-materia">Materia *</label>
                 <select id="nueva-mesa-materia" class="input-edit-ficha"></select>
             </div>
             <div class="campo-edit">
-                <label>Tipo *</label>
+                <label for="nueva-mesa-tipo">Tipo *</label>
                 <select id="nueva-mesa-tipo" class="input-edit-ficha">
                     <option value="regular">Regular</option>
                     <option value="libre">Libre</option>
                 </select>
             </div>
             <div class="campo-edit">
-                <label>Turno</label>
+                <label for="nueva-mesa-turno">Turno</label>
                 <select id="nueva-mesa-turno" class="input-edit-ficha">
                     <option value="Tarde">Tarde</option>
                     <option value="Mañana">Mañana</option>
@@ -12100,7 +12100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </select>
             </div>
             <div class="campo-edit">
-                <label>Fecha de mesa *</label>
+                <label for="nueva-mesa-dia">Fecha de mesa *</label>
                 <div style="display:flex;gap:8px;align-items:center">
                     <input type="number" id="nueva-mesa-dia" class="input-edit-ficha" placeholder="Día" min="1" max="31" style="width:70px;text-align:center">
                     <select id="nueva-mesa-mes" class="input-edit-ficha" style="flex:1">

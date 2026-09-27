@@ -98,39 +98,39 @@
 
             <div class="fila-2">
                 <div class="campo">
-                    <label>Apellido *</label>
+                    <label for="input-apellido">Apellido *</label>
                     <input type="text" name="apellido" id="input-apellido" required>
                 </div>
                 <div class="campo">
-                    <label>Nombre *</label>
+                    <label for="input-nombre">Nombre *</label>
                     <input type="text" name="nombre" id="input-nombre" required>
                 </div>
             </div>
             <div class="campo">
-                <label>Género <span style="text-transform:none;font-weight:400">(define si figurás como Administrador, Administradora o Administración)</span></label>
-                <select name="genero">
+                <label for="input-genero">Género <span style="text-transform:none;font-weight:400">(define si figurás como Administrador, Administradora o Administración)</span></label>
+                <select name="genero" id="input-genero">
                     <option value="">Sin especificar</option>
                     <option value="F">Femenino</option>
                     <option value="M">Masculino</option>
                 </select>
             </div>
             <div class="campo">
-                <label>DNI * <span style="text-transform:none;font-weight:400">(será tu usuario)</span></label>
+                <label for="input-dni">DNI * <span style="text-transform:none;font-weight:400">(será tu usuario)</span></label>
                 <input type="text" name="dni" id="input-dni" placeholder="Sin puntos ni espacios" required>
             </div>
             <div class="fila-2">
                 <div class="campo">
-                    <label>Celular</label>
-                    <input type="text" name="celular" placeholder="Ej: 3884 123456">
+                    <label for="input-celular">Celular</label>
+                    <input type="text" name="celular" id="input-celular" placeholder="Ej: 3884 123456">
                 </div>
                 <div class="campo">
-                    <label>Email</label>
-                    <input type="email" name="email" placeholder="correo@ejemplo.com">
+                    <label for="input-email">Email</label>
+                    <input type="email" name="email" id="input-email" placeholder="correo@ejemplo.com">
                 </div>
             </div>
             <div class="campo">
-                <label>Domicilio</label>
-                <input type="text" name="domicilio" placeholder="Opcional">
+                <label for="input-domicilio">Domicilio</label>
+                <input type="text" name="domicilio" id="input-domicilio" placeholder="Opcional">
             </div>
 
             <div class="botones">
@@ -145,11 +145,11 @@
             <p class="paso-desc">Esta es la que vas a usar de acá en adelante para entrar al sistema.</p>
 
             <div class="campo">
-                <label>Nueva contraseña *</label>
+                <label for="input-nueva">Nueva contraseña *</label>
                 <input type="password" name="nueva" id="input-nueva" autocomplete="new-password" oninput="validarPassword()" required>
             </div>
             <div class="campo">
-                <label>Confirmar contraseña *</label>
+                <label for="input-confirmar">Confirmar contraseña *</label>
                 <input type="password" name="confirmar" id="input-confirmar" autocomplete="new-password" oninput="validarPassword()" required>
             </div>
 
