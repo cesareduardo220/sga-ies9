@@ -1907,6 +1907,17 @@
             </div>
         </div>
 
+        <!-- Cartel propio para confirmaciones y avisos (reemplaza confirm/alert del navegador) -->
+        <div id="modal-sga-dialogo" class="modal-overlay" style="display:none;">
+            <div class="modal-card" style="max-width:460px;">
+                <div class="modal-card-header"><h3 id="sga-dialogo-titulo">Aviso</h3></div>
+                <div class="modal-card-body">
+                    <p id="sga-dialogo-mensaje" style="margin:0;white-space:pre-line;line-height:1.5;"></p>
+                </div>
+                <div class="modal-card-footer" id="sga-dialogo-botones"></div>
+            </div>
+        </div>
+
 
 <!-- ══════════════════════════════════════════════════════════════
      SECCIÓN INSCRIPCIONES — reemplaza el placeholder en dashboard
@@ -4099,6 +4110,60 @@
         }
     }
 
+    // ── Carteles propios en lugar de las ventanas nativas del navegador ──
+    // sgaDialogo devuelve una promesa con el valor del botón elegido, o null si
+    // se cierra sin elegir (Escape o clic en el fondo). sgaConfirmar devuelve
+    // true/false y sgaAviso solo espera a que se cierre.
+    var _sgaDialogoResolver = null;
+    function _sgaDialogoCerrar(valor) {
+        cerrarModal('modal-sga-dialogo');
+        const resolver = _sgaDialogoResolver;
+        _sgaDialogoResolver = null;
+        if (resolver) resolver(valor);
+    }
+    function sgaDialogo({ titulo = 'Aviso', mensaje = '', botones = [] } = {}) {
+        if (_sgaDialogoResolver) _sgaDialogoCerrar(null);   // uno a la vez
+        const el = document.getElementById('modal-sga-dialogo');
+        document.getElementById('sga-dialogo-titulo').textContent = titulo;
+        document.getElementById('sga-dialogo-mensaje').textContent = String(mensaje);
+        const pie = document.getElementById('sga-dialogo-botones');
+        pie.innerHTML = '';
+        let foco = null;
+        botones.forEach(b => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = b.estilo === 'cancelar' ? 'modal-btn-cancelar' : 'modal-btn-confirmar';
+            btn.textContent = b.texto;
+            btn.addEventListener('click', () => _sgaDialogoCerrar(b.valor === undefined ? null : b.valor));
+            pie.appendChild(btn);
+            if (b.foco) foco = btn;
+        });
+        return new Promise(resolve => {
+            _sgaDialogoResolver = resolve;
+            abrirModal('modal-sga-dialogo');
+            el.style.zIndex = '10000';   // por encima de otro cartel abierto
+            // Clic en el fondo: cerrar sin elegir (reemplaza el cierre de abrirModal)
+            el.removeEventListener('click', el._cerrarAlFondo);
+            el._cerrarAlFondo = e => { if (e.target === el) _sgaDialogoCerrar(null); };
+            el.addEventListener('click', el._cerrarAlFondo);
+            (foco || pie.lastElementChild || el).focus();
+        });
+    }
+    function sgaConfirmar(mensaje, { titulo = 'Confirmar', aceptar = 'Aceptar', cancelar = 'Cancelar' } = {}) {
+        // El foco queda en Cancelar: un Enter apurado no confirma una acción
+        return sgaDialogo({ titulo, mensaje, botones: [
+            { texto: cancelar, valor: false, estilo: 'cancelar', foco: true },
+            { texto: aceptar, valor: true },
+        ] }).then(v => v === true);
+    }
+    function sgaAviso(mensaje, { titulo = 'Aviso', boton = 'Entendido' } = {}) {
+        return sgaDialogo({ titulo, mensaje, botones: [{ texto: boton, valor: true, foco: true }] })
+            .then(() => undefined);
+    }
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && _sgaDialogoResolver) _sgaDialogoCerrar(null);
+    });
+
     // Menús por rol
     const menus = {
         sys: [
@@ -4434,21 +4499,27 @@
             return;
         }
 
-        // ── Guardia: si hay cambios sin guardar en Notas, confirmar antes de salir ──
+        // ── Guardia: si hay cambios sin guardar en Notas, preguntar antes de salir ──
         if (typeof hayCambios !== 'undefined' && hayCambios && typeof notasMateriaId !== 'undefined' && notasMateriaId !== null) {
-            const confirmar = confirm(
-                '⚠️ Tenés cambios sin guardar en Notas.\n\n' +
-                '• Aceptar → guardar y continuar\n' +
-                '• Cancelar → descartar cambios y continuar'
-            );
-            if (confirmar) {
-                notasGuardar().then(callback);
-                return;
-            }
-            // Cancelar → descartar: recargar datos originales desde DB
-            hayCambios = false;
-            const midActual = notasMateriaId;
-            notasAbrirMateria(midActual).then(callback);
+            sgaDialogo({
+                titulo: 'Cambios sin guardar',
+                mensaje: '⚠️ Tenés cambios sin guardar en Notas.',
+                botones: [
+                    { texto: 'Quedarme', valor: null, estilo: 'cancelar' },
+                    { texto: 'Descartar y continuar', valor: 'descartar', estilo: 'cancelar' },
+                    { texto: 'Guardar y continuar', valor: 'guardar', foco: true },
+                ]
+            }).then(opcion => {
+                if (opcion === 'guardar') {
+                    notasGuardar().then(callback);
+                } else if (opcion === 'descartar') {
+                    // Descartar: recargar los datos originales desde la base
+                    hayCambios = false;
+                    const midActual = notasMateriaId;
+                    notasAbrirMateria(midActual).then(callback);
+                }
+                // "Quedarme" (o cerrar el cartel): no se sale
+            });
             return;
         }
 
@@ -4457,12 +4528,16 @@
         // (es una acción irreversible), así que no se puede ofrecer un atajo de
         // guardado automático — solo confirmar si se quiere salir y perderlos.
         if (typeof mesaResultadosHayCambios !== 'undefined' && mesaResultadosHayCambios) {
-            if (!confirm('⚠️ Tenés resultados de mesa cargados sin guardar.\n\n¿Salir igual? Se van a perder.')) {
-                return;
-            }
-            mesaResultadosHayCambios = false;
-            const panelRes = document.getElementById('panel-resultados');
-            if (panelRes) panelRes.style.display = 'none';
+            sgaConfirmar('⚠️ Tenés resultados de mesa cargados sin guardar.\n\n¿Salir igual? Se van a perder.',
+                         { titulo: 'Resultados sin guardar', aceptar: 'Salir y perderlos', cancelar: 'Quedarme' })
+                .then(salir => {
+                    if (!salir) return;
+                    mesaResultadosHayCambios = false;
+                    const panelRes = document.getElementById('panel-resultados');
+                    if (panelRes) panelRes.style.display = 'none';
+                    callback();
+                });
+            return;
         }
 
         callback();
@@ -4664,23 +4739,31 @@
         if (enMateriaConCambios) {
             const mIdActual = notasMateriaId;
             history.pushState({ seccionId: 'notas', label: '', notasMateriaId: mIdActual }, '', '#notas-materia-' + mIdActual);
-            const confirmar = confirm(
-                '⚠️ Tenés cambios sin guardar en esta cursada.\n\n' +
-                '• Aceptar → guardar y volver\n' +
-                '• Cancelar → quedarte acá'
-            );
-            if (!confirmar) return;
-            hayCambios = false;
-            notasGuardar().then(() => aplicarEstadoNavegacion(e.state));
+            sgaDialogo({
+                titulo: 'Cambios sin guardar',
+                mensaje: '⚠️ Tenés cambios sin guardar en esta cursada.',
+                botones: [
+                    { texto: 'Quedarme', valor: null, estilo: 'cancelar' },
+                    { texto: 'Guardar y volver', valor: 'guardar', foco: true },
+                ]
+            }).then(opcion => {
+                if (opcion !== 'guardar') return;
+                hayCambios = false;
+                notasGuardar().then(() => aplicarEstadoNavegacion(e.state));
+            });
             return;
         }
 
         if (typeof mesaResultadosHayCambios !== 'undefined' && mesaResultadosHayCambios) {
             history.pushState({ seccionId: 'mesas', label: '', mesaId: mesaActualId }, '', '#mesa-' + mesaActualId);
-            if (!confirm('⚠️ Tenés resultados de mesa cargados sin guardar.\n\n¿Salir igual? Se van a perder.')) {
-                return;
-            }
-            mesaResultadosHayCambios = false;
+            sgaConfirmar('⚠️ Tenés resultados de mesa cargados sin guardar.\n\n¿Salir igual? Se van a perder.',
+                         { titulo: 'Resultados sin guardar', aceptar: 'Salir y perderlos', cancelar: 'Quedarme' })
+                .then(salir => {
+                    if (!salir) return;
+                    mesaResultadosHayCambios = false;
+                    aplicarEstadoNavegacion(e.state);
+                });
+            return;
         }
 
         // Guardia inscripciones: ¿hay autorización pendiente y nos estamos yendo del panel del alumno?
@@ -5173,7 +5256,7 @@
     }
 
     async function toggleAdmin(id) {
-        if (!confirm('¿Confirmar cambio de estado de este administrador?')) return;
+        if (!(await sgaConfirmar('¿Confirmar cambio de estado de este administrador?'))) return;
         const res  = await fetch(`/api/sys/admins/${id}/toggle`, { method: 'POST' });
         const data = await res.json();
         if (data.ok) cargarAdmins();
@@ -5378,24 +5461,24 @@
     }
 
     async function resetCoord(id, apellido) {
-        if (!confirm(`¿Resetear la contraseña de ${apellido}? Se le asignará su DNI como nueva clave.`)) return;
+        if (!(await sgaConfirmar(`¿Resetear la contraseña de ${apellido}? Se le asignará su DNI como nueva clave.`))) return;
         await fetch(`/api/coordinadores/${id}/reset`, { method: 'POST' });
-        alert('Contraseña reseteada. El coordinador deberá cambiarla al ingresar.');
+        await sgaAviso('Contraseña reseteada. El coordinador deberá cambiarla al ingresar.');
     }
 
 async function eliminarPreceptora(id, apellido) {
-    if (!confirm(`Se quitará a ${apellido} de esta carrera. Si no trabaja en ninguna otra, se eliminará del sistema.`)) return;
+    if (!(await sgaConfirmar(`Se quitará a ${apellido} de esta carrera. Si no trabaja en ninguna otra, se eliminará del sistema.`))) return;
     const res = await fetch(`/api/usuarios/preceptoras/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
-      alert(d.error || 'No se pudo eliminar');
+      await sgaAviso(d.error || 'No se pudo eliminar');
       return;
     }
     cargarPreceptoras();
   }
 
   async function eliminarCoord(id, apellido) {
-        if (!confirm(`¿Eliminar al coordinador ${apellido}? Esta acción no se puede deshacer.`)) return;
+        if (!(await sgaConfirmar(`¿Eliminar al coordinador ${apellido}? Esta acción no se puede deshacer.`))) return;
         await fetch(`/api/coordinadores/${id}`, { method: 'DELETE' });
         cargarCoordinadores();
     }
@@ -6384,7 +6467,7 @@ async function eliminarPreceptora(id, apellido) {
         const data = await _cierreEnviarReconocimiento({ alumno_id: aid, materia_id: mid, reconocer: true });
         if (data.error) {
             if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('⚠️ ' + data.error);
-            else alert(data.error);
+            else await sgaAviso(data.error);
             return;
         }
         if (typeof mostrarAvisoFlotante === 'function') mostrarAvisoFlotante('✅ ' + data.mensaje);
@@ -6785,7 +6868,7 @@ async function eliminarPreceptora(id, apellido) {
     async function confirmarCerrarManual() {
         const motivo = document.getElementById('input-insc-motivo-cierre').value.trim();
         if (motivo.length < 5) {
-            alert('El motivo es obligatorio (mínimo 5 caracteres).');
+            await sgaAviso('El motivo es obligatorio (mínimo 5 caracteres).');
             return;
         }
 
@@ -6796,12 +6879,12 @@ async function eliminarPreceptora(id, apellido) {
                 body:    JSON.stringify({ motivo })
             });
             const data = await res.json();
-            if (data.error) { alert('❌ ' + data.error); return; }
+            if (data.error) { await sgaAviso('❌ ' + data.error); return; }
             cerrarModal('modal-insc-cerrar');
             mostrarMensaje('config-insc-mensaje', '✅ ' + data.mensaje, 'exito');
             await cargarConfigVentanaInscripciones();
         } catch (e) {
-            alert('Error de red');
+            await sgaAviso('Error de red');
         }
     }
 
@@ -6813,7 +6896,7 @@ async function eliminarPreceptora(id, apellido) {
     async function confirmarReabrirManual() {
         const motivo = document.getElementById('input-insc-motivo-reabrir').value.trim();
         if (motivo.length < 5) {
-            alert('El motivo es obligatorio (mínimo 5 caracteres).');
+            await sgaAviso('El motivo es obligatorio (mínimo 5 caracteres).');
             return;
         }
 
@@ -6824,12 +6907,12 @@ async function eliminarPreceptora(id, apellido) {
                 body:    JSON.stringify({ motivo })
             });
             const data = await res.json();
-            if (data.error) { alert('❌ ' + data.error); return; }
+            if (data.error) { await sgaAviso('❌ ' + data.error); return; }
             cerrarModal('modal-insc-reabrir');
             mostrarMensaje('config-insc-mensaje', '✅ ' + data.mensaje, 'exito');
             await cargarConfigVentanaInscripciones();
         } catch (e) {
-            alert('Error de red');
+            await sgaAviso('Error de red');
         }
     }
 
@@ -7521,10 +7604,10 @@ async function eliminarPreceptora(id, apellido) {
     }
 
     async function eliminarAlumno(id, nombre) {
-        if (!confirm(`¿Eliminar a ${nombre}?\n\nSi el alumno tiene inscripciones registradas, no podrá eliminarse. En ese caso, desactivalo.`)) return;
+        if (!(await sgaConfirmar(`¿Eliminar a ${nombre}?\n\nSi el alumno tiene inscripciones registradas, no podrá eliminarse. En ese caso, desactivalo.`))) return;
         const res  = await fetch(`/api/alumnos/${id}`, { method: 'DELETE' });
         const data = await res.json();
-        if (data.error) { alert('⚠️ ' + data.error); return; }
+        if (data.error) { await sgaAviso('⚠️ ' + data.error); return; }
         cargarAlumnos();
     }
 
@@ -7779,10 +7862,10 @@ async function eliminarPreceptora(id, apellido) {
 
     async function fichaEliminar() {
         const nombre = `${fichaAlumnoActual.apellido}, ${fichaAlumnoActual.nombre}`;
-        if (!confirm(`¿Eliminar a ${nombre}?\n\nSi el alumno tiene inscripciones registradas, no podrá eliminarse. En ese caso, desactivalo.`)) return;
+        if (!(await sgaConfirmar(`¿Eliminar a ${nombre}?\n\nSi el alumno tiene inscripciones registradas, no podrá eliminarse. En ese caso, desactivalo.`))) return;
         const res  = await fetch(`/api/alumnos/${fichaAlumnoActual.id}`, { method: 'DELETE' });
         const data = await res.json();
-        if (data.error) { alert('⚠️ ' + data.error); return; }
+        if (data.error) { await sgaAviso('⚠️ ' + data.error); return; }
         await cargarAlumnos();
         _ejecutarNavegacion('alumnos', 'Alumnos');
     }
@@ -8268,7 +8351,7 @@ async function eliminarPreceptora(id, apellido) {
             document.getElementById('insc-cargando').style.display = 'none';
 
             if (data.error) {
-                alert('Error: ' + data.error);
+                await sgaAviso('Error: ' + data.error);
                 _inscVolverALista_inner();
                 return;
             }
@@ -8564,7 +8647,7 @@ async function eliminarPreceptora(id, apellido) {
         if (!inscAlumnoActual) return;
         const motivo = document.getElementById('modal-insc-autorizar-motivo').value.trim();
         if (motivo.length < 5) {
-            alert('El motivo es obligatorio (mínimo 5 caracteres).');
+            await sgaAviso('El motivo es obligatorio (mínimo 5 caracteres).');
             return;
         }
 
@@ -8576,7 +8659,7 @@ async function eliminarPreceptora(id, apellido) {
         const data = await res.json();
 
         if (data.error) {
-            alert('❌ ' + data.error);
+            await sgaAviso('❌ ' + data.error);
             return;
         }
 
@@ -8592,7 +8675,7 @@ async function eliminarPreceptora(id, apellido) {
     // ── Cancelar modificación (consumir autorización sin modificar) ──
     async function inscCancelarAutorizacion() {
         if (!inscAlumnoActual) return;
-        if (!confirm('¿Cerrar la inscripción sin cambios? Queda como estaba y, para corregirla, habrá que reabrirla de nuevo.')) {
+        if (!(await sgaConfirmar('¿Cerrar la inscripción sin cambios? Queda como estaba y, para corregirla, habrá que reabrirla de nuevo.'))) {
             return;
         }
         await _inscEjecutarCancelarAutorizacion(inscAlumnoActual.id, 'cancelada_por_coordinador');
@@ -8870,7 +8953,7 @@ async function eliminarPreceptora(id, apellido) {
         document.getElementById('prei-cargando-detalle').style.display = 'none';
 
         if (d.error) {
-            alert('❌ ' + d.error);
+            await sgaAviso('❌ ' + d.error);
             history.back();
             return;
         }
@@ -10011,7 +10094,7 @@ async function eliminarPreceptora(id, apellido) {
         const data = await res.json();
 
         if (data.ok && data.vinculado) {
-            alert(`${data.apellido}, ${data.nombre} ya estaba registrado como profesor en otra carrera.\n\nSe lo sumó a esta carrera. Sus datos personales son compartidos entre carreras: los que cargaste no reemplazan a los que ya tenía.`);
+            await sgaAviso(`${data.apellido}, ${data.nombre} ya estaba registrado como profesor en otra carrera.\n\nSe lo sumó a esta carrera. Sus datos personales son compartidos entre carreras: los que cargaste no reemplazan a los que ya tenía.`);
         }
         if (data.ok) {
             cerrarModal('modal-profesor');
@@ -10023,10 +10106,10 @@ async function eliminarPreceptora(id, apellido) {
     }
 
     async function eliminarProfesor(id, apellido) {
-        if (!confirm(`Se quitará a ${apellido} de esta carrera, junto con sus materias asignadas en ella.\nSi no da clases en ninguna otra, se eliminará del sistema.`)) return;
+        if (!(await sgaConfirmar(`Se quitará a ${apellido} de esta carrera, junto con sus materias asignadas en ella.\nSi no da clases en ninguna otra, se eliminará del sistema.`))) return;
         const res  = await fetch(`/api/profesores/${id}`, { method: 'DELETE' });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) { alert(data.error || 'No se pudo eliminar'); return; }
+        if (!res.ok || !data.ok) { await sgaAviso(data.error || 'No se pudo eliminar'); return; }
         cargarProfesores();
     }
 
@@ -11300,7 +11383,7 @@ async function eliminarPreceptora(id, apellido) {
 
         // El backend pide confirmación si la fecha ya pasó (carga retroactiva)
         if (data.requiere_confirmacion) {
-            if (!confirm('\u26A0\uFE0F ' + data.mensaje)) {
+            if (!(await sgaConfirmar('\u26A0\uFE0F ' + data.mensaje))) {
                 mostrarMensaje('nueva-mesa-msg', 'Creación cancelada.', 'alerta');
                 return;
             }
@@ -11402,7 +11485,7 @@ async function eliminarPreceptora(id, apellido) {
             document.getElementById('panel-inscribir').style.display = 'none';
             abrirDetalleMesa(mesaActualId, true);
         } else {
-            alert(data.error || 'Error al inscribir.');
+            await sgaAviso(data.error || 'Error al inscribir.');
         }
     }
 
@@ -11438,19 +11521,19 @@ async function eliminarPreceptora(id, apellido) {
     }
 
     async function desinscribirAlumno(alumnoId) {
-        if (!confirm('¿Quitar este alumno de la mesa?')) return;
+        if (!(await sgaConfirmar('¿Quitar este alumno de la mesa?'))) return;
         const res  = await fetch(`/api/mesas/${mesaActualId}/desinscribir/${alumnoId}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.ok) abrirDetalleMesa(mesaActualId, true);
-        else alert(data.error || 'Error al desinscribir.');
+        else await sgaAviso(data.error || 'Error al desinscribir.');
     }
 
-    function togglePanelResultados() {
+    async function togglePanelResultados() {
         const panel = document.getElementById('panel-resultados');
         const abierto = panel.style.display !== 'none';
 
         if (abierto) {
-            if (mesaResultadosHayCambios && !confirm('⚠️ Tenés resultados cargados sin guardar en esta mesa.\n\n¿Cerrar igual? Se van a perder.')) {
+            if (mesaResultadosHayCambios && !(await sgaConfirmar('⚠️ Tenés resultados cargados sin guardar en esta mesa.\n\n¿Cerrar igual? Se van a perder.'))) {
                 return;
             }
             mesaResultadosHayCambios = false;
@@ -11459,7 +11542,7 @@ async function eliminarPreceptora(id, apellido) {
         }
 
         if (!mesaActualData || !mesaActualData.inscriptos.length) {
-            alert('No hay alumnos inscriptos en esta mesa.');
+            await sgaAviso('No hay alumnos inscriptos en esta mesa.');
             return;
         }
 
@@ -11718,7 +11801,7 @@ async function eliminarPreceptora(id, apellido) {
         const data = await res.json();
 
         if (data.ok && data.vinculada) {
-            alert(`${data.apellido}, ${data.nombre} ya formaba parte de la preceptoría de otra carrera.\n\nSe sumó a esta carrera con su misma cuenta y contraseña. Sus datos personales son compartidos entre carreras: los que cargaste no reemplazan a los que ya tenía.`);
+            await sgaAviso(`${data.apellido}, ${data.nombre} ya formaba parte de la preceptoría de otra carrera.\n\nSe sumó a esta carrera con su misma cuenta y contraseña. Sus datos personales son compartidos entre carreras: los que cargaste no reemplazan a los que ya tenía.`);
         }
         if (data.ok) {
             cerrarModalPreceptora();
@@ -11734,7 +11817,7 @@ async function eliminarPreceptora(id, apellido) {
 
     async function togglePreceptora(id, activo) {
         const accion = activo ? 'desactivar' : 'activar';
-        if (!confirm(`¿Querés ${accion} el acceso de esta persona en esta carrera?`)) return;
+        if (!(await sgaConfirmar(`¿Querés ${accion} el acceso de esta persona en esta carrera?`))) return;
 
         const res  = await fetch(`/api/usuarios/preceptoras/${id}/toggle`, { method: 'POST' });
         const data = await res.json();

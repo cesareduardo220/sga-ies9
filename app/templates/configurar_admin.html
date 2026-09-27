@@ -95,6 +95,7 @@
         <div class="paso activo" id="paso-1">
             <h1>Datos del administrador</h1>
             <p class="paso-desc">Esta va a ser la cuenta definitiva del sistema. Completá tus datos reales.</p>
+            <div class="error-msg" id="error-paso1" style="display:none"></div>
 
             <div class="fila-2">
                 <div class="campo">
@@ -174,18 +175,25 @@
 </div>
 
 <script>
+function errorPaso1(texto) {
+    const el = document.getElementById('error-paso1');
+    el.textContent = texto ? '⚠️ ' + texto : '';
+    el.style.display = texto ? 'block' : 'none';
+}
+
 function irPaso2() {
     const apellido = document.getElementById('input-apellido').value.trim();
     const nombre   = document.getElementById('input-nombre').value.trim();
     const dni      = document.getElementById('input-dni').value.trim();
     if (!apellido || !nombre || !dni) {
-        alert('Apellido, nombre y DNI son obligatorios.');
+        errorPaso1('Apellido, nombre y DNI son obligatorios.');
         return;
     }
     if (!/^\d{7,8}$/.test(dni)) {
-        alert('Ingresá un DNI válido, sin puntos ni espacios (7 u 8 dígitos).');
+        errorPaso1('Ingresá un DNI válido, sin puntos ni espacios (7 u 8 dígitos).');
         return;
     }
+    errorPaso1('');
     document.getElementById('paso-1').classList.remove('activo');
     document.getElementById('paso-2').classList.add('activo');
     document.getElementById('barra-1').classList.add('activo');
