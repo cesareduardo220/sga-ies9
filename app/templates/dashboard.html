@@ -4401,10 +4401,12 @@
         document.getElementById('btn-lupa').style.display       = 'none';
         document.getElementById('btn-hamburguesa').style.display = 'none';
         document.getElementById('btn-home').style.display        = 'none';
-        _ejecutarNavegacion('administradores', '');
+        _ejecutarNavegacion('administradores', '', true);
     } else {
-        _ejecutarNavegacion('dashboard-carrera', '');
+        _ejecutarNavegacion('dashboard-carrera', '', true);
     }
+    // (true = sin agregar al historial: la pantalla inicial no es una navegación
+    // del usuario; Chrome marca como salteable una entrada agregada sin interacción)
 
     if (ROL === 'admin') {
         document.getElementById('btn-lupa').style.display = 'none';
@@ -4589,8 +4591,11 @@
     // (F5, marcador, historial). El sistema siempre arranca en el inicio,
     // asi que se limpia la URL y se deja un estado inicial coherente.
     function limpiarUrlAlCargar() {
+        // La entrada del historial queda con la sección que realmente se muestra
+        const activa = document.querySelector('.seccion.activa');
         history.replaceState(
-            { seccionId: 'dashboard-carrera', label: '' }, '', location.pathname
+            { seccionId: activa ? activa.id.replace('sec-', '') : 'dashboard-carrera', label: '' },
+            '', location.pathname
         );
     }
     document.addEventListener('DOMContentLoaded', limpiarUrlAlCargar);
