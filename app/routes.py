@@ -112,6 +112,49 @@ def bloquear_escrituras_en_movil():
     return jsonify({'error': 'Las modificaciones solo estan disponibles desde una computadora.'}), 403
 
 
+# ==========================================================
+# PRIMER INGRESO: CAMBIO DE CONTRASEÑA OBLIGATORIO
+# Quien entra con la contraseña inicial (el DNI, o una reseteada) no puede
+# usar nada más hasta cambiarla: ni volviendo atrás con el navegador, ni
+# escribiendo la dirección, ni llamando a la API. Lo mismo el administrador
+# que todavía no completó su configuración. Se consulta la base en cada
+# pedido, así vale también para una contraseña reseteada con la persona
+# conectada.
+# ==========================================================
+
+RUTAS_LIBRES_CON_CAMBIO_PENDIENTE = {
+    '/cambiar-password', '/configurar-admin', '/logout', '/login', '/login/carrera',
+    '/sesion-viva', '/sesion-expirar',
+}
+PREFIJOS_PUBLICOS = ('/inscripcion', '/api/inscripcion/', '/api/localidades')
+
+
+@auth.before_request
+def exigir_cambio_pendiente():
+    if 'rol' not in session or session.get('rol') == 'sys' or 'user_id' not in session:
+        return
+    if request.path in RUTAS_LIBRES_CON_CAMBIO_PENDIENTE or request.path.startswith(PREFIJOS_PUBLICOS):
+        return
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT debe_cambiar_password, rol, dni FROM usuarios WHERE id = %s", (session['user_id'],))
+    fila = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not fila:
+        return
+    if fila[1] == 'admin' and not fila[2]:
+        destino, motivo = url_for('auth.configurar_admin'), 'Primero tenés que completar la configuración del administrador.'
+    elif fila[0]:
+        destino, motivo = url_for('auth.cambiar_password'), 'Primero tenés que cambiar la contraseña.'
+    else:
+        return
+    if (request.path.startswith('/api/') or request.headers.get('X-Requested-With') == 'fetch'
+            or 'application/json' in (request.headers.get('Accept') or '')):
+        return jsonify({'error': motivo, 'redirigir': destino}), 403
+    return redirect(destino)
+
+
 # ================================================================
 # HELPERS
 # ================================================================
@@ -817,6 +860,10 @@ def login():
 def cambiar_password():
     if 'rol' not in session:
         return redirect(url_for('auth.login'))
+    # Una sesión desplazada por otro ingreso no puede cambiar la contraseña
+    if not _token_vigente():
+        session.clear()
+        return redirect(url_for('auth.login', desplazado=1))
 
     error = None
 
