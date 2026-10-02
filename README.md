@@ -103,20 +103,19 @@ psql -d ies9_gestion -f sga_ies9_v7.sql
 psql -d ies9_gestion -f sga_ies9_datos_iniciales.sql
 ```
 
-El primer script crea la estructura; el segundo carga los parámetros del
-sistema y el administrador inicial.
+El primer script crea la estructura completa; el segundo carga los
+parámetros del sistema, el administrador inicial y las localidades del país
+(para el formulario de inscripción). No hace falta correr ninguna migración.
 
 **4. Configurar las credenciales**
 
-Copiar `.env.example` como `.env` y completar la contraseña de PostgreSQL:
+Copiar `.env.example` como `.env` y completar:
 
-```
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=ies9_gestion
-DB_USER=postgres
-DB_PASSWORD=tu_contraseña
-```
+- `DB_PASSWORD`: la contraseña de PostgreSQL (y `DB_USER`, si no es `postgres`)
+- `SECRET_KEY`: una clave secreta para las sesiones, que se genera con
+  `python -c "import secrets; print(secrets.token_hex(32))"`
+- `SMTP_…`: la cuenta de Gmail del instituto, con una contraseña de
+  aplicación, para enviar por correo los códigos de inscripción
 
 El archivo `.env` no se versiona: cada instalación tiene el suyo.
 
@@ -162,6 +161,9 @@ sga-ies9/
 ├── docs/
 │   └── decisiones.md                 decisiones de diseño y sus motivos
 ├── migraciones/                      historial de cambios de la estructura de la base
+├── db/                               diseño del modelo por carrera (ya incluido en el esquema)
+├── pruebas/                          prueba del modelo de datos
+├── systemd/                          tarea diaria que anonimiza las preinscripciones rechazadas
 ├── run.py                            punto de entrada
 ├── reset_admin.py                    restablece el acceso del administrador
 ├── anonimizar_preinscripciones.py    borra los datos personales de preinscripciones viejas

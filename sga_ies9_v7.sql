@@ -4,10 +4,31 @@
 -- IES N 9 "Juana Azurduy" - San Pedro de Jujuy
 -- Practicas Profesionalizantes III
 --
--- Version: 7.2  (24/09/2026)
+-- Version: 7.7  (01/10/2026)
 -- Generado con pg_dump --schema-only --no-owner --no-privileges
--- desde la base real. Refleja la estructura completa (26 tablas).
+-- desde la base real. Refleja la estructura completa (27 tablas).
 --
+-- USO (instalacion nueva): crear la base vacia y ejecutar este script;
+-- despues, sga_ies9_datos_iniciales.sql.
+--      createdb ies9_gestion
+--      psql -d ies9_gestion -f sga_ies9_v7.sql
+--      psql -d ies9_gestion -f sga_ies9_datos_iniciales.sql
+-- Ya NO hace falta correr ninguna migracion: las de la carpeta
+-- migraciones/ quedan solo para actualizar bases de versiones anteriores.
+--
+-- Solo contiene la ESTRUCTURA, no los datos.
+--
+-- CAMBIOS EN 7.7
+--   + materias.admite_libre: examen libre por materia (Profesorados)
+-- CAMBIOS EN 7.6
+--   + correlatividades: tipo 'aprobada_cursar' (aprobada para cursar)
+-- CAMBIOS EN 7.5
+--   + tabla prorrogas_plan: prorrogas de alumnos en un plan que se cierra
+-- CAMBIOS EN 7.4
+--   * planes_estudio.politica_migracion: ninguna | equivalencias | personalizado
+-- CAMBIOS EN 7.3
+--   * materias: UNIQUE NULLS NOT DISTINCT (carrera_id, plan_id, anio, orden),
+--     para que dos planes convivan durante un cambio de plan
 -- CAMBIOS EN 7.2
 --   + usuarios.genero y profesores.genero (char(1): M, F o NULL)
 --     para las etiquetas de rol segun el genero
@@ -27,18 +48,12 @@
 --   Ya NO hace falta correr migracion_promocion_provisoria.sql;
 --   esa migracion sigue existiendo solo para bases creadas con v6.
 --
--- USO: crear la base vacia y ejecutar este script.
---      createdb ies9_gestion
---      psql -d ies9_gestion -f sga_ies9_v7.sql
---
--- Solo contiene la ESTRUCTURA, no los datos.
 -- ================================================================
 
 --
 -- PostgreSQL database dump
 --
 
-\restrict vhxcy37QUFQhEcug6CekcEiQsJkQCgUCowwBueAWgQbWlLF1OAXpqPXjDqlDzbj
 
 -- Dumped from database version 18.6 (Ubuntu 18.6-0ubuntu0.26.04.1)
 -- Dumped by pg_dump version 18.6 (Ubuntu 18.6-0ubuntu0.26.04.1)
@@ -274,7 +289,7 @@ CREATE TABLE public.correlatividades (
     materia_id integer NOT NULL,
     requiere_materia_id integer NOT NULL,
     tipo character varying(20) NOT NULL,
-    CONSTRAINT correlatividades_tipo_check CHECK (((tipo)::text = ANY (ARRAY[('cursada'::character varying)::text, ('aprobada'::character varying)::text])))
+    CONSTRAINT correlatividades_tipo_check CHECK (((tipo)::text = ANY ((ARRAY['cursada'::character varying, 'aprobada'::character varying, 'aprobada_cursar'::character varying])::text[])))
 );
 
 
@@ -686,6 +701,7 @@ CREATE TABLE public.materias (
     regimen_aprobacion character varying(100),
     activa boolean DEFAULT true NOT NULL,
     plan_id integer,
+    admite_libre boolean DEFAULT true NOT NULL,
     CONSTRAINT materias_anio_check CHECK (((anio >= 1) AND (anio <= 6)))
 );
 
@@ -761,10 +777,10 @@ CREATE TABLE public.planes_estudio (
     resolucion character varying(100),
     fecha_vigencia date NOT NULL,
     fecha_cierre date,
-    politica_migracion character varying(30) DEFAULT 'exactas'::character varying NOT NULL,
+    politica_migracion character varying(30) DEFAULT 'equivalencias'::character varying NOT NULL,
     activo boolean DEFAULT true NOT NULL,
     creado_en timestamp without time zone DEFAULT now() NOT NULL,
-    CONSTRAINT planes_estudio_politica_migracion_check CHECK (((politica_migracion)::text = ANY (ARRAY[('ninguna'::character varying)::text, ('exactas'::character varying)::text, ('similares'::character varying)::text, ('personalizado'::character varying)::text])))
+    CONSTRAINT planes_estudio_politica_migracion_check CHECK (((politica_migracion)::text = ANY ((ARRAY['ninguna'::character varying, 'equivalencias'::character varying, 'personalizado'::character varying])::text[])))
 );
 
 
@@ -985,6 +1001,43 @@ CREATE SEQUENCE public.profesores_id_seq
 --
 
 ALTER SEQUENCE public.profesores_id_seq OWNED BY public.profesores.id;
+
+
+--
+-- Name: prorrogas_plan; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.prorrogas_plan (
+    id integer NOT NULL,
+    alumno_id integer NOT NULL,
+    plan_id integer NOT NULL,
+    hasta date NOT NULL,
+    motivo text NOT NULL,
+    disposicion character varying(100),
+    registrado_por integer,
+    registrado_en timestamp without time zone DEFAULT now() NOT NULL,
+    CONSTRAINT prorrogas_plan_motivo_check CHECK ((length(TRIM(BOTH FROM motivo)) >= 5))
+);
+
+
+--
+-- Name: prorrogas_plan_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.prorrogas_plan_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: prorrogas_plan_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.prorrogas_plan_id_seq OWNED BY public.prorrogas_plan.id;
 
 
 --
@@ -1406,6 +1459,13 @@ ALTER TABLE ONLY public.profesores ALTER COLUMN id SET DEFAULT nextval('public.p
 
 
 --
+-- Name: prorrogas_plan id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.prorrogas_plan ALTER COLUMN id SET DEFAULT nextval('public.prorrogas_plan_id_seq'::regclass);
+
+
+--
 -- Name: reconocimientos_alumno id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1667,11 +1727,11 @@ ALTER TABLE ONLY public.materia_profesor
 
 
 --
--- Name: materias materias_carrera_id_anio_orden_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: materias materias_carrera_plan_anio_orden_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.materias
-    ADD CONSTRAINT materias_carrera_id_anio_orden_key UNIQUE (carrera_id, anio, orden);
+    ADD CONSTRAINT materias_carrera_plan_anio_orden_key UNIQUE NULLS NOT DISTINCT (carrera_id, plan_id, anio, orden);
 
 
 --
@@ -1760,6 +1820,14 @@ ALTER TABLE ONLY public.profesores
 
 ALTER TABLE ONLY public.profesores
     ADD CONSTRAINT profesores_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: prorrogas_plan prorrogas_plan_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.prorrogas_plan
+    ADD CONSTRAINT prorrogas_plan_pkey PRIMARY KEY (id);
 
 
 --
@@ -1949,6 +2017,13 @@ CREATE INDEX idx_preinscripciones_ciclo ON public.preinscripciones USING btree (
 --
 
 CREATE INDEX idx_preinscripciones_estado ON public.preinscripciones USING btree (estado);
+
+
+--
+-- Name: idx_prorrogas_plan_alumno; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_prorrogas_plan_alumno ON public.prorrogas_plan USING btree (alumno_id, plan_id);
 
 
 --
@@ -2359,6 +2434,30 @@ ALTER TABLE ONLY public.profesor_carrera
 
 
 --
+-- Name: prorrogas_plan prorrogas_plan_alumno_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.prorrogas_plan
+    ADD CONSTRAINT prorrogas_plan_alumno_id_fkey FOREIGN KEY (alumno_id) REFERENCES public.alumnos_carrera(id) ON DELETE CASCADE;
+
+
+--
+-- Name: prorrogas_plan prorrogas_plan_plan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.prorrogas_plan
+    ADD CONSTRAINT prorrogas_plan_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.planes_estudio(id) ON DELETE CASCADE;
+
+
+--
+-- Name: prorrogas_plan prorrogas_plan_registrado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.prorrogas_plan
+    ADD CONSTRAINT prorrogas_plan_registrado_por_fkey FOREIGN KEY (registrado_por) REFERENCES public.usuarios(id) ON DELETE SET NULL;
+
+
+--
 -- Name: reconocimientos_alumno reconocimientos_alumno_alumno_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2442,5 +2541,4 @@ ALTER TABLE ONLY public.usuarios
 -- PostgreSQL database dump complete
 --
 
-\unrestrict vhxcy37QUFQhEcug6CekcEiQsJkQCgUCowwBueAWgQbWlLF1OAXpqPXjDqlDzbj
 
