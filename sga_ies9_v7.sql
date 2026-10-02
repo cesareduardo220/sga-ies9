@@ -4,7 +4,7 @@
 -- IES N 9 "Juana Azurduy" - San Pedro de Jujuy
 -- Practicas Profesionalizantes III
 --
--- Version: 7.7  (01/10/2026)
+-- Version: 7.8  (01/10/2026)
 -- Generado con pg_dump --schema-only --no-owner --no-privileges
 -- desde la base real. Refleja la estructura completa (27 tablas).
 --
@@ -18,6 +18,8 @@
 --
 -- Solo contiene la ESTRUCTURA, no los datos.
 --
+-- CAMBIOS EN 7.8
+--   * usuarios.genero y profesores.genero aceptan 'X' (no binario)
 -- CAMBIOS EN 7.7
 --   + materias.admite_libre: examen libre por materia (Profesorados)
 -- CAMBIOS EN 7.6
@@ -979,7 +981,7 @@ CREATE TABLE public.profesores (
     titulo character varying(200),
     activo boolean DEFAULT true NOT NULL,
     genero character(1),
-    CONSTRAINT profesores_genero_check CHECK ((genero = ANY (ARRAY['M'::bpchar, 'F'::bpchar])))
+    CONSTRAINT profesores_genero_check CHECK ((genero = ANY (ARRAY['M'::bpchar, 'F'::bpchar, 'X'::bpchar])))
 );
 
 
@@ -1208,7 +1210,7 @@ CREATE TABLE public.usuarios (
     domicilio character varying(255),
     sesion_token text,
     genero character(1),
-    CONSTRAINT usuarios_genero_check CHECK ((genero = ANY (ARRAY['M'::bpchar, 'F'::bpchar]))),
+    CONSTRAINT usuarios_genero_check CHECK ((genero = ANY (ARRAY['M'::bpchar, 'F'::bpchar, 'X'::bpchar]))),
     CONSTRAINT usuarios_rol_check CHECK (((rol)::text = ANY (ARRAY[('admin'::character varying)::text, ('coordinador'::character varying)::text, ('preceptora'::character varying)::text, ('sys'::character varying)::text])))
 );
 

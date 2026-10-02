@@ -1065,7 +1065,8 @@ def api_aviso_plan():
 
 
 # Etiqueta visible de cada rol segun el genero de la persona:
-# (masculino, femenino, sin dato). El rol interno no cambia.
+# (masculino, femenino, neutra). La neutra es para 'X' (no binario) y para
+# vacio (sin especificar). El rol interno no cambia.
 _ETIQUETAS_ROL = {
     'preceptora':  ('Preceptor',     'Preceptora',     'Preceptoría'),
     'coordinador': ('Coordinador',   'Coordinadora',   'Coordinación'),
@@ -1076,7 +1077,8 @@ _ETIQUETAS_ROL = {
 
 
 def etiqueta_rol(rol, genero=None):
-    """'M' da la forma masculina, 'F' la femenina y vacio la neutra."""
+    """'M' da la forma masculina, 'F' la femenina; 'X' (no binario) y vacio,
+    la neutra."""
     formas = _ETIQUETAS_ROL.get(rol)
     if not formas:
         return rol or ''
@@ -1089,12 +1091,13 @@ def etiqueta_rol(rol, genero=None):
 
 
 def leer_genero(data):
-    """Genero recibido de un formulario: 'M', 'F' o None si vino vacio.
-    Devuelve False si el valor no es valido (la ruta responde 400)."""
+    """Genero recibido de un formulario: 'M', 'F', 'X' (no binario) o None si
+    vino vacio (sin especificar). Devuelve False si el valor no es valido (la
+    ruta responde 400)."""
     g = (data.get('genero') or '').strip().upper()
     if not g:
         return None
-    return g if g in ('M', 'F') else False
+    return g if g in ('M', 'F', 'X') else False
 
 
 @auth.route('/dashboard')

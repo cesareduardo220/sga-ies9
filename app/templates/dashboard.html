@@ -1118,6 +1118,18 @@
         font-weight: 600;
         font-family: 'Raleway', sans-serif;
     }
+    #menu-mobile .menu-mobile-usuario {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+    }
+    #menu-mobile .menu-mobile-header span.menu-mobile-rol {
+        color: rgba(255,255,255,0.65);
+        font-size: 0.74rem;
+        font-weight: 500;
+        overflow-wrap: anywhere;
+    }
     #menu-mobile .btn-cerrar-menu {
         background: none;
         border: none;
@@ -1269,7 +1281,10 @@
   <div id="menu-mobile-overlay" onclick="toggleMenuMobile()"></div>
   <div id="menu-mobile">
       <div class="menu-mobile-header">
-          <span>{{ apellido }}, {{ nombre }}</span>
+          <div class="menu-mobile-usuario">
+              <span>{{ apellido }}, {{ nombre }}</span>
+              <span class="menu-mobile-rol">{{ rol_etiqueta }}{% if nombre_carrera %} · {{ nombre_carrera }}{% endif %}</span>
+          </div>
           <button class="btn-cerrar-menu" onclick="toggleMenuMobile()">✕</button>
       </div>
       <div id="menu-mobile-items"></div>
@@ -3478,6 +3493,7 @@
                     <option value="">Sin especificar</option>
                     <option value="F">Femenino</option>
                     <option value="M">Masculino</option>
+                    <option value="X">No binario</option>
                 </select>
             </div>
             <div class="campo-edit">
@@ -3714,6 +3730,7 @@
                         <option value="">Sin especificar</option>
                         <option value="F">Femenino</option>
                         <option value="M">Masculino</option>
+                        <option value="X">No binario</option>
                     </select>
                 </div>
                 <div class="campo-edit">
@@ -3800,6 +3817,7 @@
                     <option value="">Sin especificar</option>
                     <option value="F">Femenino</option>
                     <option value="M">Masculino</option>
+                    <option value="X">No binario</option>
                 </select>
             </div>
             <div class="campo-edit" id="grupo-prec-dni">
