@@ -10,35 +10,53 @@ Soporte de Infraestructura de Tecnología de la Información.
 
 ## Qué hace
 
-Administra el recorrido académico de los alumnos de una carrera de nivel
-superior, aplicando las reglas del plan de estudios oficial:
+Administra el recorrido académico de los alumnos de las carreras de nivel
+superior del instituto, Tecnicaturas y Profesorados, aplicando las reglas del
+plan de estudios oficial de cada una:
 
-- **Alumnos** — legajo, datos de contacto, historial académico completo
-- **Plan de estudios** — importación desde planilla, correlatividades y
-  régimen de aprobación por materia, versionado de planes
-- **Inscripciones** — a materias, con validación de correlatividades y
-  ventana de inscripción configurable
-- **Notas** — carga manual o importación desde la planilla del profesor,
-  con sugerencia automática de condición y cierre de cursada
+- **Carreras y usuarios** — cada carrera con su coordinador y sus preceptoras;
+  cada persona ingresa con su DNI y una única contraseña
+- **Plan de estudios** — importación desde planilla Excel con revisión previa
+  (correlatividades, régimen de aprobación, examen libre y sugerencias de
+  escritura), corrección puntual de materias y versionado de planes
+- **Cambio de plan** — transición entre planes con tabla de equivalencias,
+  reconocimiento de materias aprobadas y regulares, prórrogas y migración de
+  alumnos
+- **Inscripciones** — a materias, con validación de correlatividades y ventana
+  configurable; inscripción por Internet con un código que entrega la
+  preceptora y revisión antes de aprobarla
+- **Notas** — carga manual o importación desde la planilla del profesor, con
+  sugerencia automática de condición y cierre de cursada
 - **Mesas de examen** — convocatoria, inscripción, carga de resultados y
   generación del acta en PDF
-- **Reportes** — constancias, estado académico y promedios en PDF
+- **Reportes** — constancias, estado académico, promedios y plan de estudios
+  en PDF
 
 ### Reglas académicas implementadas
 
 El sistema no permite operaciones que contradigan el plan de estudios:
 
+- Hay tres tipos de correlatividad: **regularizada para cursar**, **aprobada
+  para cursar** (propia de los Profesorados) y **aprobada para rendir o
+  promocionar**
+- Para inscribirse en materias de un año hay que tener al menos una materia
+  regularizada o aprobada del año anterior; primer año está siempre disponible
 - La regularidad vence a los **2 años** de cargada la nota, o al agotarse
   los **3 intentos** en mesa de examen — lo que ocurra primero
-- Para rendir el final hay que tener aprobadas las correlativas que el plan
-  exige; para cursar, alcanza con tenerlas regularizadas
 - Las materias cuyo régimen es sólo *Examen Final* no admiten promoción
 - Las materias cuyo régimen es sólo *Promoción* no se rinden en mesa
-- Una promoción sin la correlativa aprobada queda registrada como
-  **condicionada** hasta que el alumno apruebe la materia previa
+- El examen libre solo se admite en las materias que el plan habilita (las
+  marcadas con (\*) en la resolución)
+- Una promoción con una correlativa adeudada queda **provisoria** hasta el
+  31 de diciembre del año lectivo; si para entonces no se aprobó la
+  correlativa, la materia pasa a regular y se rinde el final
+- Una materia aprobada, o con la regularidad vigente, no se vuelve a cursar
 
 Las reglas se leen de la base de datos, no están escritas en el código: si
 cambia el plan de estudios, se importa el nuevo y el sistema se adapta.
+
+Las decisiones de diseño, con sus motivos y lo que se descartó, están en
+[`docs/decisiones.md`](docs/decisiones.md).
 
 ---
 
@@ -50,6 +68,8 @@ cambia el plan de estudios, se importa el nuevo y el sistema se adapta.
 | Base de datos | PostgreSQL 18 |
 | Frontend | HTML · CSS · JavaScript (sin framework) |
 | Reportes | ReportLab (PDF) · openpyxl (Excel) |
+| Servidor | Ubuntu Server · Gunicorn · nginx |
+| Publicación | Tailscale Funnel (HTTPS) |
 
 ---
 
@@ -72,14 +92,14 @@ cd sga-ies9
 **2. Instalar las dependencias**
 
 ```bash
-pip install flask psycopg2-binary werkzeug openpyxl reportlab
+pip install -r requirements.txt
 ```
 
 **3. Crear la base de datos**
 
 ```bash
 createdb ies9_gestion
-psql -d ies9_gestion -f sga_ies9_v6.sql
+psql -d ies9_gestion -f sga_ies9_v7.sql
 psql -d ies9_gestion -f sga_ies9_datos_iniciales.sql
 ```
 
@@ -108,6 +128,9 @@ python run.py
 
 Abrir `http://127.0.0.1:5000` en el navegador.
 
+En el servidor, el sistema corre como servicio con Gunicorn (5 procesos de
+trabajo para un procesador de 2 núcleos) detrás de nginx.
+
 ### Primer ingreso
 
 | Usuario | Contraseña |
@@ -117,8 +140,12 @@ Abrir `http://127.0.0.1:5000` en el navegador.
 El sistema pide completar los datos del administrador y definir una
 contraseña nueva antes de continuar.
 
+Los demás usuarios ingresan con su DNI como usuario y como contraseña
+provisoria, y el sistema les pide cambiarla antes de dejarlos usar
+cualquier otra pantalla.
+
 Si en algún momento se pierde el acceso, `python reset_admin.py` restablece
-la cuenta.
+la cuenta del administrador.
 
 ---
 
@@ -128,14 +155,19 @@ la cuenta.
 sga-ies9/
 ├── app/
 │   ├── __init__.py
-│   ├── database.py           conexión a PostgreSQL
-│   ├── routes.py             rutas y lógica del sistema
+│   ├── database.py                   conexión a PostgreSQL
+│   ├── routes.py                     rutas y lógica del sistema
 │   ├── static/
-│   └── templates/
-├── run.py                    punto de entrada
-├── reset_admin.py            restablece el acceso del administrador
-├── sga_ies9_v6.sql           estructura de la base (19 tablas)
-├── sga_ies9_datos_iniciales.sql
+│   └── templates/                    pantallas (panel, ingreso, formulario público)
+├── docs/
+│   └── decisiones.md                 decisiones de diseño y sus motivos
+├── migraciones/                      historial de cambios de la estructura de la base
+├── run.py                            punto de entrada
+├── reset_admin.py                    restablece el acceso del administrador
+├── anonimizar_preinscripciones.py    borra los datos personales de preinscripciones viejas
+├── sga_ies9_v7.sql                   estructura de la base
+├── sga_ies9_datos_iniciales.sql      parámetros del sistema y administrador inicial
+├── requirements.txt
 ├── .env.example
 └── .gitignore
 ```
@@ -149,8 +181,6 @@ fuera de esta versión, identificados para una implementación futura:
 
 - Gestión de convocatorias a mesas extraordinarias
 - Penalización del alumno ausente para el llamado siguiente
-- Autogestión de inscripciones por parte del alumno
-- Publicación del sistema en internet con certificado SSL
 
 ---
 
