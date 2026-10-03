@@ -4,7 +4,7 @@
 -- IES N 9 "Juana Azurduy" - San Pedro de Jujuy
 -- Practicas Profesionalizantes III
 --
--- Version: 7.8  (01/10/2026)
+-- Version: 7.9  (03/10/2026)
 -- Generado con pg_dump --schema-only --no-owner --no-privileges
 -- desde la base real. Refleja la estructura completa (27 tablas).
 --
@@ -18,6 +18,8 @@
 --
 -- Solo contiene la ESTRUCTURA, no los datos.
 --
+-- CAMBIOS EN 7.9
+--   + usuarios.password_provisoria_vence: la contrasena provisoria es al azar y vence
 -- CAMBIOS EN 7.8
 --   * usuarios.genero y profesores.genero aceptan 'X' (no binario)
 -- CAMBIOS EN 7.7
@@ -1210,6 +1212,7 @@ CREATE TABLE public.usuarios (
     domicilio character varying(255),
     sesion_token text,
     genero character(1),
+    password_provisoria_vence timestamp with time zone,
     CONSTRAINT usuarios_genero_check CHECK ((genero = ANY (ARRAY['M'::bpchar, 'F'::bpchar, 'X'::bpchar]))),
     CONSTRAINT usuarios_rol_check CHECK (((rol)::text = ANY (ARRAY[('admin'::character varying)::text, ('coordinador'::character varying)::text, ('preceptora'::character varying)::text, ('sys'::character varying)::text])))
 );

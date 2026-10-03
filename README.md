@@ -139,9 +139,10 @@ trabajo para un procesador de 2 núcleos) detrás de nginx.
 El sistema pide completar los datos del administrador y definir una
 contraseña nueva antes de continuar.
 
-Los demás usuarios ingresan con su DNI como usuario y como contraseña
-provisoria, y el sistema les pide cambiarla antes de dejarlos usar
-cualquier otra pantalla.
+Los demás usuarios ingresan con su DNI como usuario y una contraseña
+provisoria al azar, que el sistema genera al crear o resetear la cuenta y
+muestra una sola vez a quien la generó. Vence a las 72 horas si no se usa, y
+el sistema pide cambiarla antes de dejar usar cualquier otra pantalla.
 
 Si en algún momento se pierde el acceso, `python reset_admin.py` restablece
 la cuenta del administrador.

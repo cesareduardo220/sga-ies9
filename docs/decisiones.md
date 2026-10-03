@@ -126,10 +126,16 @@ su rol le permite dentro de la misma interfaz.
 
 ## 4. Acceso y seguridad
 
+**La contraseña provisoria es al azar y vence.**
+Al crear o resetear una cuenta, el sistema genera una contraseña provisoria de
+ocho caracteres al azar, que se muestra una sola vez a quien la generó para que
+la entregue, y que vence a las 72 horas si no se usa. Al principio se usaba el
+DNI, pero el DNI no es un secreto: aparece en listas y documentos, y quien lo
+conociera podía entrar antes que el titular y ponerle su propia contraseña.
+
 **El cambio de la contraseña provisoria es obligatorio y lo controla el
 servidor.**
-Las cuentas nuevas y las reseteadas ingresan con el DNI como contraseña
-provisoria. Hasta que la persona la cambie, el servidor solo le permite la
+Hasta que la persona la cambie, el servidor solo le permite la
 pantalla de cambio de contraseña o salir: cualquier otra dirección, incluida la
 vuelta atrás con el navegador, la devuelve a esa pantalla, y los pedidos de
 datos se rechazan. El control se hace en cada pedido consultando la base, así

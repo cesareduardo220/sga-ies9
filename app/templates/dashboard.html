@@ -3380,7 +3380,7 @@
             <h3>¿Resetear contraseña?</h3>
         </div>
         <div class="modal-card-body">
-            <p style="margin-bottom:0;">Se va a establecer el DNI de <b id="modal-reset-admin-nombre"></b> como nueva contraseña. Deberá cambiarla la próxima vez que ingrese.</p>
+            <p style="margin-bottom:0;">Se va a generar una contraseña provisoria nueva para <b id="modal-reset-admin-nombre"></b>, que vas a tener que entregarle. Deberá cambiarla la próxima vez que ingrese.</p>
         </div>
         <div class="modal-card-footer">
             <button class="modal-btn-cancelar" onclick="cerrarModal('modal-reset-admin')">Cancelar</button>
@@ -3850,7 +3850,7 @@
             <h3>¿Resetear contraseña?</h3>
         </div>
         <div class="modal-card-body">
-            <p style="margin-bottom:0;">Se va a establecer el DNI de <b id="modal-reset-nombre"></b> como nueva contraseña, y va a tener que cambiarla la próxima vez que ingrese.</p>
+            <p style="margin-bottom:0;">Se va a generar una contraseña provisoria nueva para <b id="modal-reset-nombre"></b>, que vas a tener que entregarle. Va a tener que cambiarla la próxima vez que ingrese.</p>
         </div>
         <div class="modal-card-footer">
             <button class="modal-btn-cancelar" onclick="cerrarModal('modal-reset-password')">Cancelar</button>
@@ -4173,6 +4173,12 @@
             { texto: cancelar, valor: false, estilo: 'cancelar', foco: true },
             { texto: aceptar, valor: true },
         ] }).then(v => v === true);
+    }
+    // Contraseña provisoria recién generada: se muestra una sola vez, para entregarla
+    function mostrarPasswordProvisoria(quien, data, titulo) {
+        return sgaAviso(`Contraseña provisoria de ${quien}:\n\n${data.password_provisoria}\n\n` +
+            `Entregásela en persona o por un medio privado. Sirve para el primer ingreso, ` +
+            `vence el ${data.vence} y no se vuelve a mostrar.`, { titulo });
     }
     function sgaAviso(mensaje, { titulo = 'Aviso', boton = 'Entendido' } = {}) {
         return sgaDialogo({ titulo, mensaje, botones: [{ texto: boton, valor: true, foco: true }] })
@@ -5233,7 +5239,8 @@
             return;
         }
         cerrarModal('modal-admin');
-        mostrarExito('admins-msg', _adminEditId ? '✅ Datos actualizados correctamente.' : '✅ Administrador creado. Su contraseña inicial es su DNI.');
+        if (data.password_provisoria) await mostrarPasswordProvisoria(`${payload.apellido}, ${payload.nombre}`, data, 'Administrador creado');
+        mostrarExito('admins-msg', _adminEditId ? '✅ Datos actualizados correctamente.' : '✅ Administrador creado.');
         cargarAdmins();
     }
 
@@ -5248,7 +5255,8 @@
         const res  = await fetch(`/api/sys/admins/${_resetAdminId}/reset`, { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
-            mostrarExito('admins-msg', '✅ Contraseña reseteada al DNI. Deberá cambiarla al ingresar.');
+            await mostrarPasswordProvisoria(document.getElementById('modal-reset-admin-nombre').textContent, data, 'Contraseña reseteada');
+            mostrarExito('admins-msg', '✅ Contraseña reseteada. Deberá cambiarla al ingresar.');
             cargarAdmins();
         } else {
             mostrarError('admins-msg', data.error || 'Error al resetear contraseña.');
@@ -5266,6 +5274,7 @@
         const res  = await fetch(`/api/sys/admins/${_virgenAdminId}/virgen`, { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
+            await mostrarPasswordProvisoria('el nuevo administrador (usuario "admin")', data, 'Cuenta en estado virgen');
             mostrarExito('admins-msg', '✅ Cuenta vuelta a estado virgen. El nuevo administrador deberá configurarla al ingresar.');
             cargarAdmins();
         } else {
@@ -5470,6 +5479,7 @@
         const data   = await res.json();
         if (data.error) { errDiv.textContent = data.error; errDiv.style.display = ''; return; }
         cerrarModal('modal-coord');
+        if (data.password_provisoria) await mostrarPasswordProvisoria(`${payload.apellido}, ${payload.nombre}`, data, 'Coordinador creado');
         cargarCoordinadores();
     }
 
@@ -5479,9 +5489,11 @@
     }
 
     async function resetCoord(id, apellido) {
-        if (!(await sgaConfirmar(`¿Resetear la contraseña de ${apellido}? Se le asignará su DNI como nueva clave.`))) return;
-        await fetch(`/api/coordinadores/${id}/reset`, { method: 'POST' });
-        await sgaAviso('Contraseña reseteada. El coordinador deberá cambiarla al ingresar.');
+        if (!(await sgaConfirmar(`¿Resetear la contraseña de ${apellido}? Se va a generar una contraseña provisoria nueva, que vas a tener que entregarle.`))) return;
+        const res  = await fetch(`/api/coordinadores/${id}/reset`, { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) await mostrarPasswordProvisoria(apellido, data, 'Contraseña reseteada');
+        else await sgaAviso(data.error || 'No se pudo resetear la contraseña.');
     }
 
 async function eliminarPreceptora(id, apellido) {
@@ -11823,9 +11835,10 @@ async function eliminarPreceptora(id, apellido) {
         }
         if (data.ok) {
             cerrarModalPreceptora();
+            if (data.password_provisoria) await mostrarPasswordProvisoria(`${body.apellido}, ${body.nombre}`, data, 'Personal agregado');
             mostrarExito('usuarios-msg', editandoPreceptoraId
                 ? '✅ Datos actualizados correctamente.'
-                : (data.vinculada ? '✅ Se sumó a esta carrera con su cuenta existente.' : '✅ Personal agregado. Su contraseña inicial es su DNI.'));
+                : (data.vinculada ? '✅ Se sumó a esta carrera con su cuenta existente.' : '✅ Personal agregado.'));
             cargarPreceptoras();
         } else {
             errDiv.style.display = 'block';
@@ -11862,6 +11875,7 @@ async function eliminarPreceptora(id, apellido) {
         const data = await res.json();
 
         if (data.ok) {
+            await mostrarPasswordProvisoria(document.getElementById('modal-reset-nombre').textContent, data, 'Contraseña reseteada');
             mostrarExito('usuarios-msg', '✅ Contraseña reseteada. Deberá cambiarla al ingresar.');
             cargarPreceptoras();
         } else {

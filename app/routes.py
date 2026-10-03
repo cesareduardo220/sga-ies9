@@ -114,7 +114,7 @@ def bloquear_escrituras_en_movil():
 
 # ==========================================================
 # PRIMER INGRESO: CAMBIO DE CONTRASEÑA OBLIGATORIO
-# Quien entra con la contraseña inicial (el DNI, o una reseteada) no puede
+# Quien entra con una contraseña provisoria (cuenta nueva o reseteada) no puede
 # usar nada más hasta cambiarla: ni volviendo atrás con el navegador, ni
 # escribiendo la dirección, ni llamando a la API. Lo mismo el administrador
 # que todavía no completó su configuración. Se consulta la base en cada
@@ -794,6 +794,31 @@ def login_carrera():
     return _completar_login(user, carrera_id)
 
 
+# ==========================================================
+# CONTRASEÑA PROVISORIA
+# Las cuentas nuevas y las reseteadas reciben una contraseña provisoria al
+# azar (no el DNI, que no es un secreto: aparece en listas y documentos). Se
+# muestra una sola vez a quien la generó, para que la entregue, y vence a las
+# VIGENCIA_PROVISORIA_HORAS si no se usa.
+# ==========================================================
+
+VIGENCIA_PROVISORIA_HORAS = 72
+_ALFABETO_PROVISORIA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'   # sin O/0, I/1/L
+
+
+def _nueva_password_provisoria():
+    """(para mostrar 'XXXX-XXXX', hash para guardar, vencimiento para mostrar).
+    Se guarda el hash del codigo sin el guion; al ingresar se acepta con o sin
+    guion, con espacios y en minusculas."""
+    codigo = ''.join(secrets.choice(_ALFABETO_PROVISORIA) for _ in range(8))
+    vence = (datetime.now() + timedelta(hours=VIGENCIA_PROVISORIA_HORAS)).strftime('%d/%m/%Y %H:%M')
+    return f'{codigo[:4]}-{codigo[4:]}', generate_password_hash(codigo), vence
+
+
+def _normalizar_provisoria(texto):
+    return re.sub(r'[\s-]', '', texto or '').upper()
+
+
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
     if 'rol' in session and not _token_vigente():
@@ -826,7 +851,8 @@ def login():
         conn = get_db()
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, nombre, apellido, rol, carrera_id, debe_cambiar_password, password_hash, dni
+            SELECT id, nombre, apellido, rol, carrera_id, debe_cambiar_password, password_hash, dni,
+                   (password_provisoria_vence < NOW()) AS provisoria_vencida
             FROM usuarios
             WHERE usuario = %s AND activo = TRUE
         """, (usuario,))
@@ -834,7 +860,14 @@ def login():
         cur.close()
         conn.close()
 
-        if user and check_password_hash(user[6], password):
+        ok = bool(user) and check_password_hash(user[6], password)
+        if user and not ok and user[5]:
+            # La contraseña provisoria se acepta con o sin guion y en minusculas
+            ok = check_password_hash(user[6], _normalizar_provisoria(password))
+        if ok and user[5] and user[8]:
+            error = 'Tu contraseña provisoria venció. Pedí una nueva a quien te dio de alta.'
+            return render_template('login.html', error=error, admin_sin_dni=admin_sin_dni)
+        if ok:
             if user[3] == 'preceptora':
                 carreras = _carreras_activas(user[0])
                 if not carreras:
@@ -881,7 +914,7 @@ def cambiar_password():
             cur = conn.cursor()
             cur.execute("""
                 UPDATE usuarios
-                SET password_hash = %s, debe_cambiar_password = FALSE
+                SET password_hash = %s, debe_cambiar_password = FALSE, password_provisoria_vence = NULL
                 WHERE id = %s
             """, (generate_password_hash(nueva), session['user_id']))
             conn.commit()
@@ -946,7 +979,8 @@ def configurar_admin():
                         UPDATE usuarios
                         SET usuario = %s, nombre = %s, apellido = %s, dni = %s,
                             celular = %s, email = %s, domicilio = %s, genero = %s,
-                            password_hash = %s, debe_cambiar_password = FALSE
+                            password_hash = %s, debe_cambiar_password = FALSE,
+                            password_provisoria_vence = NULL
                         WHERE id = %s
                     """, (dni, nombre, apellido, dni, celular, email, domicilio, genero,
                           generate_password_hash(nueva), session['user_id']))
@@ -1333,18 +1367,21 @@ def api_coord_crear():
     if genero is False:
         return jsonify({'error': 'Género inválido'}), 400
 
-    # El usuario es el DNI, contraseña inicial es el DNI también
+    # El usuario es el DNI; la contraseña inicial es provisoria, al azar y con vencimiento
+    prov, prov_hash, prov_vence = _nueva_password_provisoria()
     conn = get_db()
     cur = conn.cursor()
     try:
         cur.execute("""
-            INSERT INTO usuarios (usuario, password_hash, rol, nombre, apellido, dni, email, celular, carrera_id, debe_cambiar_password, genero)
-            VALUES (%s, %s, 'coordinador', %s, %s, %s, %s, %s, %s, TRUE, %s)
+            INSERT INTO usuarios (usuario, password_hash, rol, nombre, apellido, dni, email, celular, carrera_id, debe_cambiar_password, genero,
+                                  password_provisoria_vence)
+            VALUES (%s, %s, 'coordinador', %s, %s, %s, %s, %s, %s, TRUE, %s, NOW() + make_interval(hours => %s))
             RETURNING id
-        """, (dni, generate_password_hash(dni), nombre, apellido, dni, email, celular, carrera_id, genero))
+        """, (dni, prov_hash, nombre, apellido, dni, email, celular, carrera_id, genero,
+              VIGENCIA_PROVISORIA_HORAS))
         nuevo_id = cur.fetchone()[0]
         conn.commit()
-        return jsonify({'ok': True, 'id': nuevo_id})
+        return jsonify({'ok': True, 'id': nuevo_id, 'password_provisoria': prov, 'vence': prov_vence})
     except Exception as e:
         conn.rollback()
         if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
@@ -1399,7 +1436,7 @@ def api_coord_toggle(uid):
 @auth.route('/api/coordinadores/<int:uid>/reset', methods=['POST'])
 @login_requerido(['admin'])
 def api_coord_reset(uid):
-    # Resetea la clave al DNI del coordinador
+    # Resetea la clave a una contraseña provisoria nueva, al azar y con vencimiento
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT dni FROM usuarios WHERE id = %s AND rol = 'coordinador'", (uid,))
@@ -1407,14 +1444,16 @@ def api_coord_reset(uid):
     if not row:
         cur.close(); conn.close()
         return jsonify({'error': 'Coordinador no encontrado'}), 404
+    prov, prov_hash, prov_vence = _nueva_password_provisoria()
     cur.execute("""
-        UPDATE usuarios SET password_hash = %s, debe_cambiar_password = TRUE
+        UPDATE usuarios SET password_hash = %s, debe_cambiar_password = TRUE,
+                            password_provisoria_vence = NOW() + make_interval(hours => %s)
         WHERE id = %s AND rol = 'coordinador'
-    """, (generate_password_hash(row[0]), uid))
+    """, (prov_hash, VIGENCIA_PROVISORIA_HORAS, uid))
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'password_provisoria': prov, 'vence': prov_vence})
 
 
 @auth.route('/api/coordinadores/<int:uid>', methods=['DELETE'])
@@ -1563,18 +1602,21 @@ def api_sys_crear_admin():
     if not dni.isdigit() or len(dni) < 7:
         return jsonify({'error': 'DNI inválido'}), 400
 
+    prov, prov_hash, prov_vence = _nueva_password_provisoria()
     conn = get_db()
     cur = conn.cursor()
     try:
         cur.execute("""
             INSERT INTO usuarios (usuario, password_hash, rol, nombre, apellido, dni,
-                                  email, celular, domicilio, debe_cambiar_password, activo)
-            VALUES (%s, %s, 'admin', %s, %s, %s, %s, %s, %s, TRUE, TRUE)
+                                  email, celular, domicilio, debe_cambiar_password, activo,
+                                  password_provisoria_vence)
+            VALUES (%s, %s, 'admin', %s, %s, %s, %s, %s, %s, TRUE, TRUE, NOW() + make_interval(hours => %s))
             RETURNING id
-        """, (dni, generate_password_hash(dni), nombre, apellido, dni, email, celular, domicilio))
+        """, (dni, prov_hash, nombre, apellido, dni, email, celular, domicilio,
+              VIGENCIA_PROVISORIA_HORAS))
         conn.commit()
         cur.close(); conn.close()
-        return jsonify({'ok': True})
+        return jsonify({'ok': True, 'password_provisoria': prov, 'vence': prov_vence})
     except Exception as e:
         conn.rollback()
         cur.close(); conn.close()
@@ -1611,7 +1653,7 @@ def api_sys_editar_admin(uid):
 @auth.route('/api/sys/admins/<int:uid>/reset', methods=['POST'])
 @login_requerido(['sys'])
 def api_sys_reset_admin(uid):
-    """Resetea la contraseña del admin a su DNI."""
+    """Resetea la contraseña del admin a una provisoria nueva, al azar y con vencimiento."""
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT dni FROM usuarios WHERE id=%s AND rol='admin'", (uid,))
@@ -1619,31 +1661,50 @@ def api_sys_reset_admin(uid):
     if not row or not row[0]:
         cur.close(); conn.close()
         return jsonify({'error': 'Admin no encontrado o sin DNI configurado'}), 404
+    prov, prov_hash, prov_vence = _nueva_password_provisoria()
     cur.execute("""
-        UPDATE usuarios SET password_hash=%s, debe_cambiar_password=TRUE
+        UPDATE usuarios SET password_hash=%s, debe_cambiar_password=TRUE,
+                            password_provisoria_vence = NOW() + make_interval(hours => %s)
         WHERE id=%s AND rol='admin'
-    """, (generate_password_hash(row[0]), uid))
+    """, (prov_hash, VIGENCIA_PROVISORIA_HORAS, uid))
     conn.commit()
     cur.close(); conn.close()
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'password_provisoria': prov, 'vence': prov_vence})
 
 
 @auth.route('/api/sys/admins/<int:uid>/virgen', methods=['POST'])
 @login_requerido(['sys'])
 def api_sys_admin_virgen(uid):
-    """Vuelve la cuenta admin a estado virgen (para cambio de persona)."""
+    """Vuelve la cuenta admin a estado virgen (para cambio de persona), con una
+    contraseña provisoria al azar y con vencimiento (antes era una fija,
+    escrita en el codigo, que conocia cualquiera que leyera el repositorio)."""
+    prov, prov_hash, prov_vence = _nueva_password_provisoria()
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("""
-        UPDATE usuarios
-        SET usuario='admin', nombre=NULL, apellido=NULL, dni=NULL,
-            celular=NULL, email=NULL, domicilio=NULL,
-            password_hash=%s, debe_cambiar_password=TRUE
-        WHERE id=%s AND rol='admin'
-    """, (generate_password_hash('Sga-IES9#2026'), uid))
-    conn.commit()
-    cur.close(); conn.close()
-    return jsonify({'ok': True})
+    try:
+        # nombre y apellido no admiten NULL: quedan vacios hasta la configuracion
+        cur.execute("""
+            UPDATE usuarios
+            SET usuario='admin', nombre='', apellido='', dni=NULL, genero=NULL,
+                celular=NULL, email=NULL, domicilio=NULL,
+                password_hash=%s, debe_cambiar_password=TRUE,
+                password_provisoria_vence = NOW() + make_interval(hours => %s)
+            WHERE id=%s AND rol='admin'
+        """, (prov_hash, VIGENCIA_PROVISORIA_HORAS, uid))
+        if cur.rowcount == 0:
+            conn.rollback()
+            return jsonify({'error': 'Administrador no encontrado'}), 404
+        conn.commit()
+        return jsonify({'ok': True, 'password_provisoria': prov, 'vence': prov_vence})
+    except Exception as e:
+        conn.rollback()
+        if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+            return jsonify({'error': 'Ya hay otra cuenta de administrador esperando su configuración '
+                                     '(usuario "admin"): configurala o eliminala primero.'}), 409
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 @auth.route('/api/sys/admins/<int:uid>/toggle', methods=['POST'])
@@ -7022,17 +7083,20 @@ def api_preceptoras_crear():
             return jsonify({'ok': True, 'id': existente[0], 'vinculada': True,
                             'nombre': existente[2], 'apellido': existente[3]})
 
+        prov, prov_hash, prov_vence = _nueva_password_provisoria()
         cur.execute("""
             INSERT INTO usuarios
                 (usuario, password_hash, rol, nombre, apellido, dni,
-                 email, celular, carrera_id, debe_cambiar_password, genero)
-            VALUES (%s, %s, 'preceptora', %s, %s, %s, %s, %s, %s, TRUE, %s)
+                 email, celular, carrera_id, debe_cambiar_password, genero,
+                 password_provisoria_vence)
+            VALUES (%s, %s, 'preceptora', %s, %s, %s, %s, %s, %s, TRUE, %s, NOW() + make_interval(hours => %s))
             RETURNING id
-        """, (dni, generate_password_hash(dni), nombre, apellido, dni, email, celular, carrera_id, genero))
+        """, (dni, prov_hash, nombre, apellido, dni, email, celular, carrera_id, genero,
+              VIGENCIA_PROVISORIA_HORAS))
         nuevo_id = cur.fetchone()[0]
         cur.execute("INSERT INTO usuario_carrera (usuario_id, carrera_id) VALUES (%s, %s)", (nuevo_id, carrera_id))
         conn.commit()
-        return jsonify({'ok': True, 'id': nuevo_id})
+        return jsonify({'ok': True, 'id': nuevo_id, 'password_provisoria': prov, 'vence': prov_vence})
     except Exception as e:
         conn.rollback()
         if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
@@ -7126,7 +7190,7 @@ def api_preceptoras_eliminar(uid):
 @auth.route('/api/usuarios/preceptoras/<int:uid>/reset', methods=['POST'])
 @login_requerido(['coordinador'])
 def api_preceptoras_reset(uid):
-    """Resetea la contraseña al DNI de la preceptora."""
+    """Resetea la contraseña de la preceptora a una provisoria nueva, al azar y con vencimiento."""
     carrera_id = session.get('carrera_id')
     conn = get_db()
     cur = conn.cursor()
@@ -7135,15 +7199,17 @@ def api_preceptoras_reset(uid):
     if not row:
         cur.close(); conn.close()
         return jsonify({'error': 'No se encontró a esa persona en esta carrera'}), 404
+    prov, prov_hash, prov_vence = _nueva_password_provisoria()
     cur.execute("""
         UPDATE usuarios
-        SET password_hash = %s, debe_cambiar_password = TRUE
+        SET password_hash = %s, debe_cambiar_password = TRUE,
+            password_provisoria_vence = NOW() + make_interval(hours => %s)
         WHERE id = %s AND rol = 'preceptora' AND EXISTS (SELECT 1 FROM usuario_carrera uc WHERE uc.usuario_id = usuarios.id AND uc.carrera_id = %s)
-    """, (generate_password_hash(row[0]), uid, carrera_id))
+    """, (prov_hash, VIGENCIA_PROVISORIA_HORAS, uid, carrera_id))
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'password_provisoria': prov, 'vence': prov_vence})
 
 
 # ================================================================
