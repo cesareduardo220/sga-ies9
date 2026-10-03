@@ -23,6 +23,10 @@ def create_app():
         respuesta.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         respuesta.headers['Pragma'] = 'no-cache'
         respuesta.headers['Expires'] = '0'
+        # Ninguna página puede mostrar el SGA dentro de un marco (iframe):
+        # protege del clickjacking. El clásico y el moderno, para todo navegador.
+        respuesta.headers['X-Frame-Options'] = 'DENY'
+        respuesta.headers['Content-Security-Policy'] = "frame-ancestors 'none'"
         return respuesta
 
     return app
