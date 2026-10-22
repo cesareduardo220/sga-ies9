@@ -302,6 +302,15 @@ proveedores de correo conocidos, según una lista configurable.
 La ventana del formulario público y la de inscripción a materias son
 independientes, y la preceptora revisa cada inscripción antes de aprobarla.
 
+**Se puede apagar por instalación.**
+Una instalación solo de red local, sin salida a Internet, apaga el módulo con
+`AUTOINSCRIPCION_ONLINE=0` en el `.env`: no aparece en la interfaz, sus rutas
+responden 404 y no se envían correos. Va en el `.env` y no en la tabla
+`configuracion` porque depende de cómo está instalado el servidor, no de una
+decisión académica; el coordinador sigue abriendo y cerrando la ventana del
+formulario como siempre. Se apaga en lugar de borrarse para poder volver a
+encenderlo cuando el instituto pase a la carga por Internet.
+
 ---
 
 ## 9. Documentos

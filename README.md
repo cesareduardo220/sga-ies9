@@ -116,6 +116,10 @@ Copiar `.env.example` como `.env` y completar:
   `python -c "import secrets; print(secrets.token_hex(32))"`
 - `SMTP_…`: la cuenta de Gmail del instituto, con una contraseña de
   aplicación, para enviar por correo los códigos de inscripción
+- `AUTOINSCRIPCION_ONLINE`: `1` si el servidor sale a Internet y los alumnos
+  se inscriben en línea; `0` en una instalación solo de red local. Con `0`,
+  Preinscripciones y Tokens desaparecen de los menús, sus direcciones responden
+  404 y no se envían correos (los `SMTP_…` pueden quedar sin completar)
 
 El archivo `.env` no se versiona: cada instalación tiene el suyo.
 
