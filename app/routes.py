@@ -297,7 +297,10 @@ def resolver_promociones_provisorias(conn):
             nota_obs = (f'PROMOCIÓN CAÍDA — venció el plazo del '
                         f'{limite.strftime("%d/%m/%Y")} sin aprobar el final '
                         f'de la correlativa. Se asienta como regular.')
-            obs_nueva = (obs_ant + ' | ' + nota_obs).strip(' |') if obs_ant else nota_obs
+            # La marca "PROMOCIÓN PROVISORIA…" se reemplaza por la de la caída;
+            # lo que escribió la preceptora se conserva.
+            obs_base = _limpiar_marcas_automaticas(obs_ant)
+            obs_nueva = (obs_base + ' | ' + nota_obs).strip(' |') if obs_base else nota_obs
 
             cur.execute("""
                 UPDATE cursadas
@@ -5850,9 +5853,14 @@ def api_notas_materia_detalle(mid):
             'promocionados': sum(1 for a in alumnos if a['condicion'] == 'promocionado'),
             'regulares':     sum(1 for a in alumnos if a['condicion'] == 'regular'),
             # "Libre" agrupa: condición libre explícita, el viejo valor "ausente" (ya no
-            # existe como categoría propia) y los que quedaron sin condición registrada
-            # al momento del cierre — así Promocionados+Regulares+Libres = inscriptos.
-            'libres':        sum(1 for a in alumnos if a['condicion'] not in ('promocionado', 'regular')),
+            # existe como categoría propia) y, una vez cerrada la cursada, los que
+            # quedaron sin condición registrada. Mientras está abierta, el que no
+            # tiene condición todavía no tiene la nota cargada: cuenta como
+            # pendiente, no como libre. Siempre P + R + L + pendientes = inscriptos.
+            'libres':        sum(1 for a in alumnos
+                                 if a['condicion'] not in ('promocionado', 'regular')
+                                 and (a['condicion'] or cerrada)),
+            'pendientes':    0 if cerrada else sum(1 for a in alumnos if not a['condicion']),
         }
     })
 
@@ -8040,9 +8048,12 @@ def api_mesas_inscribir(mid):
             return jsonify({'error': f'La condición del alumno venció el '
                                      f'{_vence.strftime("%d/%m/%Y")}.'}), 400
 
+        # Solo cuentan los finales desaprobados: el ausente no es un intento
+        # (mismo criterio que la inscripción a materias y el historial).
         cur.execute("""
             SELECT COUNT(*) FROM examenes
             WHERE alumno_id = %s AND materia_id = %s AND fecha_mesa >= %s
+              AND resultado = 'desaprobado'
         """, (alumno_id, materia_id_mesa, _cargado))
         if cur.fetchone()[0] >= 3:
             cur.close(); conn.close()
@@ -8332,6 +8343,7 @@ def api_mesas_alumnos_disponibles(mid):
                   FROM examenes e
                  WHERE e.alumno_id  = a.id
                    AND e.materia_id = %s
+                   AND e.resultado  = 'desaprobado'   -- el ausente no es un intento
                    AND e.fecha_mesa >= uc.cargado_en::date) AS intentos
         FROM ultima_cursada uc
         JOIN alumnos_carrera a ON a.id = uc.alumno_id
