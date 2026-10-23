@@ -187,6 +187,10 @@ def login_requerido(roles_permitidos):
                     return jsonify({'error': 'sesion_desplazada'}), 401
                 return redirect(url_for('auth.login', desplazado=1))
             if session['rol'] not in roles_permitidos:
+                # A la pantalla le contesta con un error legible: una redirección
+                # le devolvería el HTML del panel y el mensaje quedaría colgado.
+                if request.headers.get('X-Requested-With') == 'fetch' or 'application/json' in (request.headers.get('Accept') or '') or request.path.startswith('/api/'):
+                    return jsonify({'error': 'Tu rol no tiene permiso para esta acción.'}), 403
                 return redirect(url_for('auth.dashboard'))
             return f(*args, **kwargs)
         return wrapper
@@ -1356,7 +1360,10 @@ def api_coord_crear():
     data = request.get_json()
     nombre    = data.get('nombre', '').strip()
     apellido  = data.get('apellido', '').strip()
-    dni       = data.get('dni', '').strip()
+    # El DNI se guarda limpio, como en el resto de las altas: el login le saca
+    # los puntos a lo que se escribe, así que un "25.333.444" guardado con
+    # puntos no podría entrar nunca y además esquivaría el control de repetidos.
+    dni       = limpiar_dni(data.get('dni', ''))
     email     = data.get('email', '').strip() or None
     celular   = data.get('celular', '').strip() or None
     carrera_id = data.get('carrera_id') or None
@@ -1364,6 +1371,8 @@ def api_coord_crear():
 
     if not nombre or not apellido or not dni:
         return jsonify({'error': 'Nombre, apellido y DNI son obligatorios'}), 400
+    if not dni.isdigit() or len(dni) < 7:
+        return jsonify({'error': 'DNI inválido'}), 400
     if genero is False:
         return jsonify({'error': 'Género inválido'}), 400
 
@@ -8015,6 +8024,17 @@ def api_mesas_inscribir(mid):
             return jsonify({'error': 'El alumno agotó los 3 intentos permitidos.'}), 400
     else:
         _cond, _cargado, _vence = _cur_row
+        # La condición de la última cursada tiene que ser la que pide la mesa,
+        # igual que en la lista de habilitados de la pantalla.
+        if _cond in ('promocionado', 'aprobado'):
+            cur.close(); conn.close()
+            return jsonify({'error': 'El alumno ya aprobó esta materia.'}), 400
+        _cond_mesa = 'regular' if mesa[1] == 'regular' else 'libre'
+        if _cond != _cond_mesa:
+            cur.close(); conn.close()
+            _plural = {'regular': 'regulares', 'libre': 'libres'}
+            return jsonify({'error': f'El alumno es {_cond} en esta materia: no puede rendir en una '
+                                     f'mesa de alumnos {_plural.get(_cond_mesa, _cond_mesa)}.'}), 400
         if _vence and mesa[3] > _vence:
             cur.close(); conn.close()
             return jsonify({'error': f'La condición del alumno venció el '
@@ -8170,7 +8190,12 @@ def api_mesas_cargar_resultados(mid):
                 # venza el plazo, pese a haber cumplido.
                 cur.execute("""
                     UPDATE cursadas cu
-                    SET promocion_provisoria = FALSE
+                    SET promocion_provisoria = FALSE,
+                        -- Se saca la marca "PROMOCIÓN PROVISORIA…": ya quedó
+                        -- confirmada. Lo que escribió la preceptora se conserva.
+                        observaciones = NULLIF(btrim(regexp_replace(
+                            regexp_replace(cu.observaciones, 'PROMOCIÓN PROVISORIA[^|]*', '', 'g'),
+                            '(\\s*\\|\\s*)+', ' | ', 'g'), ' |'), '')
                     FROM inscripciones i, correlatividades co
                     WHERE cu.inscripcion_id = i.id
                       AND i.alumno_id = %s

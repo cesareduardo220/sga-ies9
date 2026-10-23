@@ -4237,8 +4237,9 @@
                 { id: 'mesas',        icon: '🎓', label: 'Mesas de Examen' },
                 { id: 'profesores',   icon: '👨‍🏫', label: 'Profesores' },
             ]},
+            // Sin "Subir Plan de Estudios": cargar o cambiar el plan es tarea de
+            // la coordinación (la API se lo niega a la preceptora).
             { seccion: 'herramientas', items: [
-                { id: 'excel',            icon: '📥', label: 'Subir Plan de Estudios' },
                 { id: 'reportes',         icon: '📄', label: 'Reportes' },
             ]},
         ],
@@ -7445,8 +7446,11 @@ async function eliminarPreceptora(id, apellido) {
     let tipoDocOriginal = 'DNI';
     let anioLectivoActual = new Date().getFullYear();
 
-    // Cargar año lectivo para pre-completar
-    fetch('/api/stats/carrera').then(r => r.json()).then(d => { anioLectivoActual = parseInt(d.anio) || anioLectivoActual; }).catch(() => {});
+    // Cargar año lectivo para pre-completar (solo los roles de una carrera
+    // tienen acceso a estas estadísticas; el admin no carga alumnos)
+    if (ROL === 'coordinador' || ROL === 'preceptora') {
+        fetch('/api/stats/carrera').then(r => r.json()).then(d => { anioLectivoActual = parseInt(d.anio) || anioLectivoActual; }).catch(() => {});
+    }
 
     function onTipoDocChange() {
         const tipo = document.getElementById('input-al-tipo-doc').value;
